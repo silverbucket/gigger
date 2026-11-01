@@ -146,6 +146,9 @@ onMount(() => {
       "Could not save or load changes. Please check your connection and try again.";
   });
   storage.on("disconnected", () => {
+    mode = "login";
+    ready = false;
+    error = "";
     signedIn = false;
     summaries = [];
     selected = "";

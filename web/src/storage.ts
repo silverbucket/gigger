@@ -83,5 +83,5 @@ export async function logout() {
     storage.on("disconnected", done);
     storage.disconnect();
   });
-  location.replace("/login");
+  history.replaceState(null, "", "/login");
 }
