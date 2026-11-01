@@ -20,6 +20,7 @@ type Summary = {
 };
 let summaries = $state<Summary[]>([]);
 let selected = $state("");
+let openedGig = $state("");
 let bandName = $state("");
 let memberName = $state("");
 let editingMember = $state("");
@@ -299,7 +300,13 @@ onMount(() => {
   {:else}
     <nav aria-label="Bands">
       <label
-        >View band<select bind:value={selected} onchange={() => resetMember()}>
+        >View band<select
+          bind:value={selected}
+          onchange={() => {
+            resetMember();
+            openedGig = "";
+          }}
+        >
           <option value="">All bands</option>
           {#each summaries as { band } (band.id)}
             <option value={band.id}>{band.name}</option>
@@ -380,8 +387,13 @@ onMount(() => {
     {/if}
     {#key selected}
       <Bookings
-        bandList={summaries.map((item) => item.band)}
-        initialBand={selected}
+        {summaries}
+        bandId={selected}
+        initialGigId={openedGig}
+        onopen={(bandId, gigId) => {
+          openedGig = gigId;
+          selected = bandId;
+        }}
         onchanged={load}
       />
     {/key}
@@ -400,6 +412,7 @@ onMount(() => {
               class="band"
               onclick={() => {
                 selected = summary.band.id;
+                openedGig = "";
                 resetMember();
               }}
             >

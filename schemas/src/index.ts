@@ -219,7 +219,9 @@ export function createGigger(client: Client) {
             old.status !== gig.status &&
             !canMoveStatus(old.status, gig.status)
           )
-            throw new Error("Invalid gig status move");
+            throw new Error(
+              "This gig changed somewhere else, reload to see the latest",
+            );
         }
         for (const [relatedKind, relatedId] of [
           ...(gig.venueId ? [["venue", gig.venueId] as const] : []),
@@ -237,7 +239,9 @@ export function createGigger(client: Client) {
       const path = recordPath("gig", bandId, gigId);
       const current = read("gig", await client.getObject(path));
       if (!canMoveStatus(current.status, status))
-        throw new Error("Invalid gig status move");
+        throw new Error(
+          "This gig changed somewhere else, reload to see the latest",
+        );
       const updated = { ...current, status };
       await client.storeObject("gig", path, updated);
       return updated;

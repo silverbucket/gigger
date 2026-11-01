@@ -99,7 +99,7 @@ test("linked booking schemas, band isolation and status enforcement", async () =
     for (const status of ["offered", "confirmed", "played"] as const)
       await store.save("gig", "a", { ...gig, status });
     await expect(store.save("gig", "a", gig)).rejects.toThrow(
-      "Invalid gig status move",
+      "This gig changed somewhere else, reload to see the latest",
     );
     const stale = { ...gig, id: "synced" };
     await store.save("gig", "a", stale);
@@ -118,7 +118,9 @@ test("linked booking schemas, band isolation and status enforcement", async () =
     await store.moveGigStatus("a", stale.id, "cancelled");
     await expect(
       store.moveGigStatus("a", stale.id, "confirmed"),
-    ).rejects.toThrow("Invalid gig status move");
+    ).rejects.toThrow(
+      "This gig changed somewhere else, reload to see the latest",
+    );
     await expect(
       store.moveGigStatus("a", "missing", "offered"),
     ).rejects.toThrow("Invalid gig record");

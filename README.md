@@ -66,4 +66,6 @@ Use Bookings to choose a band and create a new enquiry: paste the message, choos
 
 Booking fields include load-in and soundcheck times (`HH:mm`), set times, `setLength` (positive integer minutes), `fee: { amount?: string, extras: string[] }` (amount includes currency), private notes, `contactDate` (optional local date; `date` remains the proposed gig date), `enquiryText`, `enquirySource` and `public: { ticketUrl?: string, description?: string }`. The public fields describe event information but remain in private storage; they are not published. Dates and times are local to the venue. Legacy gigs with free-text venue, address, contacts and fee remain readable; the editor uses linked records for new saves.
 
-The Venues and Contacts screens list records and open their details for editing.
+The header band picker also filters Bookings; choose All bands for a combined gig list grouped by status, with the band and venue on every row. Opening a gig from that list selects its band. Enquiry forms have collapsible Enquiry, When, Where, Who, Money and Public sections, labelled creation switches and tap-to-select contacts. Empty booking details are hidden. Venue details list gigs played there.
+
+The Venues and Contacts screens list records and open their details for editing. Invalid status changes show “This gig changed somewhere else, reload to see the latest”; the gig date/status line stays visible, and Reload latest refreshes the record and any open edit form.
