@@ -17,6 +17,7 @@ services:
       retries: 12
   armadietto:
     image: remotestorage/armadietto-monolithic:latest
+    platform: linux/amd64
     volumes:
       - armadietto_data:/usr/share/armadietto
       - ./armadietto/conf.json:/etc/armadietto/conf.json:ro
