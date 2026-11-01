@@ -1,0 +1,111 @@
+import { expect, test } from "bun:test";
+import {
+  type Contact,
+  canMoveStatus,
+  type Gig,
+  Gigger,
+  type GiggerStore,
+  gigStatuses,
+  recordPath,
+} from "@gigger/schemas";
+import RemoteStorage from "remotestoragejs";
+
+test("status moves cover every pair and keep terminal statuses closed", () => {
+  const allowed = new Set([
+    "enquiry:offered",
+    "enquiry:cancelled",
+    "offered:confirmed",
+    "offered:cancelled",
+    "confirmed:played",
+    "confirmed:cancelled",
+  ]);
+  for (const from of gigStatuses)
+    for (const to of gigStatuses)
+      expect(canMoveStatus(from, to)).toBe(allowed.has(`${from}:${to}`));
+});
+
+test("linked booking schemas, band isolation and status enforcement", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Gigger);
+  storage.access.claim("gigger", "rw");
+  storage.caching.enable("/gigger/");
+  const store = (storage as RemoteStorage & { gigger: GiggerStore }).gigger;
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  try {
+    await store.save("venue", "a", {
+      id: "v",
+      name: "Club",
+      address: "Main St",
+    });
+    await store.save("contact", "a", {
+      id: "c",
+      name: "Promoter",
+      email: "p@example.com",
+      instagram: "@p",
+    });
+    expect(await store.list("venue", "a")).toHaveLength(1);
+    expect(await store.list("contact", "a")).toHaveLength(1);
+    expect(await store.list("contact", "b")).toEqual([]);
+    expect(recordPath("contact", "a", "c")).toBe("bands/a/contacts/c");
+    const gig: Gig = {
+      id: "g",
+      title: "Show",
+      venueId: "v",
+      contactIds: ["c"],
+      date: "2030-06-20",
+      status: "enquiry",
+      enquiryText: "Can you play?",
+      enquirySource: "messenger",
+      setLength: 45,
+      fee: { amount: "500 EUR", extras: ["Travel", "Dinner"] },
+      public: {
+        ticketUrl: "https://example.com/tickets",
+        description: "Live music",
+      },
+    };
+    await store.save("gig", "a", gig);
+    expect((await store.list("gig", "a"))[0]).toMatchObject(gig);
+    for (const patch of [
+      { enquirySource: "sms" },
+      { venueId: "" },
+      { contactIds: ["../escape"] },
+      { public: { ticketUrl: "https://example.com", unexpected: true } },
+      { setLength: 0 },
+      { setLength: 2.5 },
+      { fee: { extras: [4] } },
+      { public: { ticketUrl: "javascript:alert(1)" } },
+      { contactIds: ["c", "c"] },
+      { venueId: "missing" },
+      { contactIds: ["missing"] },
+      { date: "tomorrow" },
+      { status: "played" },
+    ])
+      await expect(
+        store.save("gig", "a", { ...gig, ...patch } as Gig),
+      ).rejects.toBeDefined();
+    await expect(store.save("gig", "b", gig)).rejects.toBeDefined();
+    for (const source of ["instagram", "email", "other"] as const)
+      await store.save("gig", "a", { ...gig, enquirySource: source });
+    for (const status of ["offered", "confirmed", "played"] as const)
+      await store.save("gig", "a", { ...gig, status });
+    await expect(store.save("gig", "a", gig)).rejects.toThrow(
+      "Invalid gig status move",
+    );
+    const cancelled = { ...gig, id: "cancel" };
+    await store.save("gig", "a", cancelled);
+    await store.save("gig", "a", { ...cancelled, status: "cancelled" });
+    await expect(store.save("gig", "a", cancelled)).rejects.toThrow();
+    for (const invalid of [
+      { id: "bad", name: " " },
+      { id: "bad", name: "P", email: "invalid" },
+    ])
+      await expect(
+        store.save("contact", "a", invalid as Contact),
+      ).rejects.toBeDefined();
+    await expect(
+      store.save("venue", "a", { id: "bad", name: "Club", address: "" }),
+    ).rejects.toBeDefined();
+  } finally {
+    storage.stopSync();
+  }
+});

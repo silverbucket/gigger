@@ -48,7 +48,7 @@ This creates disposable test accounts in the local data volume. CI runs it again
 
 ## Shared data module
 
-`@gigger/schemas` exports the `Gigger` remoteStorage module, JSON schemas and TypeScript types for band, member, gig and venue. Both web and API import this package. The web uses remoteStorage.js pinned to `2.0.0-beta.10`, claims `gigger:rw`, and caches `/gigger/` for offline use.
+`@gigger/schemas` exports the `Gigger` remoteStorage module, JSON schemas and TypeScript types for band, member, gig, venue and contact. Both web and API import this package. The web uses remoteStorage.js pinned to `2.0.0-beta.10`, claims `gigger:rw`, and caches `/gigger/` for offline use.
 
 Records are private and scoped to a band:
 
@@ -56,5 +56,12 @@ Records are private and scoped to a band:
 - `/gigger/bands/<bandId>/members/<memberId>`
 - `/gigger/bands/<bandId>/gigs/<gigId>`
 - `/gigger/bands/<bandId>/venues/<venueId>`
+- `/gigger/bands/<bandId>/contacts/<contactId>`
 
-The module provides `save(kind, bandId, record)`, `bands()`, and `list(kind, bandId)`. IDs accept letters, numbers, underscores and hyphens. Gigs have a title, venue name, address, contacts (free-text strings), local date (`YYYY-MM-DD`), and status (`enquiry`, `offered`, `confirmed`, `played`, `cancelled`). Optional booking details are load-in and soundcheck times (`HH:mm`), set times (an array of `HH:mm`), fee (text including currency), and notes. Dates and times are local to the venue. Gig/venue editing screens are outside this change; these records can be written by clients using the shared module.
+The module provides `save(kind, bandId, record)`, `bands()`, and `list(kind, bandId)`. IDs accept letters, numbers, underscores and hyphens. Gigs link to a venue with `venueId` and contacts with `contactIds`; linked records must exist within the same band. Venues have a name and address. Contacts have a name and optional email, phone, Messenger, Instagram and notes.
+
+Use Bookings to choose a band and create a new enquiry: paste the message, choose its source (Messenger, Instagram, email or other), date and venue. Existing venues and contacts can be selected or created inline. Enquiries start with status `enquiry`. Open a gig to edit booking details or move its status: enquiry → offered → confirmed → played. Enquiry, offered and confirmed can also move to cancelled. Played and cancelled are terminal. The module rejects invalid status changes; saving edits without changing status is allowed.
+
+Booking fields include load-in and soundcheck times (`HH:mm`), set times, `setLength` (positive integer minutes), `fee: { amount?: string, extras: string[] }` (amount includes currency), private notes, `enquiryText`, `enquirySource` and `public: { ticketUrl?: string, description?: string }`. The public fields describe event information but remain in private storage; they are not published. Dates and times are local to the venue. Legacy gigs with free-text venue, address, contacts and fee remain readable; the editor uses linked records for new saves.
+
+The Venues and Contacts screens list records and open their details for editing.

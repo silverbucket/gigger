@@ -1,9 +1,23 @@
 <script lang="ts">
-import { type Band, type Gig, groupGigs, type Member } from "@gigger/schemas";
+import {
+  type Band,
+  type Contact,
+  type Gig,
+  groupGigs,
+  type Member,
+  type Venue,
+} from "@gigger/schemas";
 import { onMount } from "svelte";
+import Bookings from "./Bookings.svelte";
 import { bands, connectSession, logout, storage } from "./storage";
 
-type Summary = { band: Band; members: Member[]; gigs: Gig[] };
+type Summary = {
+  band: Band;
+  members: Member[];
+  gigs: Gig[];
+  venues: Venue[];
+  contacts: Contact[];
+};
 let summaries = $state<Summary[]>([]);
 let selected = $state("");
 let bandName = $state("");
@@ -30,6 +44,8 @@ async function load() {
       band,
       members: await bands.list("member", band.id),
       gigs: await bands.list("gig", band.id),
+      venues: await bands.list("venue", band.id),
+      contacts: await bands.list("contact", band.id),
     })),
   );
   if (signedIn && token === storage.remote.token) summaries = loaded;
@@ -351,6 +367,13 @@ onMount(() => {
         </form>
       </section>
     {/if}
+    {#key selected}
+      <Bookings
+        bandList={summaries.map((item) => item.band)}
+        initialBand={selected}
+        onchanged={load}
+      />
+    {/key}
     <section aria-labelledby="overview-title">
       <h2 id="overview-title">
         {current ? current.band.name : "All bands"}
@@ -378,12 +401,27 @@ onMount(() => {
               {#each group.gigs as gig (gig.id)}
                 <li>
                   <strong>{gig.title}</strong>
-                  · <time datetime={gig.date}>{gig.date}</time> · {gig.venue}
+                  · <time datetime={gig.date}>{gig.date}</time> ·
+                  {summary.venues.find((venue) => venue.id === gig.venueId)
+                    ?.name ?? gig.venue}
                   <details>
                     <summary>Gig details</summary>
-                    <p>{gig.address}</p>
-                    {#if gig.contacts.length}
-                      <p>Contacts: {gig.contacts.join(" · ")}</p>
+                    <p>
+                      {summary.venues.find((venue) => venue.id === gig.venueId)
+                        ?.address ?? gig.address}
+                    </p>
+                    {#if gig.contactIds?.length || gig.contacts?.length}
+                      <p>
+                        Contacts:
+                        {gig.contactIds
+                          ?.map(
+                            (id) =>
+                              summary.contacts.find(
+                                (contact) => contact.id === id,
+                              )?.name ?? id,
+                          )
+                          .join(" · ") ?? gig.contacts?.join(" · ")}
+                      </p>
                     {/if}
                     {#if gig.loadIn}
                       <p>Load-in: {gig.loadIn}</p>
@@ -395,7 +433,10 @@ onMount(() => {
                       <p>Set times: {gig.setTimes.join(", ")}</p>
                     {/if}
                     {#if gig.fee}
-                      <p>Fee: {gig.fee}</p>
+                      <p>
+                        Fee:
+                        {typeof gig.fee === "string" ? gig.fee : gig.fee.amount}
+                      </p>
                     {/if}
                     {#if gig.notes}
                       <p>{gig.notes}</p>
