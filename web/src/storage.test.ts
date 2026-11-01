@@ -44,6 +44,24 @@ test("real remoteStorage module validates and stores bands and related records",
     expect(edited).toHaveLength(1);
     expect(edited[0]?.name).toBe("Samuel");
     expect(edited[0]?.messenger).toBeUndefined();
+    await store.save("member", "a", {
+      id: "m",
+      name: "Samuel",
+      email: "sam@example.com",
+    });
+    expect((await store.list("member", "a"))[0]?.email).toBe("sam@example.com");
+    expect((await store.list("member", "a"))[0]?.phone).toBeUndefined();
+    await store.save("member", "a", { id: "m", name: "Samuel" });
+    const nameOnly = (await store.list("member", "a"))[0];
+    expect(nameOnly?.name).toBe("Samuel");
+    expect(nameOnly?.email).toBeUndefined();
+    await expect(
+      store.save("member", "a", {
+        id: "bad",
+        name: "Invalid email",
+        email: "invalid",
+      }),
+    ).rejects.toBeDefined();
     await store.removeMember("a", "m");
     expect(await store.list("member", "a")).toEqual([]);
     expect((await store.list("member", "b"))[0]?.name).toBe("Jo");
@@ -51,7 +69,7 @@ test("real remoteStorage module validates and stores bands and related records",
       "Invalid ID",
     );
     await expect(
-      store.save("member", "a", { id: "bad", name: "Missing contact" }),
+      store.save("member", "a", { id: "bad", name: "   " }),
     ).rejects.toBeDefined();
     await expect(
       store.save("band", "a", { id: "a", name: "   " }),
@@ -94,7 +112,7 @@ test("real remoteStorage module validates and stores bands and related records",
       .storeFile(
         "application/json",
         "bands/a/members/bad",
-        JSON.stringify({ id: "bad", name: "No contact" }),
+        JSON.stringify({ id: "bad", name: "" }),
       );
     await expect(store.list("member", "a")).rejects.toThrow(
       "Invalid member record",

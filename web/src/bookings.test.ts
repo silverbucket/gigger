@@ -53,6 +53,7 @@ test("linked booking schemas, band isolation and status enforcement", async () =
       venueId: "v",
       contactIds: ["c"],
       date: "2030-06-20",
+      contactDate: "2030-01-15",
       status: "enquiry",
       enquiryText: "Can you play?",
       enquirySource: "messenger",
@@ -78,12 +79,21 @@ test("linked booking schemas, band isolation and status enforcement", async () =
       { venueId: "missing" },
       { contactIds: ["missing"] },
       { date: "tomorrow" },
+      { contactDate: "yesterday" },
       { status: "played" },
     ])
       await expect(
         store.save("gig", "a", { ...gig, ...patch } as Gig),
       ).rejects.toBeDefined();
     await expect(store.save("gig", "b", gig)).rejects.toBeDefined();
+    await store.save("gig", "a", { ...gig, contactDate: "2030-01-16" });
+    expect((await store.list("gig", "a"))[0]).toMatchObject({
+      contactDate: "2030-01-16",
+      date: "2030-06-20",
+    });
+    const { contactDate: _, ...withoutContactDate } = gig;
+    await store.save("gig", "a", withoutContactDate);
+    expect((await store.list("gig", "a"))[0]?.contactDate).toBeUndefined();
     for (const source of ["instagram", "email", "other"] as const)
       await store.save("gig", "a", { ...gig, enquirySource: source });
     for (const status of ["offered", "confirmed", "played"] as const)

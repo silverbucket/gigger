@@ -92,6 +92,7 @@ function edit(gig?: Gig) {
         id: crypto.randomUUID(),
         title: "",
         date: "",
+        contactDate: new Date().toLocaleDateString("en-CA"),
         venueId: "",
         contactIds: [],
         status: "enquiry",
@@ -163,6 +164,7 @@ async function submitGig(event: SubmitEvent) {
         .filter(Boolean),
       public: { ...(ticketUrl ? { ticketUrl } : {}), description },
     };
+    if (!saved.contactDate) delete saved.contactDate;
     if (!saved.loadIn) delete saved.loadIn;
     if (!saved.soundcheck) delete saved.soundcheck;
     if (saved.setLength === undefined) delete saved.setLength;
@@ -305,7 +307,17 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
               </select></label
             >
             <label
-              >Date<input type="date" bind:value={draft.date} required></label
+              >Contact date<input
+                type="date"
+                bind:value={draft.contactDate}
+              ></label
+            >
+            <label
+              >Proposed gig date<input
+                type="date"
+                bind:value={draft.date}
+                required
+              ></label
             >
             <label
               >Venue<select
@@ -404,7 +416,8 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
         </form>
       {:else if detail}
         <h3>{detail.title}</h3>
-        <p>{detail.date} · {detail.status}</p>
+        <p>Proposed gig date: {detail.date} · {detail.status}</p>
+        <p>Contact date: {detail.contactDate ?? "Not recorded"}</p>
         <p>
           Venue:
           {venues.find((v) => v.id === detail?.venueId)?.name ?? detail.venue}

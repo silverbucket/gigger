@@ -25,6 +25,7 @@ let memberName = $state("");
 let editingMember = $state("");
 let creatingBand = $state(false);
 let phone = $state("");
+let memberEmail = $state("");
 let messenger = $state("");
 let mode = $state(location.pathname === "/signup" ? "signup" : "login");
 let email = $state("");
@@ -78,8 +79,8 @@ function createBand(event: SubmitEvent) {
 }
 function saveMember(event: SubmitEvent) {
   event.preventDefault();
-  if (!selected || !memberName.trim() || (!phone.trim() && !messenger.trim())) {
-    error = "Enter a name and a phone number or Messenger handle.";
+  if (!selected || !memberName.trim()) {
+    error = "Enter a member name.";
     return;
   }
   void save(async () => {
@@ -87,6 +88,7 @@ function saveMember(event: SubmitEvent) {
       id: editingMember || crypto.randomUUID(),
       name: memberName.trim(),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(memberEmail.trim() ? { email: memberEmail.trim() } : {}),
       ...(messenger.trim() ? { messenger: messenger.trim() } : {}),
     });
     resetMember();
@@ -96,12 +98,14 @@ function resetMember() {
   editingMember = "";
   memberName = "";
   phone = "";
+  memberEmail = "";
   messenger = "";
 }
 function editMember(member: Member) {
   editingMember = member.id;
   memberName = member.name;
   phone = member.phone ?? "";
+  memberEmail = member.email ?? "";
   messenger = member.messenger ?? "";
 }
 function removeMember(member: Member) {
@@ -330,7 +334,12 @@ onMount(() => {
           {#each current.members as member (member.id)}
             <li>
               <strong>{member.name}</strong>
-              — {[member.phone, member.messenger].filter(Boolean).join(" · ")}
+              {#if member.phone || member.email || member.messenger}
+                —
+                {[member.phone, member.email, member.messenger]
+                  .filter(Boolean)
+                  .join(" · ")}
+              {/if}
               <button
                 type="button"
                 class="text-button"
@@ -353,9 +362,11 @@ onMount(() => {
           {/each}
         </ul>
         <h3>{editingMember ? "Edit member" : "Add a member"}</h3>
-        <p>A name and at least one way to reach them.</p>
+        <p>Only a name is required. Contact details are optional.</p>
         <form onsubmit={saveMember}>
           <label>Name<input bind:value={memberName} required></label
+          ><label
+            >Email address<input type="email" bind:value={memberEmail}></label
           ><label>Phone number<input type="tel" bind:value={phone}></label
           ><label>Messenger handle<input bind:value={messenger}></label
           ><button type="submit" disabled={!ready || busy}>

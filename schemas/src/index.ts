@@ -6,6 +6,7 @@ export interface Member {
   id: string;
   name: string;
   phone?: string;
+  email?: string;
   messenger?: string;
 }
 export const gigStatuses = [
@@ -25,6 +26,7 @@ export interface Gig {
   venue?: string;
   address?: string;
   contacts?: string[];
+  contactDate?: string;
   enquiryText?: string;
   enquirySource?: EnquirySource;
   setLength?: number;
@@ -76,6 +78,11 @@ export interface Records {
   contact: Contact;
 }
 const text = { type: "string", minLength: 1, pattern: "\\S" };
+const email = {
+  type: "string",
+  format: "email",
+  pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+};
 const id = { type: "string", pattern: "^[A-Za-z0-9_-]+$" };
 const date = {
   type: "string",
@@ -98,14 +105,13 @@ function object(
 }
 export const schemas = {
   band: object({ name: text }, ["name"]),
-  member: object({ name: text, phone: text, messenger: text }, ["name"], {
-    anyOf: [{ required: ["phone"] }, { required: ["messenger"] }],
-  }),
+  member: object({ name: text, phone: text, email, messenger: text }, ["name"]),
   gig: object(
     {
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
+      contactDate: date,
       enquiryText: { type: "string" },
       enquirySource: { enum: [...enquirySources] },
       setLength: { type: "integer", minimum: 1 },
@@ -154,11 +160,7 @@ export const schemas = {
     {
       name: text,
       phone: text,
-      email: {
-        type: "string",
-        format: "email",
-        pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
-      },
+      email,
       messenger: text,
       instagram: text,
       notes: { type: "string" },
