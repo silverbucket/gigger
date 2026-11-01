@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Gigger</title></head>
+<body>
+  <main>
+    <h1>Gigger</h1>
+    <p>Local development stack</p>
+    <h2>Connect</h2>
+    <p><a href="/storage/">Create or manage a storage account</a>, then enter your remoteStorage address in your client:</p>
+    <p><code id="storage-address">username@localhost:8080</code> (replace username with your account name)</p>
+    <p>Sockethub: connect to <code id="sockethub-origin">http://localhost:8080</code> with Socket.IO path <code>/sockethub</code>.</p>
+    <p>API: <a href="/api/items">/api/items</a></p>
+    <h2>Items</h2>
+    <ul id="items"><li>Loading…</li></ul>
+  </main>
+  <script>
+    document.querySelector('#storage-address').textContent = `username@${location.host}`;
+    document.querySelector('#sockethub-origin').textContent = location.origin;
+    fetch('/api/items').then(response => {
+      if (!response.ok) throw new Error('API unavailable');
+      return response.json();
+    }).then(items => {
+      const list = document.querySelector('#items');
+      list.replaceChildren();
+      if (!items.length) list.textContent = 'No items yet. Run make seed to add an example.';
+      for (const item of items) {
+        const li = document.createElement('li');
+        li.textContent = item.name;
+        list.append(li);
+      }
+    }).catch(() => { document.querySelector('#items').textContent = 'Could not load items.'; });
+  </script>
+</body>
+</html>
