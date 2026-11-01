@@ -1,0 +1,25 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci --prefix api && npm test --prefix api
+      - run: docker compose config --quiet
+      - run: make up
+      - run: make seed && make seed
+      - name: Check proxy routes
+        run: |
+          curl -fsS http://localhost:8080/ | grep -q Gigger
+          curl -fsS http://localhost:8080/api/items | grep -q 'Welcome to Gigger'
+          curl -fsS http://localhost:8080/storage/ | grep -qi armadietto
+          curl -fsS 'http://localhost:8080/.well-known/webfinger?resource=acct:alice@localhost:8080' | grep -q 'http://localhost:8080/storage/storage/alice'
+          curl -fsS 'http://localhost:8080/sockethub/?EIO=4&transport=polling' | grep -q 'sid'
+      - if: always()
+        run: docker compose logs && docker compose down -v

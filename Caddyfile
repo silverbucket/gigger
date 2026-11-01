@@ -1,0 +1,25 @@
+:80 {
+  handle /health {
+    respond "ok" 200
+  }
+  handle /.well-known/* {
+    rewrite * /storage{uri}
+    reverse_proxy armadietto:8000
+  }
+  handle /storage {
+    redir /storage/ 308
+  }
+  handle /storage/* {
+    reverse_proxy armadietto:8000
+  }
+  handle /sockethub* {
+    reverse_proxy sockethub:10550
+  }
+  handle /api/* {
+    uri strip_prefix /api
+    reverse_proxy api:3000
+  }
+  handle {
+    reverse_proxy web:80
+  }
+}
