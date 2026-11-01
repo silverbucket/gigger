@@ -1,14 +1,12 @@
 {
-  "name": "gigger-api",
-  "version": "0.1.0",
+  "name": "@gigger/api",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "test": "npm run build && node --test test/*.test.mjs"
+    "start": "bun src/server.ts",
+    "seed": "bun src/seed.ts"
   },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^5.8.3"
+  "dependencies": {
+    "@gigger/schemas": "workspace:*"
   }
 }

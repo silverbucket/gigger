@@ -6,4 +6,4 @@ down:
 	docker compose down
 
 seed:
-	docker compose exec -T api node dist/seed.js
+	docker compose exec -T api bun src/seed.ts

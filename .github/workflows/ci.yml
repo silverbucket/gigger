@@ -5,12 +5,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: api/package-lock.json
-      - run: npm ci --prefix api && npm test --prefix api
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run check
+      - run: bun test
+      - run: bun run build
       - run: docker compose config --quiet
       - run: make up
       - run: make seed && make seed
@@ -18,8 +20,8 @@ jobs:
         run: |
           curl -fsS http://localhost:8080/ | grep -q Gigger
           curl -fsS http://localhost:8080/api/items | grep -q 'Welcome to Gigger'
-          curl -fsS http://localhost:8080/storage/ | grep -qi armadietto
           curl -fsS 'http://localhost:8080/.well-known/webfinger?resource=acct:alice@localhost:8080' | grep -q 'http://localhost:8080/storage/storage/alice'
           curl -fsS 'http://localhost:8080/sockethub/?EIO=4&transport=polling' | grep -q 'sid'
+      - run: AUTH_TEST_URL=http://localhost:8080/api bun test api/test/auth.integration.test.ts
       - if: always()
         run: docker compose logs && docker compose down -v

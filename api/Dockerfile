@@ -1,13 +1,11 @@
-FROM node:24-alpine AS build
+FROM oven/bun:1.4.2-alpine
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY tsconfig.json ./
-COPY src ./src
-RUN npm run build
-
-FROM node:24-alpine
-WORKDIR /app
-COPY --from=build /app/package.json ./
-COPY --from=build /app/dist ./dist
-CMD ["node", "dist/server.js"]
+COPY package.json bun.lock ./
+COPY api/package.json api/package.json
+COPY web/package.json web/package.json
+COPY schemas/package.json schemas/package.json
+RUN bun install --frozen-lockfile --production
+COPY api/src api/src
+COPY schemas/src schemas/src
+WORKDIR /app/api
+CMD ["bun", "src/server.ts"]
