@@ -233,6 +233,15 @@ export function createGigger(client: Client) {
       }
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);
     },
+    async moveGigStatus(bandId: string, gigId: string, status: GigStatus) {
+      const path = recordPath("gig", bandId, gigId);
+      const current = read("gig", await client.getObject(path));
+      if (!canMoveStatus(current.status, status))
+        throw new Error("Invalid gig status move");
+      const updated = { ...current, status };
+      await client.storeObject("gig", path, updated);
+      return updated;
+    },
     async removeMember(bandId: string, memberId: string) {
       await client.remove(recordPath("member", bandId, memberId));
     },

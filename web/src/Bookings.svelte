@@ -9,7 +9,7 @@ import {
   type Venue,
 } from "@gigger/schemas";
 import { onMount } from "svelte";
-import { bands } from "./storage";
+import { bands, storage } from "./storage";
 
 let {
   bandList,
@@ -46,9 +46,10 @@ let contactName = $state("");
 let contactEmail = $state("");
 let contactPhone = $state("");
 let source = $state<EnquirySource>("other");
-async function load() {
+let syncedChanges = false;
+async function load(background = false) {
   const requested = bandId;
-  loadedBand = "";
+  if (!background) loadedBand = "";
   const [g, v, c] = await Promise.all([
     bands.list("gig", requested),
     bands.list("venue", requested),
@@ -59,6 +60,7 @@ async function load() {
   venues = v;
   contacts = c;
   loadedBand = requested;
+  if (detail) detail = g.find((gig) => gig.id === detail?.id) ?? null;
 }
 async function run(action: () => Promise<void>) {
   busy = true;
@@ -70,6 +72,7 @@ async function run(action: () => Promise<void>) {
       cause instanceof Error ? cause.message : "Could not save. Please retry.";
   } finally {
     busy = false;
+    refreshSynced();
   }
 }
 function switchBand() {
@@ -81,9 +84,27 @@ function switchBand() {
   contacts = [];
   if (bandId) void run(load);
 }
+function refreshSynced() {
+  if (!syncedChanges || busy || !bandId) return;
+  syncedChanges = false;
+  void load(true).catch(() => {
+    error = "Could not refresh bookings. Please retry.";
+    syncedChanges = true;
+  });
+}
 onMount(() => {
   bandId = initialBand || bandList[0]?.id || "";
   if (bandId) void run(load);
+  const scope = storage.scope("/gigger/");
+  const changed = () => {
+    syncedChanges = true;
+  };
+  scope.on("change", changed);
+  storage.on("sync-done", refreshSynced);
+  return () => {
+    scope.removeEventListener("change", changed);
+    storage.removeEventListener("sync-done", refreshSynced);
+  };
 });
 function edit(gig?: Gig) {
   draft = gig
@@ -178,10 +199,9 @@ async function submitGig(event: SubmitEvent) {
 }
 async function move(status: Gig["status"]) {
   if (!detail) return;
-  const value = { ...$state.snapshot(detail), status };
+  const gigId = detail.id;
   await run(async () => {
-    await bands.save("gig", bandId, value);
-    detail = value;
+    detail = await bands.moveGigStatus(bandId, gigId, status);
     await load();
     await onchanged();
   });

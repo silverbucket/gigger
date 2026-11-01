@@ -101,6 +101,30 @@ test("linked booking schemas, band isolation and status enforcement", async () =
     await expect(store.save("gig", "a", gig)).rejects.toThrow(
       "Invalid gig status move",
     );
+    const stale = { ...gig, id: "synced" };
+    await store.save("gig", "a", stale);
+    const latest = {
+      ...stale,
+      date: "2031-07-01",
+      notes: "Synced notes",
+      fee: { amount: "900 EUR", extras: ["Hotel"] },
+    };
+    await store.save("gig", "a", latest);
+    const moved = await store.moveGigStatus("a", stale.id, "offered");
+    expect(moved).toMatchObject({ ...latest, status: "offered" });
+    expect(
+      (await store.list("gig", "a")).find((g) => g.id === stale.id),
+    ).toMatchObject({ ...latest, status: "offered" });
+    await store.moveGigStatus("a", stale.id, "cancelled");
+    await expect(
+      store.moveGigStatus("a", stale.id, "confirmed"),
+    ).rejects.toThrow("Invalid gig status move");
+    await expect(
+      store.moveGigStatus("a", "missing", "offered"),
+    ).rejects.toThrow("Invalid gig record");
+    await expect(store.moveGigStatus("b", stale.id, "offered")).rejects.toThrow(
+      "Invalid gig record",
+    );
     const cancelled = { ...gig, id: "cancel" };
     await store.save("gig", "a", cancelled);
     await store.save("gig", "a", { ...cancelled, status: "cancelled" });
