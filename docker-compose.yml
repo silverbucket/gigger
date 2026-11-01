@@ -6,10 +6,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
-      armadietto: {condition: service_healthy}
-      sockethub: {condition: service_healthy}
-      api: {condition: service_healthy}
-      web: {condition: service_healthy}
+      armadietto: { condition: service_healthy }
+      sockethub: { condition: service_healthy }
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/health"]
       interval: 10s
@@ -22,7 +22,15 @@ services:
       - armadietto_data:/usr/share/armadietto
       - ./armadietto/conf.json:/etc/armadietto/conf.json:ro
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/storage/"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8000/storage/",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -40,28 +48,42 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
     depends_on:
-      redis: {condition: service_healthy}
+      redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10550/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:10550/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 30s
   api:
-    build: ./api
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     environment:
       DATABASE_PATH: /data/gigger.sqlite
     volumes:
       - api_data:/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
   web:
-    image: nginx:1.27-alpine
-    volumes:
-      - ./web:/usr/share/nginx/html:ro
+    build:
+      context: .
+      dockerfile: web/Dockerfile
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 10s

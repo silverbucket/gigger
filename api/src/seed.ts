@@ -1,5 +1,12 @@
-import { db } from './db.js';
-
-db.prepare('INSERT OR IGNORE INTO items (name) VALUES (?)').run('Welcome to Gigger');
-db.close();
-console.log('Seed complete');
+import { openDatabase } from "./db";
+export function seed(db: ReturnType<typeof openDatabase>) {
+  db.query("INSERT OR IGNORE INTO items (name) VALUES (?)").run(
+    "Welcome to Gigger",
+  );
+}
+if (import.meta.main) {
+  const db = openDatabase();
+  seed(db);
+  db.close();
+  console.log("Seed complete");
+}

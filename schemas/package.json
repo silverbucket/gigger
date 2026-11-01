@@ -1,0 +1,6 @@
+{
+  "name": "@gigger/schemas",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts"
+}

@@ -5,12 +5,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: api/package-lock.json
-      - run: npm ci --prefix api && npm test --prefix api
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run check
+      - run: bun test
+      - run: bun run build
       - run: docker compose config --quiet
       - run: make up
       - run: make seed && make seed
