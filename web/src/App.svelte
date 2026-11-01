@@ -8,6 +8,8 @@ let summaries = $state<Summary[]>([]);
 let selected = $state("");
 let bandName = $state("");
 let memberName = $state("");
+let editingMember = $state("");
+let creatingBand = $state(false);
 let phone = $state("");
 let messenger = $state("");
 let mode = $state(location.pathname === "/signup" ? "signup" : "login");
@@ -22,13 +24,15 @@ let busy = $state(false);
 let current = $derived(summaries.find((item) => item.band.id === selected));
 
 async function load() {
-  summaries = await Promise.all(
+  const token = storage.remote.token;
+  const loaded = await Promise.all(
     (await bands.bands()).map(async (band) => ({
       band,
       members: await bands.list("member", band.id),
       gigs: await bands.list("gig", band.id),
     })),
   );
+  if (signedIn && token === storage.remote.token) summaries = loaded;
 }
 async function save(action: () => Promise<void>) {
   busy = true;
@@ -53,9 +57,10 @@ function createBand(event: SubmitEvent) {
     await bands.save("band", band.id, band);
     selected = band.id;
     bandName = "";
+    creatingBand = false;
   });
 }
-function addMember(event: SubmitEvent) {
+function saveMember(event: SubmitEvent) {
   event.preventDefault();
   if (!selected || !memberName.trim() || (!phone.trim() && !messenger.trim())) {
     error = "Enter a name and a phone number or Messenger handle.";
@@ -63,14 +68,31 @@ function addMember(event: SubmitEvent) {
   }
   void save(async () => {
     await bands.save("member", selected, {
-      id: crypto.randomUUID(),
+      id: editingMember || crypto.randomUUID(),
       name: memberName.trim(),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       ...(messenger.trim() ? { messenger: messenger.trim() } : {}),
     });
-    memberName = "";
-    phone = "";
-    messenger = "";
+    resetMember();
+  });
+}
+function resetMember() {
+  editingMember = "";
+  memberName = "";
+  phone = "";
+  messenger = "";
+}
+function editMember(member: Member) {
+  editingMember = member.id;
+  memberName = member.name;
+  phone = member.phone ?? "";
+  messenger = member.messenger ?? "";
+}
+function removeMember(member: Member) {
+  if (!confirm(`Remove ${member.name} from this band?`)) return;
+  void save(async () => {
+    await bands.removeMember(selected, member.id);
+    if (editingMember === member.id) resetMember();
   });
 }
 async function authenticate(event: SubmitEvent) {
@@ -110,19 +132,20 @@ async function authenticate(event: SubmitEvent) {
     busy = false;
   }
 }
-async function logOut() {
-  busy = true;
+function logOut(event: MouseEvent) {
+  event.preventDefault();
+  signedIn = false;
+  ready = false;
+  busy = false;
   error = "";
-  try {
-    await logout();
-  } catch (cause) {
-    error =
-      cause instanceof Error
-        ? cause.message
-        : "Could not log out. Please retry.";
-  } finally {
-    busy = false;
-  }
+  status = "";
+  summaries = [];
+  selected = "";
+  mode = "login";
+  creatingBand = false;
+  bandName = "";
+  resetMember();
+  logout();
 }
 onMount(() => {
   const refresh = () => {
@@ -180,6 +203,9 @@ onMount(() => {
     <p class="eyebrow">Keep the band together</p>
     <h1>Gigger</h1>
     <p>One place for every band you play with.</p>
+    {#if signedIn}
+      <a class="logout" href="/login" onclick={logOut}>Log out</a>
+    {/if}
   </header>
   {#if error}
     <p class="error" role="alert">{error}</p>
@@ -200,7 +226,7 @@ onMount(() => {
             required
             maxlength="254"
             pattern={mode === "signup"
-              ? "[a-zA-Z0-9][a-zA-Z0-9._-]{1,63}"
+              ? "[a-zA-Z0-9][a-zA-Z0-9._\\-]{1,63}"
               : undefined}
           ></label
         >
@@ -251,24 +277,35 @@ onMount(() => {
       </p>
     </section>
   {:else}
-    <button type="button" onclick={logOut} disabled={busy}>Log out</button>
     <nav aria-label="Bands">
       <label
-        >View band<select bind:value={selected}>
+        >View band<select bind:value={selected} onchange={() => resetMember()}>
           <option value="">All bands</option>
           {#each summaries as { band } (band.id)}
             <option value={band.id}>{band.name}</option>
           {/each}
         </select></label
       >
+      <button
+        type="button"
+        aria-expanded={creatingBand}
+        aria-controls="new-band"
+        onclick={() => {
+          creatingBand = !creatingBand;
+        }}
+      >
+        + New band
+      </button>
     </nav>
-    <section aria-labelledby="create-title">
-      <h2 id="create-title">Create a band</h2>
-      <form onsubmit={createBand}>
-        <label>Band name<input bind:value={bandName} required></label
-        ><button type="submit" disabled={!ready || busy}>Create band</button>
-      </form>
-    </section>
+    {#if creatingBand}
+      <section id="new-band" aria-labelledby="create-title">
+        <h2 id="create-title">Create a band</h2>
+        <form onsubmit={createBand}>
+          <label>Band name<input bind:value={bandName} required></label
+          ><button type="submit" disabled={!ready || busy}>Create band</button>
+        </form>
+      </section>
+    {/if}
     {#if current}
       <section>
         <h2>{current.band.name}</h2>
@@ -278,18 +315,39 @@ onMount(() => {
             <li>
               <strong>{member.name}</strong>
               — {[member.phone, member.messenger].filter(Boolean).join(" · ")}
+              <button
+                type="button"
+                class="text-button"
+                disabled={busy}
+                onclick={() => editMember(member)}
+              >
+                Edit<span class="sr-only"> {member.name}</span>
+              </button>
+              <button
+                type="button"
+                class="text-button"
+                disabled={busy}
+                onclick={() => removeMember(member)}
+              >
+                Remove<span class="sr-only"> {member.name}</span>
+              </button>
             </li>
           {:else}
             <li>No members yet.</li>
           {/each}
         </ul>
-        <h3>Add a member</h3>
+        <h3>{editingMember ? "Edit member" : "Add a member"}</h3>
         <p>A name and at least one way to reach them.</p>
-        <form onsubmit={addMember}>
+        <form onsubmit={saveMember}>
           <label>Name<input bind:value={memberName} required></label
           ><label>Phone number<input type="tel" bind:value={phone}></label
           ><label>Messenger handle<input bind:value={messenger}></label
-          ><button type="submit" disabled={!ready || busy}>Add member</button>
+          ><button type="submit" disabled={!ready || busy}>
+            {editingMember ? "Save member" : "Add member"}
+          </button>
+          {#if editingMember}
+            <button type="button" onclick={resetMember}>Cancel</button>
+          {/if}
         </form>
       </section>
     {/if}
@@ -308,6 +366,7 @@ onMount(() => {
               class="band"
               onclick={() => {
                 selected = summary.band.id;
+                resetMember();
               }}
             >
               {summary.band.name}
@@ -356,6 +415,34 @@ onMount(() => {
   {/if}
 </main>
 <style>
+.logout {
+  position: absolute;
+  top: 2rem;
+  right: 0;
+  font-size: 0.875rem;
+}
+.text-button {
+  background: transparent;
+  color: #205b43;
+  border: 0;
+  padding: 0.3rem 0.5rem;
+  text-decoration: underline;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+nav {
+  display: flex;
+  gap: 1rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
 .status {
   text-transform: capitalize;
 }
@@ -373,6 +460,7 @@ main {
   padding: 2rem 1rem 4rem;
 }
 header {
+  position: relative;
   padding: 2rem 0;
 }
 h1 {

@@ -14,9 +14,9 @@ make seed
 
 Open [http://localhost:8080](http://localhost:8080). Change `PORT` in `.env` if needed. The first build downloads Sockethub source and can take several minutes. `make seed` adds the original example API item and is safe to repeat.
 
-Sign up at `/signup` with a username, email, password, and band name. Signup creates your account and first band, then opens the app. Log in at `/login` with your username and password. Bare usernames use this site's account service; an explicit `username@host` uses that host's standard authorization flow. Sessions survive reloads. Log out from the app to revoke a local session and clear its browser cache after changes finish saving.
+Sign up at `/signup` with a username, email, password, and band name. Signup creates your account and first band, then opens the app. Log in at `/login` with your username and password. Bare usernames use this site's account service; an explicit `username@host` uses that host's standard authorization flow. Sessions survive reloads. Log out from the header to clear the browser session immediately. Local token revocation runs in the background; logout does not wait for pending changes to sync.
 
-Create bands, switch between them, and add members with a name and a phone number or Messenger handle. The all-bands overview lists gigs grouped by status, with upcoming confirmed gigs first.
+Use “+ New band” to create bands, switch between them, and add members with a name and a phone number or Messenger handle. The private account owner acts as the band leader and can edit or remove members. The all-bands overview lists gigs grouped by status, with upcoming confirmed gigs first.
 
 Only Caddy publishes a port, bound to localhost. The API exposes `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, `/api/health`, `/api/items`, and `/api/schemas`. Accounts, password hashes, tokens, and band data live only in Armadietto; the API keeps no user/session tables. The container-only auth hook on port 8001 uses Armadietto's existing account and authorization methods and grants only `gigger:rw`. Duplicate usernames and emails are rejected. Signup initializes the first band on the server and rolls back a new account if initial setup fails. The Armadietto image is pinned by digest and uses its original username routing and password hashing.
 

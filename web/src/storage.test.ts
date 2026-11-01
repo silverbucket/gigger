@@ -35,6 +35,21 @@ test("real remoteStorage module validates and stores bands and related records",
     expect((await store.list("member", "a")).map((m) => m.name)).toEqual([
       "Sam",
     ]);
+    await store.save("member", "a", {
+      id: "m",
+      name: "Samuel",
+      phone: "+420111222333",
+    });
+    const edited = await store.list("member", "a");
+    expect(edited).toHaveLength(1);
+    expect(edited[0]?.name).toBe("Samuel");
+    expect(edited[0]?.messenger).toBeUndefined();
+    await store.removeMember("a", "m");
+    expect(await store.list("member", "a")).toEqual([]);
+    expect((await store.list("member", "b"))[0]?.name).toBe("Jo");
+    await expect(store.removeMember("a", "../escape")).rejects.toThrow(
+      "Invalid ID",
+    );
     await expect(
       store.save("member", "a", { id: "bad", name: "Missing contact" }),
     ).rejects.toBeDefined();

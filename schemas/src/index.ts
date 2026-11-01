@@ -93,6 +93,7 @@ export interface Client {
   getAll(path: string): Promise<unknown>;
   getListing(path: string): Promise<unknown>;
   validate(value: object): { valid?: boolean };
+  remove(path: string): Promise<unknown>;
 }
 function safeId(value: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid ID");
@@ -125,6 +126,9 @@ export function createGigger(client: Client) {
       if (kind === "band" && value.id !== bandId)
         throw new Error("Band ID must match its path");
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);
+    },
+    async removeMember(bandId: string, memberId: string) {
+      await client.remove(recordPath("member", bandId, memberId));
     },
     async bands(): Promise<Band[]> {
       const folders = await client.getListing("bands/");
