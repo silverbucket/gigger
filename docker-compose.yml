@@ -16,7 +16,11 @@ services:
       timeout: 5s
       retries: 12
   armadietto:
-    image: remotestorage/armadietto-monolithic:latest
+    build:
+      context: .
+      dockerfile: armadietto/Dockerfile
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:${PORT:-8080}}
     platform: linux/amd64
     volumes:
       - armadietto_data:/usr/share/armadietto
@@ -67,6 +71,8 @@ services:
       dockerfile: api/Dockerfile
     environment:
       DATABASE_PATH: /data/gigger.sqlite
+      ARMADIETTO_AUTH_URL: http://armadietto:8001
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:${PORT:-8080}}
     volumes:
       - api_data:/data
     healthcheck:

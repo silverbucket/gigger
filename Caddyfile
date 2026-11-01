@@ -6,11 +6,15 @@
     rewrite * /storage{uri}
     reverse_proxy armadietto:8000
   }
-  handle /storage {
-    redir /storage/ 308
-  }
-  handle /storage/* {
+  handle /storage/storage/* {
     reverse_proxy armadietto:8000
+  }
+  @authorization path /storage/oauth* /storage/assets/*
+  handle @authorization {
+    reverse_proxy armadietto:8000
+  }
+  handle /storage* {
+    respond 404
   }
   handle /sockethub* {
     reverse_proxy sockethub:10550
