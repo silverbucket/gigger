@@ -49,7 +49,6 @@ export interface Venue {
   id: string;
   name: string;
   address: string;
-  surveys?: VenueSurvey[];
 }
 export const capacities = [
   "under 50",
@@ -70,8 +69,10 @@ export const dealTypes = [
   "bar percentage",
   "mixed",
 ] as const;
+/** One record per played gig, keyed by the gig ID, so concurrent saves never overwrite each other. */
 export interface VenueSurvey {
-  gigId: string;
+  id: string;
+  venueId: string;
   date: string;
   rating: number;
   capacity: (typeof capacities)[number];
@@ -80,6 +81,10 @@ export interface VenueSurvey {
   stageNotes?: string;
   playAgain: boolean;
 }
+export type SurveyInput = Pick<
+  VenueSurvey,
+  "rating" | "capacity" | "setting" | "pa" | "stageNotes" | "playAgain"
+>;
 export interface Earnings {
   dealType: (typeof dealTypes)[number];
   door?: number;
@@ -213,6 +218,7 @@ export interface Records {
   member: Member;
   gig: Gig;
   venue: Venue;
+  survey: VenueSurvey;
   contact: Contact;
   otherBand: OtherBand;
 }
@@ -244,29 +250,25 @@ function object(
 }
 const money = { type: "number", minimum: 0 };
 const currency = { type: "string", pattern: "^[A-Z]{3}$" };
-export const surveySchema = {
-  type: "object",
-  properties: {
-    gigId: id,
-    date,
-    rating: { type: "integer", minimum: 1, maximum: 5 },
-    capacity: { enum: [...capacities] },
-    setting: { enum: ["indoor", "outdoor"] },
-    pa: { enum: [...paOptions] },
-    stageNotes: { type: "string" },
-    playAgain: { type: "boolean" },
-  },
-  required: [
-    "gigId",
-    "date",
-    "rating",
-    "capacity",
-    "setting",
-    "pa",
-    "playAgain",
-  ],
-  additionalProperties: false,
+const surveyFields = {
+  venueId: id,
+  date,
+  rating: { type: "integer", minimum: 1, maximum: 5 },
+  capacity: { enum: [...capacities] },
+  setting: { enum: ["indoor", "outdoor"] },
+  pa: { enum: [...paOptions] },
+  stageNotes: { type: "string" },
+  playAgain: { type: "boolean" },
 };
+export const surveySchema = object(surveyFields, [
+  "venueId",
+  "date",
+  "rating",
+  "capacity",
+  "setting",
+  "pa",
+  "playAgain",
+]);
 const earningsSchema = {
   type: "object",
   properties: {
@@ -339,14 +341,8 @@ export const schemas = {
       ],
     },
   ),
-  venue: object(
-    {
-      name: text,
-      address: text,
-      surveys: { type: "array", items: surveySchema },
-    },
-    ["name", "address"],
-  ),
+  venue: object({ name: text, address: text }, ["name", "address"]),
+  survey: surveySchema,
   otherBand: object(
     {
       name: text,
@@ -446,7 +442,7 @@ export function createGigger(client: Client) {
     async markPlayed(
       bandId: string,
       gigId: string,
-      survey: VenueSurvey,
+      survey: SurveyInput,
       earnings: Earnings,
     ) {
       const path = recordPath("gig", bandId, gigId);
@@ -464,9 +460,10 @@ export function createGigger(client: Client) {
             name: current.venue,
             address: current.address,
           });
-      // Explicitly select survey fields: private earnings must never enter venue data.
-      const cleanSurvey: VenueSurvey = {
-        gigId: current.id,
+      // Explicitly select survey fields: private earnings must never enter survey data.
+      const cleanSurvey = read("survey", {
+        id: current.id,
+        venueId,
         date: current.date,
         rating: survey.rating,
         capacity: survey.capacity,
@@ -476,13 +473,6 @@ export function createGigger(client: Client) {
           ? { stageNotes: survey.stageNotes.trim() }
           : {}),
         playAgain: survey.playAgain,
-      };
-      const updatedVenue = read("venue", {
-        ...venue,
-        surveys: [
-          ...(venue.surveys ?? []).filter((s) => s.gigId !== gigId),
-          cleanSurvey,
-        ],
       });
       const updated = read("gig", {
         ...current,
@@ -495,11 +485,17 @@ export function createGigger(client: Client) {
         earnings.handedOver > earnings.total
       )
         throw new Error("Amount handed over cannot exceed total takings.");
-      // Save the survey first; a retry replaces it if saving the gig fails.
+      if (!existing)
+        await client.storeObject(
+          "venue",
+          recordPath("venue", bandId, venueId),
+          venue,
+        );
+      // Each survey is its own record keyed by gig; a retry simply rewrites it.
       await client.storeObject(
-        "venue",
-        recordPath("venue", bandId, venueId),
-        updatedVenue,
+        "survey",
+        recordPath("survey", bandId, current.id),
+        cleanSurvey,
       );
       await client.storeObject("gig", path, updated);
       return updated;

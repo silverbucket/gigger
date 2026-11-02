@@ -10,7 +10,8 @@ import {
 import RemoteStorage from "remotestoragejs";
 
 const survey: VenueSurvey = {
-  gigId: "g",
+  id: "g",
+  venueId: "v",
   date: "2030-01-01",
   rating: 4,
   capacity: "50–100",
@@ -57,12 +58,6 @@ test("survey validation and earnings isolation using real private/public storage
       name: "Club",
       address: "Main St",
     });
-    const venue = {
-      id: "v",
-      name: "Club",
-      address: "Main St",
-      surveys: [survey],
-    };
     for (const patch of [
       { rating: 0 },
       { rating: 6 },
@@ -76,15 +71,12 @@ test("survey validation and earnings isolation using real private/public storage
       { freeform: "unexpected" },
     ]) {
       await expect(
-        store.save("venue", "a", {
-          ...venue,
-          surveys: [{ ...survey, ...patch }],
-        } as typeof venue),
+        store.save("survey", "a", { ...survey, ...patch } as VenueSurvey),
       ).rejects.toBeDefined();
     }
     const { rating: _, ...missing } = survey;
     await expect(
-      store.save("venue", "a", { ...venue, surveys: [missing as VenueSurvey] }),
+      store.save("survey", "a", missing as VenueSurvey),
     ).rejects.toBeDefined();
     await store.save("gig", "a", {
       id: "g",
@@ -122,7 +114,7 @@ test("survey validation and earnings isolation using real private/public storage
     await expect(
       store.markPlayed("a", "g", survey, { ...noSplit, handedOver: 601 }),
     ).rejects.toThrow("cannot exceed");
-    expect((await store.list("venue", "a"))[0]?.surveys).toBeUndefined();
+    expect(await store.list("survey", "a")).toEqual([]);
     await store.markPlayed(
       "a",
       "g",
@@ -148,13 +140,18 @@ test("survey validation and earnings isolation using real private/public storage
       "EUR",
     );
     expect((await store.bands())[0]?.currency).toBe("CZK");
-    const savedVenue = (await store.list("venue", "a"))[0];
-    expect(savedVenue?.surveys).toEqual([
+    const savedSurveys = await store.list("survey", "a");
+    expect(savedSurveys).toHaveLength(2);
+    expect(savedSurveys).toMatchObject([
       survey,
-      { ...survey, gigId: "germany", date: "2030-01-02" },
+      { ...survey, id: "germany", date: "2030-01-02" },
     ]);
-    expect(JSON.stringify(savedVenue)).not.toContain("earnings");
-    expect(JSON.stringify(savedVenue)).not.toContain("takeHome");
+    const shared = JSON.stringify([
+      savedSurveys,
+      await store.list("venue", "a"),
+    ]);
+    expect(shared).not.toContain("earnings");
+    expect(shared).not.toContain("takeHome");
     expect(await store.list("gig", "b")).toEqual([]);
     expect(
       Object.keys((await rs.scope("/public/gigger/").getAll("bands/")) ?? {}),
@@ -203,12 +200,50 @@ test("legacy venue creation and retry after gig write fails keep one survey", as
     );
     expect((await store.list("gig", "a"))[0]?.status).toBe("confirmed");
     await store.markPlayed("a", "g", survey, earnings);
-    expect((await store.list("venue", "a"))[0]?.surveys).toEqual([survey]);
+    expect(await store.list("survey", "a")).toMatchObject([
+      { ...survey, venueId: "gig-g" },
+    ]);
     expect((await store.list("gig", "a"))[0]).toMatchObject({
       venueId: "gig-g",
       status: "played",
       earnings,
     });
+  } finally {
+    await rs.disconnect();
+  }
+});
+
+test("surveys for different gigs at one venue never overwrite each other", async () => {
+  const rs = new RemoteStorage();
+  rs.access.claim("gigger", "rw");
+  await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
+  const store = createGigger(rs.scope("/gigger/"));
+  try {
+    await store.save("venue", "a", { id: "v", name: "Club", address: "Main" });
+    const gig = {
+      title: "Show",
+      status: "confirmed" as const,
+      venueId: "v",
+      contactIds: [],
+    };
+    await store.save("gig", "a", { ...gig, id: "one", date: "2030-01-01" });
+    await store.save("gig", "a", { ...gig, id: "two", date: "2030-01-02" });
+    const earnings = {
+      dealType: "door" as const,
+      total: 100,
+      takeHome: 100,
+      currency: "EUR",
+    };
+    await Promise.all([
+      store.markPlayed("a", "one", survey, earnings),
+      store.markPlayed("a", "two", { ...survey, rating: 2 }, earnings),
+    ]);
+    const saved = await store.list("survey", "a");
+    expect(saved.map((s) => [s.id, s.rating]).sort()).toEqual([
+      ["one", 4],
+      ["two", 2],
+    ]);
+    expect(venueAverages(saved)?.rating).toBe(3);
   } finally {
     await rs.disconnect();
   }

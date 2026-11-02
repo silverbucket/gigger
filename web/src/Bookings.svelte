@@ -8,6 +8,7 @@ import {
   formatMoney,
   type Gig,
   type OtherBand,
+  type SurveyInput,
   statusMoves,
   type Venue,
   type VenueSurvey,
@@ -39,6 +40,7 @@ let {
 let groups = $derived(groupBookings(summaries, bandId));
 let gigs = $state<Gig[]>([]);
 let venues = $state<Venue[]>([]);
+let surveys = $state<VenueSurvey[]>([]);
 let contacts = $state<Contact[]>([]);
 let otherBands = $state<OtherBand[]>([]);
 let otherBand = $state<OtherBand>({ id: "", name: "", contactIds: [] });
@@ -58,6 +60,7 @@ let extraText = $state("");
 let timesText = $state("");
 let amount = $state<number>();
 let feeCurrency = $state("");
+let legacyFee = $state("");
 let bandCurrency = $derived(
   summaries.find((s) => s.band.id === bandId)?.band.currency ?? "EUR",
 );
@@ -74,15 +77,17 @@ let source = $state<EnquirySource | "">("");
 let syncedChanges = false;
 async function load() {
   const requested = bandId;
-  const [g, v, c, b] = await Promise.all([
+  const [g, v, c, b, sv] = await Promise.all([
     bands.list("gig", requested),
     bands.list("venue", requested),
     bands.list("contact", requested),
     bands.list("otherBand", requested),
+    bands.list("survey", requested),
   ]);
   if (requested !== bandId) return;
   gigs = g;
   venues = v;
+  surveys = sv;
   contacts = c;
   otherBands = b;
   loadedBand = requested;
@@ -148,12 +153,10 @@ function edit(gig?: Gig) {
   otherBandName = "";
   otherBandContactIds = [];
   draft.venueId ??= "";
-  const legacyAmount =
-    typeof gig?.fee === "string" ? gig.fee : gig?.fee?.amount;
-  amount =
-    typeof legacyAmount === "number"
-      ? legacyAmount
-      : Number.parseFloat(legacyAmount ?? "") || undefined;
+  const previousFee = typeof gig?.fee === "string" ? gig.fee : gig?.fee?.amount;
+  amount = typeof previousFee === "number" ? previousFee : undefined;
+  // Legacy free-text fees stay as written until an amount replaces them.
+  legacyFee = typeof previousFee === "string" ? previousFee.trim() : "";
   feeCurrency =
     (typeof gig?.fee === "object" ? gig.fee.currency : undefined) ??
     bandCurrency;
@@ -227,7 +230,9 @@ async function submitGig(event: SubmitEvent) {
       fee: {
         ...(amount !== undefined
           ? { amount, currency: feeCurrency.toUpperCase() }
-          : {}),
+          : legacyFee
+            ? { amount: legacyFee }
+            : {}),
         extras: extraText
           .split("\n")
           .map((s) => s.trim())
@@ -265,7 +270,7 @@ async function move(status: Gig["status"]) {
     await onchanged();
   });
 }
-async function savePlayed(survey: VenueSurvey, earnings: Earnings) {
+async function savePlayed(survey: SurveyInput, earnings: Earnings) {
   if (!detail) return;
   const gigId = detail.id;
   await run(async () => {
@@ -623,6 +628,9 @@ async function saveRecord(
           </details>
           <details>
             <summary>Money</summary>
+            {#if legacyFee}
+              <p>Current fee: {legacyFee}. Enter an amount to replace it.</p>
+            {/if}
             <label
               >Fee<input
                 type="number"
@@ -834,8 +842,8 @@ async function saveRecord(
       </fieldset>
     </form>
     {#if venue.id}
-      {@const surveys = venues.find((v) => v.id === venue.id)?.surveys ?? []}
-      {@const averages = venueAverages(surveys)}
+      {@const venueSurveys = surveys.filter((s) => s.venueId === venue.id)}
+      {@const averages = venueAverages(venueSurveys)}
       <h4>Venue surveys</h4>
       <p>Saved in your account; sharing with other bands comes later.</p>
       {#if averages}
@@ -847,9 +855,9 @@ async function saveRecord(
             (averages.paProvided / averages.count) * 100,
           )}%)
         </p>
-        {#each [...surveys].sort((a, b) =>
+        {#each [...venueSurveys].sort((a, b) =>
           b.date.localeCompare(a.date),
-        ) as survey (survey.gigId)}
+        ) as survey (survey.id)}
           <article>
             <h5>{survey.date} · {survey.rating} / 5</h5>
             <p>

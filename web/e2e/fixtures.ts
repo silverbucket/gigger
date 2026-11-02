@@ -7,6 +7,7 @@ export const test = base.extend<{
     password: string;
     bandId: string;
     read: (path: string) => Promise<Record<string, unknown>>;
+    exists: (path: string) => Promise<boolean>;
     seedGig: (gig: Partial<Gig> & Pick<Gig, "id" | "title">) => Promise<void>;
   };
 }>({
@@ -67,6 +68,11 @@ export const test = base.extend<{
         const result = await request.get(`${path}${location}`, { headers });
         expect(result.ok()).toBe(true);
         return result.json();
+      },
+      async exists(location) {
+        const result = await request.get(`${path}${location}`, { headers });
+        expect([200, 404]).toContain(result.status());
+        return result.status() === 200;
       },
       async seedGig(gig) {
         await put("gig", `gigs/${gig.id}`, {

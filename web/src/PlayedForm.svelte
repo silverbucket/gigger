@@ -4,10 +4,10 @@ import {
   capacities,
   dealTypes,
   type Earnings,
-  feeAmount,
   formatMoney,
   type Gig,
   paOptions,
+  type SurveyInput,
   type VenueSurvey,
 } from "@gigger/schemas";
 import { untrack } from "svelte";
@@ -22,7 +22,7 @@ let {
   gig: Gig;
   currency: string;
   busy: boolean;
-  onsave: (survey: VenueSurvey, earnings: Earnings) => Promise<void>;
+  onsave: (survey: SurveyInput, earnings: Earnings) => Promise<void>;
   oncancel: () => void;
 } = $props();
 let rating = $state<number | "">("");
@@ -35,15 +35,21 @@ let dealType = $state<Earnings["dealType"]>("fixed fee");
 let door = $state<number>();
 let hat = $state<number>();
 let bar = $state<number>();
-const fee = $derived(feeAmount(gig.fee));
-let totalOverride = $state<number | undefined>(
-  untrack(() => feeAmount(gig.fee)),
+// A fixed fee pre-fills the total together with its own currency, never relabelled.
+const fee = untrack(() =>
+  typeof gig.fee === "object" && typeof gig.fee.amount === "number"
+    ? {
+        amount: gig.fee.amount,
+        currency: (gig.fee.currency ?? currency).toUpperCase(),
+      }
+    : undefined,
 );
+let totalOverride = $state<number | undefined>(fee?.amount);
 let split = $state("none");
 let numberOfBands = $state<number>();
 let handedOver = $state<number>();
 let takeHomeOverride = $state<number>();
-let selectedCurrency = $state("");
+let selectedCurrency = $state(fee?.currency ?? "");
 const effectiveCurrency = $derived(selectedCurrency || currency);
 const total = $derived(totalOverride ?? (door ?? 0) + (hat ?? 0) + (bar ?? 0));
 const calculated = $derived(
@@ -56,11 +62,22 @@ const calculated = $derived(
 const takeHome = $derived(takeHomeOverride ?? calculated);
 const money = (amount: number) =>
   formatMoney(amount, effectiveCurrency, navigator.language);
+const feeMatchesCurrency = () =>
+  fee !== undefined && fee.currency === effectiveCurrency.toUpperCase();
 function changeDeal(event: Event & { currentTarget: HTMLSelectElement }) {
   dealType = event.currentTarget.value as Earnings["dealType"];
   if (dealType === "fixed fee" && totalOverride === undefined)
-    totalOverride = fee;
-  else if (dealType !== "fixed fee" && totalOverride === fee)
+    totalOverride = feeMatchesCurrency() ? fee?.amount : undefined;
+  else if (dealType !== "fixed fee" && totalOverride === fee?.amount)
+    totalOverride = undefined;
+}
+function changeCurrency(event: Event & { currentTarget: HTMLInputElement }) {
+  selectedCurrency = event.currentTarget.value;
+  if (
+    selectedCurrency.length === 3 &&
+    !feeMatchesCurrency() &&
+    totalOverride === fee?.amount
+  )
     totalOverride = undefined;
 }
 async function submit(event: SubmitEvent) {
@@ -68,8 +85,6 @@ async function submit(event: SubmitEvent) {
   if (!rating || !capacity || !setting || !pa || !playAgain) return;
   await onsave(
     {
-      gigId: gig.id,
-      date: gig.date,
       rating,
       capacity,
       setting,
@@ -225,9 +240,7 @@ async function submit(event: SubmitEvent) {
         pattern={"[A-Za-z]{3}"}
         maxlength="3"
         value={effectiveCurrency}
-        oninput={(event) => {
-          selectedCurrency = event.currentTarget.value;
-        }}
+        oninput={changeCurrency}
       ></label
     >
   </fieldset>

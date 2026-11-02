@@ -167,7 +167,7 @@ test("survey choices are required, cancel leaves the gig unplayed", async ({
   await expect(
     page.getByRole("button", { name: "Mark played", exact: true }),
   ).toBeVisible();
-  expect((await account.read("venues/club")).surveys).toBeUndefined();
+  expect(await account.exists("surveys/prague")).toBe(false);
 });
 
 test("earnings validate, recalculate, persist currencies per gig and stay out of venue data", async ({
@@ -207,6 +207,12 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
       "Total including fixed fee (optional override)",
     );
     await expect(totalOverride).toHaveValue(title === "Prague" ? "5000" : "");
+    if (title === "Prague") {
+      // A fee in another currency is never relabelled as the earnings total.
+      await page.getByLabel("Currency", { exact: true }).fill("EUR");
+      await expect(totalOverride).toHaveValue("");
+      await page.getByLabel("Currency", { exact: true }).fill("CZK");
+    }
     await page
       .getByRole("combobox", { name: "Deal type", exact: true })
       .selectOption("mixed");
@@ -303,9 +309,13 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
     currency: "EUR",
     handedOver: 25,
   });
-  const venue = await account.read("venues/club");
-  expect(venue.surveys).toHaveLength(2);
-  expect(JSON.stringify(venue)).not.toMatch(
+  const shared = [
+    await account.read("venues/club"),
+    await account.read("surveys/prague"),
+    await account.read("surveys/berlin"),
+  ];
+  expect(shared[1]).toMatchObject({ venueId: "club", rating: 4 });
+  expect(JSON.stringify(shared)).not.toMatch(
     /earnings|takeHome|handedOver|currency/,
   );
   expect(
@@ -388,4 +398,47 @@ test("gig sheet shows logistics, omits empty fields and hides other UI in print"
     "Notes",
   ])
     await expect(sheet.getByText(label, { exact: true })).toHaveCount(0);
+});
+
+test("legacy free-text fees survive unrelated edits until replaced", async ({
+  page,
+  account,
+}) => {
+  await account.seedGig({
+    id: "legacy",
+    title: "Legacy show",
+    fee: "door split",
+  });
+  await page.reload();
+  await page.getByLabel("View band").selectOption(account.bandId);
+  await page.getByRole("button", { name: /2030-06-20 · Legacy show/ }).click();
+  const bookings = page.getByRole("region", { name: "Bookings" });
+  await expect(
+    bookings.getByText("Fee: door split", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit gig", exact: true }).click();
+  await page.getByLabel("Title", { exact: true }).fill("Legacy show renamed");
+  await page
+    .getByRole("combobox", { name: "Source", exact: true })
+    .selectOption("email");
+  await page.getByText("Money", { exact: true }).click();
+  await expect(page.getByText(/Current fee: door split/)).toBeVisible();
+  await expect(page.getByLabel("Fee", { exact: true })).toHaveValue("");
+  await page.getByRole("button", { name: "Save gig", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Legacy show renamed", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => (await account.read("gigs/legacy")).fee)
+    .toEqual({ amount: "door split", extras: [] });
+  await page.getByRole("button", { name: "Edit gig", exact: true }).click();
+  await page.getByText("Money", { exact: true }).click();
+  await page.getByLabel("Fee", { exact: true }).fill("250");
+  await page.getByRole("button", { name: "Save gig", exact: true }).click();
+  await expect
+    .poll(async () => (await account.read("gigs/legacy")).fee)
+    .toEqual({ amount: 250, currency: "CZK", extras: [] });
+  await expect(
+    bookings.getByText(`Fee: ${money(250, "CZK")}`, { exact: true }),
+  ).toBeVisible();
 });
