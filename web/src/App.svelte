@@ -223,7 +223,7 @@ onMount(() => {
   <header>
     <p class="eyebrow">Keep the band together</p>
     <h1>Gigger</h1>
-    <p>One place for every band you play with.</p>
+    <p>Book it, plan it, play it, post it.</p>
     {#if signedIn}
       <a class="logout" href="/login" onclick={logOut}>Log out</a>
     {/if}
