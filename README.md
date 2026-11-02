@@ -28,7 +28,7 @@ Root WebFinger discovery and `/storage/storage/*` still provide remoteStorage ac
 
 ## Workspace commands
 
-Install Bun 1.4.2, then:
+Install Bun 1.4.4, then:
 
 ```sh
 bun install --frozen-lockfile
