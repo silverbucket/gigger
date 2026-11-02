@@ -37,7 +37,10 @@ export interface Gig {
   loadIn?: string;
   soundcheck?: string;
   setTimes?: string[];
-  fee?: string | { amount?: string; extras: string[] };
+  /** Legacy fees are free text or a text amount; new fees are a number plus currency. */
+  fee?:
+    | string
+    | { amount?: string | number; currency?: string; extras: string[] };
   notes?: string;
   earnings?: Earnings;
   status: GigStatus;
@@ -100,6 +103,65 @@ export function calculateTakeHome(
         : total / (numberOfBands ?? 1)) * 100,
     ) / 100
   );
+}
+const zeroDecimalCurrencies = new Set(["CZK"]);
+/** Formats money in the browser's locale, e.g. "14 000 Kč" for cs-CZ. */
+export function formatMoney(amount: number, currency: string, locale?: string) {
+  const code = currency.toUpperCase();
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: code,
+      ...(zeroDecimalCurrencies.has(code) ? { maximumFractionDigits: 0 } : {}),
+    }).format(amount);
+  } catch {
+    return `${amount} ${code}`;
+  }
+}
+/** Numeric fee amount, or undefined for legacy text fees. */
+export function feeAmount(fee: Gig["fee"]) {
+  return typeof fee === "object" && typeof fee.amount === "number"
+    ? fee.amount
+    : undefined;
+}
+export function formatFee(
+  fee: Gig["fee"],
+  bandCurrency: string,
+  locale?: string,
+) {
+  if (typeof fee === "string") return fee.trim() || undefined;
+  if (typeof fee?.amount === "number")
+    return formatMoney(fee.amount, fee.currency ?? bandCurrency, locale);
+  return fee?.amount?.trim() || undefined;
+}
+const regionCurrencies: Record<string, string> = {
+  CZ: "CZK",
+  PL: "PLN",
+  HU: "HUF",
+  CH: "CHF",
+  GB: "GBP",
+  US: "USD",
+  CA: "CAD",
+  AU: "AUD",
+  NZ: "NZD",
+  SE: "SEK",
+  NO: "NOK",
+  DK: "DKK",
+  IS: "ISK",
+  RO: "RON",
+  BG: "BGN",
+  JP: "JPY",
+  BR: "BRL",
+  MX: "MXN",
+};
+/** Currency for a browser locale, e.g. "cs" or "cs-CZ" gives CZK; falls back to EUR. */
+export function currencyForLocale(locale?: string) {
+  try {
+    const region = new Intl.Locale(locale ?? "").maximize().region;
+    return (region && regionCurrencies[region]) || "EUR";
+  } catch {
+    return "EUR";
+  }
 }
 export function venueAverages(surveys: VenueSurvey[]) {
   if (!surveys.length) return null;
@@ -257,7 +319,8 @@ export const schemas = {
           {
             type: "object",
             properties: {
-              amount: text,
+              amount: { anyOf: [text, money] },
+              currency,
               extras: { type: "array", items: text },
             },
             required: ["extras"],

@@ -2,6 +2,8 @@
 import {
   type Band,
   type Contact,
+  currencyForLocale,
+  formatFee,
   type Gig,
   groupGigs,
   type Member,
@@ -29,7 +31,7 @@ let summaries = $state<Summary[]>([]);
 let selected = $state("");
 let openedGig = $state("");
 let bandName = $state("");
-let bandCurrency = $state("EUR");
+let bandCurrency = $state(currencyForLocale(navigator.language));
 let memberName = $state("");
 let editingMember = $state("");
 let creatingBand = $state(false);
@@ -501,10 +503,14 @@ onMount(() => {
                     {#if gig.setTimes?.length}
                       <p>Set times: {gig.setTimes.join(", ")}</p>
                     {/if}
-                    {#if gig.fee}
+                    {#if formatFee(gig.fee, summary.band.currency ?? "EUR")}
                       <p>
                         Fee:
-                        {typeof gig.fee === "string" ? gig.fee : gig.fee.amount}
+                        {formatFee(
+                          gig.fee,
+                          summary.band.currency ?? "EUR",
+                          navigator.language,
+                        )}
                       </p>
                     {/if}
                     {#if gig.notes}

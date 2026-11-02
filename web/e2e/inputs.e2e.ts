@@ -1,5 +1,14 @@
 import { expect, test } from "./fixtures";
 
+const money = (amount: number, currency: string) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    ...(currency === "CZK" ? { maximumFractionDigits: 0 } : {}),
+  })
+    .format(amount)
+    .replace(/[\u00a0\u202f]/g, " ");
+
 test.beforeEach(async ({ page, account }) => {
   await account.seedGig({
     id: "prague",
@@ -8,7 +17,7 @@ test.beforeEach(async ({ page, account }) => {
     soundcheck: "17:00",
     setTimes: ["20:00"],
     setLength: 45,
-    fee: { amount: "5000 CZK", extras: ["Dinner"] },
+    fee: { amount: 5000, currency: "CZK", extras: ["Dinner"] },
     notes: "Use the side entrance",
   });
   await account.seedGig({ id: "berlin", title: "Berlin show" });
@@ -103,6 +112,19 @@ test("booking validation opens collapsed invalid fields and preserves the draft"
     )
     .toBe(true);
   await page.getByLabel("Set length (minutes)").fill("45");
+  await page.getByText("Money", { exact: true }).click();
+  const fee = page.getByLabel("Fee", { exact: true });
+  await expect(page.getByLabel("Fee currency", { exact: true })).toHaveValue(
+    "CZK",
+  );
+  await fee.fill("-5");
+  await page.getByRole("button", { name: "Save enquiry", exact: true }).click();
+  await expect
+    .poll(() =>
+      fee.evaluate((input: HTMLInputElement) => input.validity.rangeUnderflow),
+    )
+    .toBe(true);
+  await fee.fill("1500");
   await page.getByRole("button", { name: "Save enquiry", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "New booking", exact: true }),
@@ -112,6 +134,11 @@ test("booking validation opens collapsed invalid fields and preserves the draft"
   await page.getByRole("button", { name: /2030-07-01 · New booking/ }).click();
   await expect(
     page.getByText("Set length: 45 minutes", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Bookings" })
+      .getByText(`Fee: ${money(1500, "CZK")}`, { exact: true }),
   ).toBeVisible();
 });
 
@@ -176,9 +203,14 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
         exact: true,
       })
       .selectOption("yes");
+    const totalOverride = page.getByLabel(
+      "Total including fixed fee (optional override)",
+    );
+    await expect(totalOverride).toHaveValue(title === "Prague" ? "5000" : "");
     await page
       .getByRole("combobox", { name: "Deal type", exact: true })
       .selectOption("mixed");
+    await expect(totalOverride).toHaveValue("");
     await expect(page.getByLabel("Currency", { exact: true })).toHaveValue(
       "CZK",
     );
@@ -197,20 +229,17 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
     await page.getByLabel("Door takings (optional)").fill("100");
     await page.getByLabel("Hat takings (optional)").fill("20");
     await page.getByLabel("Bar takings (optional)").fill("30");
+    const c = currency as string;
     await expect(
-      page.getByText("Total takings: 150.00", { exact: true }),
+      page.getByText(`Total takings: ${money(150, c)}`, { exact: true }),
     ).toBeVisible();
-    await page
-      .getByLabel("Total including fixed fee (optional override)")
-      .fill("200");
+    await totalOverride.fill("200");
     await expect(
-      page.getByText("Total takings: 200.00", { exact: true }),
+      page.getByText(`Total takings: ${money(200, c)}`, { exact: true }),
     ).toBeVisible();
-    await page
-      .getByLabel("Total including fixed fee (optional override)")
-      .clear();
+    await totalOverride.clear();
     await expect(
-      page.getByText("Total takings: 150.00", { exact: true }),
+      page.getByText(`Total takings: ${money(150, c)}`, { exact: true }),
     ).toBeVisible();
     await page.getByLabel("Split with other bands").selectOption("bands");
     await page.getByLabel("Number of bands (including yours)").fill("1.5");
@@ -226,7 +255,7 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
       .toBe(true);
     await page.getByLabel("Number of bands (including yours)").fill("3");
     await expect(
-      page.getByText(`Your band took home: 50.00 ${currency}`, { exact: true }),
+      page.getByText(`Your band took home: ${money(50, c)}`, { exact: true }),
     ).toBeVisible();
     await page.getByLabel("Split with other bands").selectOption("amount");
     await page
@@ -246,7 +275,7 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
       .getByRole("spinbutton", { name: "Amount handed over", exact: true })
       .fill("25");
     await expect(
-      page.getByText(`Your band took home: 125.00 ${currency}`, {
+      page.getByText(`Your band took home: ${money(125, c)}`, {
         exact: true,
       }),
     ).toBeVisible();
@@ -255,7 +284,7 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
       .getByRole("button", { name: "Save and mark played", exact: true })
       .click();
     await expect(
-      page.getByText(`Your band took home: 120.00 ${currency}`, {
+      page.getByText(`Your band took home: ${money(120, c)}`, {
         exact: true,
       }),
     ).toBeVisible();
@@ -288,7 +317,9 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
   await page.getByLabel("View band").selectOption(account.bandId);
   await page.getByRole("button", { name: /2030-06-20 · Berlin show/ }).click();
   await expect(
-    page.getByText("Your band took home: 120.00 EUR", { exact: true }),
+    page.getByText(`Your band took home: ${money(120, "EUR")}`, {
+      exact: true,
+    }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Venues", exact: true }).click();
   await page.getByRole("button", { name: "Test Club", exact: true }).click();
@@ -310,7 +341,7 @@ test("gig sheet shows logistics, omits empty fields and hides other UI in print"
     sheet.getByRole("link", { name: "Map and directions" }),
   ).toHaveAttribute(
     "href",
-    "https://www.google.com/maps/search/?api=1&query=Main%20Street%2012%2C%20Prague",
+    "https://www.openstreetmap.org/search?query=Main%20Street%2012%2C%20Prague",
   );
   for (const text of [
     "Touring Band",
@@ -318,7 +349,7 @@ test("gig sheet shows logistics, omits empty fields and hides other UI in print"
     "17:00",
     "20:00",
     "45 minutes",
-    "5000 CZK",
+    money(5000, "CZK"),
     "Dinner",
     "Use the side entrance",
   ])

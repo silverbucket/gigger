@@ -4,6 +4,8 @@ import {
   type Earnings,
   type EnquirySource,
   enquirySources,
+  formatFee,
+  formatMoney,
   type Gig,
   type OtherBand,
   statusMoves,
@@ -54,7 +56,11 @@ let error = $state("");
 let loadedBand = $state("");
 let extraText = $state("");
 let timesText = $state("");
-let amount = $state("");
+let amount = $state<number>();
+let feeCurrency = $state("");
+let bandCurrency = $derived(
+  summaries.find((s) => s.band.id === bandId)?.band.currency ?? "EUR",
+);
 let ticketUrl = $state("");
 let description = $state("");
 let newVenue = $state(false);
@@ -142,7 +148,15 @@ function edit(gig?: Gig) {
   otherBandName = "";
   otherBandContactIds = [];
   draft.venueId ??= "";
-  amount = typeof gig?.fee === "string" ? gig.fee : (gig?.fee?.amount ?? "");
+  const legacyAmount =
+    typeof gig?.fee === "string" ? gig.fee : gig?.fee?.amount;
+  amount =
+    typeof legacyAmount === "number"
+      ? legacyAmount
+      : Number.parseFloat(legacyAmount ?? "") || undefined;
+  feeCurrency =
+    (typeof gig?.fee === "object" ? gig.fee.currency : undefined) ??
+    bandCurrency;
   extraText = typeof gig?.fee === "object" ? gig.fee.extras.join("\n") : "";
   timesText = gig?.setTimes?.join(", ") ?? "";
   ticketUrl = gig?.public?.ticketUrl ?? "";
@@ -211,7 +225,9 @@ async function submitGig(event: SubmitEvent) {
       contactIds: value.contactIds ?? [],
       enquirySource,
       fee: {
-        ...(amount.trim() ? { amount: amount.trim() } : {}),
+        ...(amount !== undefined
+          ? { amount, currency: feeCurrency.toUpperCase() }
+          : {}),
         extras: extraText
           .split("\n")
           .map((s) => s.trim())
@@ -367,6 +383,7 @@ async function saveRecord(
     <GigSheet
       gig={detail}
       bandName={summaries.find((s) => s.band.id === bandId)?.band.name ?? ""}
+      currency={bandCurrency}
       venue={venues.find((v) => v.id === detail?.venueId)}
       contacts={contacts.filter((c) => detail?.contactIds?.includes(c.id))}
       onback={() => {
@@ -376,8 +393,7 @@ async function saveRecord(
   {:else if screen === "played" && detail}
     <PlayedForm
       gig={detail}
-      currency={summaries.find((s) => s.band.id === bandId)?.band.currency ??
-        "EUR"}
+      currency={bandCurrency}
       {busy}
       oncancel={() => {
         screen = "gig";
@@ -607,7 +623,22 @@ async function saveRecord(
           </details>
           <details>
             <summary>Money</summary>
-            <label>Fee (including currency)<input bind:value={amount}></label>
+            <label
+              >Fee<input
+                type="number"
+                min="0"
+                step="0.01"
+                bind:value={amount}
+              ></label
+            >
+            <label
+              >Fee currency<input
+                bind:value={feeCurrency}
+                required={amount !== undefined}
+                pattern={"[A-Za-z]{3}"}
+                maxlength="3"
+              ></label
+            >
             <label
               >Fee extras (one per line)<textarea
                 bind:value={extraText}
@@ -650,8 +681,7 @@ async function saveRecord(
         (detail.contactIds ?? [])
           .map((id) => contacts.find((c) => c.id === id)?.name ?? id)
           .join(", ") || detail.contacts?.join(", ")}
-      {@const feeAmount =
-        typeof detail.fee === "string" ? detail.fee : detail.fee?.amount}
+      {@const feeText = formatFee(detail.fee, bandCurrency, navigator.language)}
       <h3>{detail.title}</h3>
       <button
         type="button"
@@ -664,8 +694,12 @@ async function saveRecord(
       {#if detail.status === "played" && detail.earnings}
         <p>
           <strong
-            >Your band took home: {detail.earnings.takeHome.toFixed(2)}
-            {detail.earnings.currency}</strong
+            >Your band took home:
+            {formatMoney(
+              detail.earnings.takeHome,
+              detail.earnings.currency,
+              navigator.language,
+            )}</strong
           >
         </p>
         <p>Private, only you can see this</p>
@@ -722,8 +756,8 @@ async function saveRecord(
       {#if detail.setLength}
         <p>Set length: {detail.setLength} minutes</p>
       {/if}
-      {#if feeAmount?.trim()}
-        <p>Fee: {feeAmount}</p>
+      {#if feeText}
+        <p>Fee: {feeText}</p>
       {/if}
       {#if typeof detail.fee === "object" && detail.fee.extras.length}
         <p>Extras: {detail.fee.extras.join(", ")}</p>

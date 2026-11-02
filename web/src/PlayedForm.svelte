@@ -4,10 +4,13 @@ import {
   capacities,
   dealTypes,
   type Earnings,
+  feeAmount,
+  formatMoney,
   type Gig,
   paOptions,
   type VenueSurvey,
 } from "@gigger/schemas";
+import { untrack } from "svelte";
 
 let {
   gig,
@@ -32,7 +35,10 @@ let dealType = $state<Earnings["dealType"]>("fixed fee");
 let door = $state<number>();
 let hat = $state<number>();
 let bar = $state<number>();
-let totalOverride = $state<number>();
+const fee = $derived(feeAmount(gig.fee));
+let totalOverride = $state<number | undefined>(
+  untrack(() => feeAmount(gig.fee)),
+);
 let split = $state("none");
 let numberOfBands = $state<number>();
 let handedOver = $state<number>();
@@ -48,6 +54,15 @@ const calculated = $derived(
   ),
 );
 const takeHome = $derived(takeHomeOverride ?? calculated);
+const money = (amount: number) =>
+  formatMoney(amount, effectiveCurrency, navigator.language);
+function changeDeal(event: Event & { currentTarget: HTMLSelectElement }) {
+  dealType = event.currentTarget.value as Earnings["dealType"];
+  if (dealType === "fixed fee" && totalOverride === undefined)
+    totalOverride = fee;
+  else if (dealType !== "fixed fee" && totalOverride === fee)
+    totalOverride = undefined;
+}
 async function submit(event: SubmitEvent) {
   event.preventDefault();
   if (!rating || !capacity || !setting || !pa || !playAgain) return;
@@ -83,60 +98,54 @@ async function submit(event: SubmitEvent) {
   <fieldset disabled={busy}>
     <legend>Venue survey</legend>
     <p>Saved in your account; sharing with other bands comes later.</p>
-    <label
-      >Rating<select required bind:value={rating}>
-        <option value="" disabled>Choose an option</option>
-        {#each [1, 2, 3, 4, 5] as value (value)}
-          <option {value}>{value} / 5</option>
-        {/each}
-      </select></label
-    >
-    <label
-      >Capacity<select required bind:value={capacity}>
-        <option value="" disabled>Choose an option</option>
-        {#each capacities as value (value)}
-          <option>{value}</option>
-        {/each}
-      </select></label
-    >
-    <label
-      >Indoor or outdoor<select required bind:value={setting}>
-        <option value="" disabled>Choose an option</option>
-        <option value="indoor">Indoor</option>
-        <option value="outdoor">Outdoor</option>
-      </select></label
-    >
-    <label
-      >PA<select required bind:value={pa}>
-        <option value="" disabled>Choose an option</option>
-        {#each paOptions as value (value)}
-          <option>{value}</option>
-        {/each}
-      </select></label
-    >
+    <label for="survey-rating">Rating</label>
+    <select id="survey-rating" required bind:value={rating}>
+      <option value="" disabled>Choose an option</option>
+      {#each [1, 2, 3, 4, 5] as value (value)}
+        <option {value}>{value} / 5</option>
+      {/each}
+    </select>
+    <label for="survey-capacity">Capacity</label>
+    <select id="survey-capacity" required bind:value={capacity}>
+      <option value="" disabled>Choose an option</option>
+      {#each capacities as value (value)}
+        <option>{value}</option>
+      {/each}
+    </select>
+    <label for="survey-setting">Indoor or outdoor</label>
+    <select id="survey-setting" required bind:value={setting}>
+      <option value="" disabled>Choose an option</option>
+      <option value="indoor">Indoor</option>
+      <option value="outdoor">Outdoor</option>
+    </select>
+    <label for="survey-pa">PA</label>
+    <select id="survey-pa" required bind:value={pa}>
+      <option value="" disabled>Choose an option</option>
+      {#each paOptions as value (value)}
+        <option>{value}</option>
+      {/each}
+    </select>
     <label
       >Stage notes (optional)<textarea
         bind:value={stageNotes}
       ></textarea></label
     >
-    <label
-      >Would you play here again?<select required bind:value={playAgain}>
-        <option value="" disabled>Choose an option</option>
-        <option value="yes">Yes</option>
-        <option value="no">No</option>
-      </select></label
-    >
+    <label for="survey-play-again">Would you play here again?</label>
+    <select id="survey-play-again" required bind:value={playAgain}>
+      <option value="" disabled>Choose an option</option>
+      <option value="yes">Yes</option>
+      <option value="no">No</option>
+    </select>
   </fieldset>
   <fieldset disabled={busy}>
     <legend>Your earnings</legend>
     <p>Private, only you can see this</p>
-    <label
-      >Deal type<select bind:value={dealType}>
-        {#each dealTypes as value (value)}
-          <option>{value}</option>
-        {/each}
-      </select></label
-    >
+    <label for="deal-type">Deal type</label>
+    <select id="deal-type" value={dealType} onchange={changeDeal}>
+      {#each dealTypes as value (value)}
+        <option>{value}</option>
+      {/each}
+    </select>
     <label
       >Door takings (optional)<input
         type="number"
@@ -161,23 +170,22 @@ async function submit(event: SubmitEvent) {
         bind:value={bar}
       ></label
     >
-    <p>Total takings: {total.toFixed(2)}</p>
+    <p>Total takings: {money(total)}</p>
     <label
       >Total including fixed fee (optional override)<input
         type="number"
         min="0"
         step="0.01"
         bind:value={totalOverride}
-        placeholder={total.toFixed(2)}
+        placeholder={((door ?? 0) + (hat ?? 0) + (bar ?? 0)).toFixed(2)}
       ></label
     >
-    <label
-      >Split with other bands<select bind:value={split}>
-        <option value="none">No split</option>
-        <option value="bands">Split equally by number of bands</option>
-        <option value="amount">Amount handed over</option>
-      </select></label
-    >
+    <label for="split">Split with other bands</label>
+    <select id="split" bind:value={split}>
+      <option value="none">No split</option>
+      <option value="bands">Split equally by number of bands</option>
+      <option value="amount">Amount handed over</option>
+    </select>
     {#if split === "bands"}
       <label
         >Number of bands (including yours)<input
@@ -201,10 +209,7 @@ async function submit(event: SubmitEvent) {
         ></label
       >
     {/if}
-    <p>
-      Your band took home: {takeHome.toFixed(2)}
-      {effectiveCurrency.toUpperCase()}
-    </p>
+    <p>Your band took home: {money(takeHome)}</p>
     <label
       >Take-home amount (optional override)<input
         type="number"
@@ -249,6 +254,14 @@ label {
   display: grid;
   gap: 0.3rem;
   margin-block: 1rem;
+}
+label:has(+ select) {
+  margin-bottom: 0.3rem;
+}
+select {
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
 }
 input,
 select,

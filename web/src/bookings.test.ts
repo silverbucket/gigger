@@ -75,6 +75,8 @@ test("linked booking schemas, band isolation and status enforcement", async () =
       { setLength: 0 },
       { setLength: 2.5 },
       { fee: { extras: [4] } },
+      { fee: { amount: -1, extras: [] } },
+      { fee: { amount: 500, currency: "eur", extras: [] } },
       { public: { ticketUrl: "javascript:alert(1)" } },
       { contactIds: ["c", "c"] },
       { venueId: "missing" },

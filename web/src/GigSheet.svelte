@@ -1,21 +1,23 @@
 <script lang="ts">
-import type { Contact, Gig, Venue } from "@gigger/schemas";
+import { type Contact, formatFee, type Gig, type Venue } from "@gigger/schemas";
 
 let {
   gig,
   bandName,
+  currency,
   venue,
   contacts,
   onback,
 }: {
   gig: Gig;
   bandName: string;
+  currency: string;
   venue?: Venue;
   contacts: Contact[];
   onback: () => void;
 } = $props();
 const address = $derived((venue?.address ?? gig.address)?.trim());
-const fee = $derived(typeof gig.fee === "string" ? gig.fee : gig.fee?.amount);
+const fee = $derived(formatFee(gig.fee, currency, navigator.language));
 </script>
 <article class="gig-sheet">
   <div class="actions">
@@ -43,7 +45,7 @@ const fee = $derived(typeof gig.fee === "string" ? gig.fee : gig.fee?.amount);
       <dd>
         {address}
         <a
-          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+          href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`}
           target="_blank"
           rel="noreferrer"
           >Map and directions</a
@@ -89,7 +91,7 @@ const fee = $derived(typeof gig.fee === "string" ? gig.fee : gig.fee?.amount);
       <dt>Set length</dt>
       <dd>{gig.setLength} minutes</dd>
     {/if}
-    {#if fee?.trim()}
+    {#if fee}
       <dt>Fee</dt>
       <dd>{fee}</dd>
     {/if}
