@@ -206,11 +206,23 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
     const totalOverride = page.getByLabel(
       "Total including fixed fee (optional override)",
     );
+    const c = currency as string;
     await expect(totalOverride).toHaveValue(title === "Prague" ? "5000" : "");
     if (title === "Prague") {
-      // A fee in another currency is never relabelled as the earnings total.
-      await page.getByLabel("Currency", { exact: true }).fill("EUR");
+      // A fee in another currency is never relabelled as the earnings total,
+      // and clearing the currency does not fall back to the band's currency.
+      await page.getByLabel("Currency", { exact: true }).clear();
       await expect(totalOverride).toHaveValue("");
+      await page
+        .getByRole("button", { name: "Save and mark played", exact: true })
+        .click();
+      await expect
+        .poll(() =>
+          page
+            .getByLabel("Currency", { exact: true })
+            .evaluate((input: HTMLInputElement) => input.validity.valueMissing),
+        )
+        .toBe(true);
       await page.getByLabel("Currency", { exact: true }).fill("CZK");
     }
     await page
@@ -232,10 +244,27 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
           .evaluate((input: HTMLInputElement) => input.validity.rangeUnderflow),
       )
       .toBe(true);
+    // Floating-point sums are rounded to cents so a matching split is valid.
+    await page.getByLabel("Door takings (optional)").fill("0.10");
+    await page.getByLabel("Hat takings (optional)").fill("0.70");
+    await expect(
+      page.getByText(`Total takings: ${money(0.8, c)}`, { exact: true }),
+    ).toBeVisible();
+    await page.getByLabel("Split with other bands").selectOption("amount");
+    await page
+      .getByRole("spinbutton", { name: "Amount handed over", exact: true })
+      .fill("0.80");
+    await expect
+      .poll(() =>
+        page
+          .getByRole("spinbutton", { name: "Amount handed over", exact: true })
+          .evaluate((input: HTMLInputElement) => input.validity.valid),
+      )
+      .toBe(true);
+    await page.getByLabel("Split with other bands").selectOption("none");
     await page.getByLabel("Door takings (optional)").fill("100");
     await page.getByLabel("Hat takings (optional)").fill("20");
     await page.getByLabel("Bar takings (optional)").fill("30");
-    const c = currency as string;
     await expect(
       page.getByText(`Total takings: ${money(150, c)}`, { exact: true }),
     ).toBeVisible();

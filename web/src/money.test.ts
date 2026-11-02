@@ -39,6 +39,7 @@ test("new bands default to the browser locale's currency", () => {
   expect(currencyForLocale("en-GB")).toBe("GBP");
   expect(currencyForLocale("en-US")).toBe("USD");
   expect(currencyForLocale("de")).toBe("EUR");
+  expect(currencyForLocale("bg-BG")).toBe("EUR");
   expect(currencyForLocale("")).toBe("EUR");
   expect(currencyForLocale(undefined)).toBe("EUR");
   expect(currencyForLocale("not a locale!")).toBe("EUR");

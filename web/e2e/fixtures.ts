@@ -65,7 +65,13 @@ export const test = base.extend<{
       password,
       bandId: bandId as string,
       async read(location) {
-        const result = await request.get(`${path}${location}`, { headers });
+        // Writes from the browser land asynchronously; retry briefly instead
+        // of failing on a transient 404 or 5xx.
+        let result = await request.get(`${path}${location}`, { headers });
+        for (let attempt = 0; !result.ok() && attempt < 10; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          result = await request.get(`${path}${location}`, { headers });
+        }
         expect(result.ok()).toBe(true);
         return result.json();
       },

@@ -49,9 +49,14 @@ let split = $state("none");
 let numberOfBands = $state<number>();
 let handedOver = $state<number>();
 let takeHomeOverride = $state<number>();
-let selectedCurrency = $state(fee?.currency ?? "");
-const effectiveCurrency = $derived(selectedCurrency || currency);
-const total = $derived(totalOverride ?? (door ?? 0) + (hat ?? 0) + (bar ?? 0));
+// The input owns the currency outright: an empty field fails validation rather
+// than silently falling back to the band's currency.
+let effectiveCurrency = $state(
+  untrack(() => fee?.currency ?? currency.toUpperCase()),
+);
+const cents = (amount: number) => Math.round(amount * 100) / 100;
+const summed = $derived(cents((door ?? 0) + (hat ?? 0) + (bar ?? 0)));
+const total = $derived(totalOverride ?? summed);
 const calculated = $derived(
   calculateTakeHome(
     total,
@@ -72,12 +77,8 @@ function changeDeal(event: Event & { currentTarget: HTMLSelectElement }) {
     totalOverride = undefined;
 }
 function changeCurrency(event: Event & { currentTarget: HTMLInputElement }) {
-  selectedCurrency = event.currentTarget.value;
-  if (
-    selectedCurrency.length === 3 &&
-    !feeMatchesCurrency() &&
-    totalOverride === fee?.amount
-  )
+  effectiveCurrency = event.currentTarget.value;
+  if (!feeMatchesCurrency() && totalOverride === fee?.amount)
     totalOverride = undefined;
 }
 async function submit(event: SubmitEvent) {
@@ -192,7 +193,7 @@ async function submit(event: SubmitEvent) {
         min="0"
         step="0.01"
         bind:value={totalOverride}
-        placeholder={((door ?? 0) + (hat ?? 0) + (bar ?? 0)).toFixed(2)}
+        placeholder={summed.toFixed(2)}
       ></label
     >
     <label for="split">Split with other bands</label>

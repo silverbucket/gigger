@@ -154,12 +154,11 @@ const regionCurrencies: Record<string, string> = {
   DK: "DKK",
   IS: "ISK",
   RO: "RON",
-  BG: "BGN",
   JP: "JPY",
   BR: "BRL",
   MX: "MXN",
 };
-/** Currency for a browser locale, e.g. "cs" or "cs-CZ" gives CZK; falls back to EUR. */
+/** Currency for a browser locale, e.g. "cs" or "cs-CZ" gives CZK; euro countries and unknown regions get EUR. */
 export function currencyForLocale(locale?: string) {
   try {
     const region = new Intl.Locale(locale ?? "").maximize().region;
