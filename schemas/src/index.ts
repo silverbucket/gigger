@@ -22,6 +22,7 @@ export interface Gig {
   title: string;
   venueId?: string;
   contactIds?: string[];
+  otherBandIds?: string[];
   /** Legacy records remain readable. New forms use linked records. */
   venue?: string;
   address?: string;
@@ -43,6 +44,12 @@ export interface Venue {
   id: string;
   name: string;
   address: string;
+}
+export interface OtherBand {
+  id: string;
+  name: string;
+  contactIds: string[];
+  notes?: string;
 }
 export interface Contact {
   id: string;
@@ -76,6 +83,7 @@ export interface Records {
   gig: Gig;
   venue: Venue;
   contact: Contact;
+  otherBand: OtherBand;
 }
 const text = { type: "string", minLength: 1, pattern: "\\S" };
 const email = {
@@ -111,6 +119,7 @@ export const schemas = {
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
+      otherBandIds: { type: "array", items: id, uniqueItems: true },
       contactDate: date,
       enquiryText: { type: "string" },
       enquirySource: { enum: [...enquirySources] },
@@ -156,6 +165,14 @@ export const schemas = {
     },
   ),
   venue: object({ name: text, address: text }, ["name", "address"]),
+  otherBand: object(
+    {
+      name: text,
+      contactIds: { type: "array", items: id, uniqueItems: true },
+      notes: { type: "string" },
+    },
+    ["name", "contactIds"],
+  ),
   contact: object(
     {
       name: text,
@@ -226,11 +243,20 @@ export function createGigger(client: Client) {
         for (const [relatedKind, relatedId] of [
           ...(gig.venueId ? [["venue", gig.venueId] as const] : []),
           ...(gig.contactIds ?? []).map((id) => ["contact", id] as const),
+          ...(gig.otherBandIds ?? []).map((id) => ["otherBand", id] as const),
         ]) {
           const related = await client.getObject(
             recordPath(relatedKind, bandId, relatedId),
           );
           read(relatedKind, related);
+        }
+      }
+      if (kind === "otherBand") {
+        for (const contactId of (value as OtherBand).contactIds) {
+          read(
+            "contact",
+            await client.getObject(recordPath("contact", bandId, contactId)),
+          );
         }
       }
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);

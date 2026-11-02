@@ -145,3 +145,100 @@ test("linked booking schemas, band isolation and status enforcement", async () =
     storage.stopSync();
   }
 });
+
+test("other bands are reusable records with contact links and band-scoped gig references", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Gigger);
+  storage.access.claim("gigger", "rw");
+  storage.caching.enable("/gigger/");
+  const store = (storage as RemoteStorage & { gigger: GiggerStore }).gigger;
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  try {
+    await store.save("band", "a", { id: "a", name: "Our band" });
+    await store.save("contact", "a", {
+      id: "c",
+      name: "Their singer",
+      email: "singer@example.com",
+    });
+    await store.save("venue", "a", {
+      id: "v",
+      name: "Club",
+      address: "Main St",
+    });
+    await store.save("otherBand", "a", {
+      id: "support",
+      name: "Another band",
+      contactIds: ["c"],
+      notes: "Shared backline",
+    });
+    await store.save("otherBand", "a", {
+      id: "no-contacts",
+      name: "New friends",
+      contactIds: [],
+    });
+    expect(recordPath("otherBand", "a", "support")).toBe(
+      "bands/a/otherBands/support",
+    );
+    const gig: Gig = {
+      id: "one",
+      title: "Show",
+      date: "2030-06-20",
+      status: "enquiry",
+      venueId: "v",
+      contactIds: [],
+      otherBandIds: ["support"],
+    };
+    await store.save("gig", "a", gig);
+    await store.save("gig", "a", { ...gig, id: "two", date: "2030-08-01" });
+    await store.save("otherBand", "a", {
+      id: "support",
+      name: "Renamed band",
+      contactIds: ["c"],
+    });
+    expect(
+      (await store.list("otherBand", "a")).find((b) => b.id === "support"),
+    ).toMatchObject({ name: "Renamed band", contactIds: ["c"] });
+    expect((await store.list("gig", "a")).map((g) => g.otherBandIds)).toEqual([
+      ["support"],
+      ["support"],
+    ]);
+    expect(await store.bands()).toHaveLength(1);
+    expect(await store.list("otherBand", "b")).toEqual([]);
+    for (const patch of [
+      { otherBandIds: ["missing"] },
+      { otherBandIds: ["support", "support"] },
+      { otherBandIds: ["../escape"] },
+    ])
+      await expect(
+        store.save("gig", "a", { ...gig, ...patch }),
+      ).rejects.toBeDefined();
+    for (const patch of [
+      { name: "  ", contactIds: [] },
+      { name: "Invalid contact", contactIds: ["missing"] },
+      { name: "Duplicate contact", contactIds: ["c", "c"] },
+    ])
+      await expect(
+        store.save("otherBand", "a", { id: "bad", ...patch }),
+      ).rejects.toBeDefined();
+    await expect(
+      store.save("otherBand", "b", {
+        id: "support",
+        name: "Wrong band",
+        contactIds: ["c"],
+      }),
+    ).rejects.toBeDefined();
+    await store.save("otherBand", "b", {
+      id: "foreign",
+      name: "Foreign",
+      contactIds: [],
+    });
+    await expect(
+      store.save("gig", "a", { ...gig, otherBandIds: ["foreign"] }),
+    ).rejects.toBeDefined();
+    expect(
+      (await store.moveGigStatus("a", "one", "offered")).otherBandIds,
+    ).toEqual(["support"]);
+  } finally {
+    storage.stopSync();
+  }
+});

@@ -4,6 +4,7 @@ import {
   type EnquirySource,
   enquirySources,
   type Gig,
+  type OtherBand,
   statusMoves,
   type Venue,
 } from "@gigger/schemas";
@@ -32,6 +33,11 @@ let groups = $derived(groupBookings(summaries, bandId));
 let gigs = $state<Gig[]>([]);
 let venues = $state<Venue[]>([]);
 let contacts = $state<Contact[]>([]);
+let otherBands = $state<OtherBand[]>([]);
+let otherBand = $state<OtherBand>({ id: "", name: "", contactIds: [] });
+let newOtherBand = $state(false);
+let otherBandName = $state("");
+let otherBandContactIds = $state<string[]>([]);
 let screen = $state("gigs");
 let detail = $state<Gig | null>(null);
 let editing = $state(false);
@@ -57,15 +63,17 @@ let source = $state<EnquirySource>("other");
 let syncedChanges = false;
 async function load() {
   const requested = bandId;
-  const [g, v, c] = await Promise.all([
+  const [g, v, c, b] = await Promise.all([
     bands.list("gig", requested),
     bands.list("venue", requested),
     bands.list("contact", requested),
+    bands.list("otherBand", requested),
   ]);
   if (requested !== bandId) return;
   gigs = g;
   venues = v;
   contacts = c;
+  otherBands = b;
   loadedBand = requested;
   if (detail) detail = g.find((gig) => gig.id === detail?.id) ?? null;
 }
@@ -124,6 +132,10 @@ function edit(gig?: Gig) {
         enquiryText: "",
       };
   draft.contactIds ??= [];
+  draft.otherBandIds ??= [];
+  newOtherBand = false;
+  otherBandName = "";
+  otherBandContactIds = [];
   draft.venueId ??= "";
   amount = typeof gig?.fee === "string" ? gig.fee : (gig?.fee?.amount ?? "");
   extraText = typeof gig?.fee === "object" ? gig.fee.extras.join("\n") : "";
@@ -171,6 +183,18 @@ async function submitGig(event: SubmitEvent) {
       newContact = false;
       draft = { ...value };
     }
+    if (newOtherBand) {
+      const b: OtherBand = {
+        id: crypto.randomUUID(),
+        name: otherBandName.trim(),
+        contactIds: [...otherBandContactIds],
+      };
+      await bands.save("otherBand", bandId, b);
+      value.otherBandIds = [...(value.otherBandIds ?? []), b.id];
+      otherBands = [...otherBands, b];
+      newOtherBand = false;
+      draft = { ...value };
+    }
     const saved: Gig = {
       ...value,
       title: value.title.trim(),
@@ -215,7 +239,10 @@ async function move(status: Gig["status"]) {
     await onchanged();
   });
 }
-async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
+async function saveRecord(
+  event: SubmitEvent,
+  kind: "venue" | "contact" | "otherBand",
+) {
   event.preventDefault();
   await run(async () => {
     if (kind === "venue") {
@@ -225,6 +252,14 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
       };
       await bands.save("venue", bandId, value);
       venue = value;
+    } else if (kind === "otherBand") {
+      const value = {
+        ...$state.snapshot(otherBand),
+        id: otherBand.id || crypto.randomUUID(),
+        name: otherBand.name.trim(),
+      };
+      await bands.save("otherBand", bandId, value);
+      otherBand = value;
     } else {
       const value = {
         ...$state.snapshot(contact),
@@ -293,6 +328,16 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
       }}
     >
       Contacts
+    </button>
+    <button
+      type="button"
+      disabled={busy || !bandId || loadedBand !== bandId}
+      onclick={() => {
+        screen = "otherBands";
+        draft = null;
+      }}
+    >
+      Other bands
     </button>
   </nav>
   {#if !bandId}
@@ -436,6 +481,53 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
           </details>
           <details>
             <summary>Who</summary>
+            <fieldset>
+              <legend>Other bands playing — tap to add or remove</legend>
+              {#each otherBands as b (b.id)}
+                <label class="toggle"
+                  ><input
+                    type="checkbox"
+                    value={b.id}
+                    bind:group={draft.otherBandIds}
+                  >{b.name}</label
+                >
+              {:else}
+                <p>No other bands yet.</p>
+              {/each}
+            </fieldset>
+            <label class="toggle"
+              ><input
+                type="checkbox"
+                role="switch"
+                aria-checked={newOtherBand}
+                bind:checked={newOtherBand}
+                aria-controls="create-other-band-fields"
+              >Create a new band</label
+            >
+            {#if newOtherBand}
+              <div id="create-other-band-fields">
+                <label
+                  >Band name<input bind:value={otherBandName} required></label
+                >
+                <fieldset>
+                  <legend>Contacts in this band</legend>
+                  {#each contacts as c (c.id)}
+                    <label class="toggle"
+                      ><input
+                        type="checkbox"
+                        value={c.id}
+                        bind:group={otherBandContactIds}
+                      >{c.name}</label
+                    >
+                  {:else}
+                    <p>
+                      Add contacts from the Contacts screen to link them to this
+                      band.
+                    </p>
+                  {/each}
+                </fieldset>
+              </div>
+            {/if}
             <fieldset class="contact-options">
               <legend>Contacts — tap to add or remove</legend>
               {#each contacts as c (c.id)}
@@ -519,6 +611,28 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
       {@const feeAmount =
         typeof detail.fee === "string" ? detail.fee : detail.fee?.amount}
       <h3>{detail.title}</h3>
+      {#if detail.otherBandIds?.length}
+        <h4>Playing with</h4>
+        <ul>
+          {#each detail.otherBandIds as id (id)}
+            {@const b = otherBands.find((b) => b.id === id)}
+            <li>
+              <button
+                type="button"
+                disabled={busy || !b}
+                onclick={() => {
+                  if (b) {
+                    otherBand = structuredClone($state.snapshot(b));
+                    screen = "otherBand";
+                  }
+                }}
+              >
+                {b?.name ?? id}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
       {#if detail.contactDate}
         <p>Contact date: {detail.contactDate}</p>
       {/if}
@@ -642,6 +756,96 @@ async function saveRecord(event: SubmitEvent, kind: "venue" | "contact") {
           </li>
         {:else}
           <li>No gigs played here yet.</li>
+        {/each}
+      </ul>
+    {/if}
+  {:else if screen === "otherBands"}
+    <h3>Other bands</h3>
+    <p>Reusable bands you share a bill with.</p>
+    <ul>
+      {#each otherBands as b (b.id)}
+        <li>
+          <button
+            type="button"
+            disabled={busy}
+            onclick={() => {
+              otherBand = structuredClone($state.snapshot(b));
+              screen = "otherBand";
+            }}
+          >
+            {b.name}
+          </button>
+        </li>
+      {:else}
+        <li>No other bands yet.</li>
+      {/each}
+    </ul>
+    <button
+      type="button"
+      disabled={busy}
+      onclick={() => {
+        otherBand = { id: "", name: "", contactIds: [] };
+        screen = "otherBand";
+      }}
+    >
+      New band
+    </button>
+  {:else if screen === "otherBand"}
+    <h3>{otherBand.id ? otherBand.name : "New band"}</h3>
+    <form onsubmit={(e) => saveRecord(e, "otherBand")}>
+      <fieldset disabled={busy}>
+        <label>Band name<input required bind:value={otherBand.name}></label>
+        <fieldset>
+          <legend>Contacts in this band — tap to add or remove</legend>
+          {#each contacts as c (c.id)}
+            <label class="toggle"
+              ><input
+                type="checkbox"
+                value={c.id}
+                bind:group={otherBand.contactIds}
+              >{c.name}</label
+            >
+          {:else}
+            <p>No contacts yet. Add one from the Contacts screen.</p>
+          {/each}
+        </fieldset>
+        <label>Notes<textarea bind:value={otherBand.notes}></textarea></label>
+        <button type="submit">Save band</button>
+      </fieldset>
+    </form>
+    {#if otherBand.contactIds.length}
+      <h4>Band contacts</h4>
+      <ul>
+        {#each otherBand.contactIds as id (id)}
+          {@const c = contacts.find((c) => c.id === id)}
+          <li>
+            {#if c}
+              <button
+                type="button"
+                disabled={busy}
+                onclick={() => {
+                  contact = { ...c };
+                  screen = "contact";
+                }}
+              >
+                {c.name}
+              </button>
+              {#if c.email}
+                · {c.email}
+              {/if}
+              {#if c.phone}
+                · {c.phone}
+              {/if}
+              {#if c.messenger}
+                · {c.messenger}
+              {/if}
+              {#if c.instagram}
+                · {c.instagram}
+              {/if}
+            {:else}
+              {id}
+            {/if}
+          </li>
         {/each}
       </ul>
     {/if}

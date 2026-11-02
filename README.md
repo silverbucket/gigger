@@ -50,7 +50,7 @@ This creates disposable test accounts in the local data volume. CI runs it again
 
 ## Shared data module
 
-`@gigger/schemas` exports the `Gigger` remoteStorage module, JSON schemas and TypeScript types for band, member, gig, venue and contact. Both web and API import this package. The web uses remoteStorage.js pinned to `2.0.0-beta.10`, claims `gigger:rw`, and caches `/gigger/` for offline use.
+`@gigger/schemas` exports the `Gigger` remoteStorage module, JSON schemas and TypeScript types for band, member, gig, venue, contact and otherBand. Both web and API import this package. The web uses remoteStorage.js pinned to `2.0.0-beta.10`, claims `gigger:rw`, and caches `/gigger/` for offline use.
 
 Records are private and scoped to a band:
 
@@ -59,6 +59,7 @@ Records are private and scoped to a band:
 - `/gigger/bands/<bandId>/gigs/<gigId>`
 - `/gigger/bands/<bandId>/venues/<venueId>`
 - `/gigger/bands/<bandId>/contacts/<contactId>`
+- `/gigger/bands/<bandId>/otherBands/<otherBandId>`
 
 The module provides `save(kind, bandId, record)`, `bands()`, and `list(kind, bandId)`. IDs accept letters, numbers, underscores and hyphens. Gigs link to a venue with `venueId` and contacts with `contactIds`; linked records must exist within the same band. Venues have a name and address. Contacts have a name and optional email, phone, Messenger, Instagram and notes.
 
@@ -69,3 +70,5 @@ Booking fields include load-in and soundcheck times (`HH:mm`), set times, `setLe
 The header band picker also filters Bookings; choose All bands for a combined gig list grouped by status, with the band and venue on every row. Opening a gig from that list selects its band. Enquiry forms have collapsible Enquiry, When, Where, Who, Money and Public sections, labelled creation switches and tap-to-select contacts. Empty booking details are hidden. Venue details list gigs played there.
 
 The Venues and Contacts screens list records and open their details for editing. Invalid status changes show “This gig changed somewhere else, reload to see the latest”; the gig date/status line stays visible, and Reload latest refreshes the record and any open edit form.
+
+Other bands you share a bill with are reusable `otherBand` records with `name`, `contactIds` and optional `notes`. Gigs link to them through `otherBandIds`; links and contacts must exist within the same managed band, matching venue/contact scoping. In the Who section, tap existing bands or create a new band inline. Use Other bands to edit a record and link contacts, or open a band from a gig's Playing with list. Updating the band's name or contact links applies wherever that record is reused. These bands do not appear in the managed-band picker.
