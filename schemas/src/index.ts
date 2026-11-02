@@ -1,6 +1,7 @@
 export interface Band {
   id: string;
   name: string;
+  currency?: string;
 }
 export interface Member {
   id: string;
@@ -38,12 +39,80 @@ export interface Gig {
   setTimes?: string[];
   fee?: string | { amount?: string; extras: string[] };
   notes?: string;
+  earnings?: Earnings;
   status: GigStatus;
 }
 export interface Venue {
   id: string;
   name: string;
   address: string;
+  surveys?: VenueSurvey[];
+}
+export const capacities = [
+  "under 50",
+  "50–100",
+  "100–250",
+  "250–500",
+  "500+",
+] as const;
+export const paOptions = [
+  "venue provided",
+  "we brought our own",
+  "mixed",
+] as const;
+export const dealTypes = [
+  "fixed fee",
+  "door",
+  "pass the hat",
+  "bar percentage",
+  "mixed",
+] as const;
+export interface VenueSurvey {
+  gigId: string;
+  date: string;
+  rating: number;
+  capacity: (typeof capacities)[number];
+  setting: "indoor" | "outdoor";
+  pa: (typeof paOptions)[number];
+  stageNotes?: string;
+  playAgain: boolean;
+}
+export interface Earnings {
+  dealType: (typeof dealTypes)[number];
+  door?: number;
+  hat?: number;
+  bar?: number;
+  total: number;
+  numberOfBands?: number;
+  handedOver?: number;
+  takeHome: number;
+  currency: string;
+}
+export function calculateTakeHome(
+  total: number,
+  numberOfBands?: number,
+  handedOver?: number,
+) {
+  return (
+    Math.round(
+      (handedOver !== undefined
+        ? total - handedOver
+        : total / (numberOfBands ?? 1)) * 100,
+    ) / 100
+  );
+}
+export function venueAverages(surveys: VenueSurvey[]) {
+  if (!surveys.length) return null;
+  const counts = capacities.map(
+    (capacity) => surveys.filter((s) => s.capacity === capacity).length,
+  );
+  const most = Math.max(...counts);
+  return {
+    rating: surveys.reduce((sum, s) => sum + s.rating, 0) / surveys.length,
+    capacities: capacities.filter((_, i) => counts[i] === most),
+    paProvided: surveys.filter((s) => s.pa === "venue provided").length,
+    count: surveys.length,
+  };
 }
 export interface OtherBand {
   id: string;
@@ -111,11 +180,54 @@ function object(
     ...extra,
   };
 }
+const money = { type: "number", minimum: 0 };
+const currency = { type: "string", pattern: "^[A-Z]{3}$" };
+export const surveySchema = {
+  type: "object",
+  properties: {
+    gigId: id,
+    date,
+    rating: { type: "integer", minimum: 1, maximum: 5 },
+    capacity: { enum: [...capacities] },
+    setting: { enum: ["indoor", "outdoor"] },
+    pa: { enum: [...paOptions] },
+    stageNotes: { type: "string" },
+    playAgain: { type: "boolean" },
+  },
+  required: [
+    "gigId",
+    "date",
+    "rating",
+    "capacity",
+    "setting",
+    "pa",
+    "playAgain",
+  ],
+  additionalProperties: false,
+};
+const earningsSchema = {
+  type: "object",
+  properties: {
+    dealType: { enum: [...dealTypes] },
+    door: money,
+    hat: money,
+    bar: money,
+    total: money,
+    numberOfBands: { type: "integer", minimum: 1 },
+    handedOver: money,
+    takeHome: money,
+    currency,
+  },
+  required: ["dealType", "total", "takeHome", "currency"],
+  additionalProperties: false,
+  not: { required: ["numberOfBands", "handedOver"] },
+};
 export const schemas = {
-  band: object({ name: text }, ["name"]),
+  band: object({ name: text, currency }, ["name"]),
   member: object({ name: text, phone: text, email, messenger: text }, ["name"]),
   gig: object(
     {
+      earnings: earningsSchema,
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
@@ -164,7 +276,14 @@ export const schemas = {
       ],
     },
   ),
-  venue: object({ name: text, address: text }, ["name", "address"]),
+  venue: object(
+    {
+      name: text,
+      address: text,
+      surveys: { type: "array", items: surveySchema },
+    },
+    ["name", "address"],
+  ),
   otherBand: object(
     {
       name: text,
@@ -260,6 +379,67 @@ export function createGigger(client: Client) {
         }
       }
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);
+    },
+    async markPlayed(
+      bandId: string,
+      gigId: string,
+      survey: VenueSurvey,
+      earnings: Earnings,
+    ) {
+      const path = recordPath("gig", bandId, gigId);
+      const current = read("gig", await client.getObject(path));
+      if (current.status !== "confirmed")
+        throw new Error("Reload this gig before marking it played.");
+      const venueId = current.venueId ?? `gig-${current.id}`;
+      const existing = await client.getObject(
+        recordPath("venue", bandId, venueId),
+      );
+      const venue = existing
+        ? read("venue", existing)
+        : read("venue", {
+            id: venueId,
+            name: current.venue,
+            address: current.address,
+          });
+      // Explicitly select survey fields: private earnings must never enter venue data.
+      const cleanSurvey: VenueSurvey = {
+        gigId: current.id,
+        date: current.date,
+        rating: survey.rating,
+        capacity: survey.capacity,
+        setting: survey.setting,
+        pa: survey.pa,
+        ...(survey.stageNotes?.trim()
+          ? { stageNotes: survey.stageNotes.trim() }
+          : {}),
+        playAgain: survey.playAgain,
+      };
+      const updatedVenue = read("venue", {
+        ...venue,
+        surveys: [
+          ...(venue.surveys ?? []).filter((s) => s.gigId !== gigId),
+          cleanSurvey,
+        ],
+      });
+      const updated = read("gig", {
+        ...current,
+        venueId,
+        status: "played",
+        earnings,
+      });
+      if (
+        earnings.handedOver !== undefined &&
+        earnings.handedOver > earnings.total
+      )
+        throw new Error("Amount handed over cannot exceed total takings.");
+      // Save the survey first; a retry replaces it if saving the gig fails.
+      await client.storeObject(
+        "venue",
+        recordPath("venue", bandId, venueId),
+        updatedVenue,
+      );
+      await client.storeObject("gig", path, updated);
+      return updated;
     },
     async moveGigStatus(bandId: string, gigId: string, status: GigStatus) {
       const path = recordPath("gig", bandId, gigId);

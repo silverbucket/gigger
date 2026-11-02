@@ -1,12 +1,15 @@
 <script lang="ts">
 import {
   type Contact,
+  type Earnings,
   type EnquirySource,
   enquirySources,
   type Gig,
   type OtherBand,
   statusMoves,
   type Venue,
+  type VenueSurvey,
+  venueAverages,
 } from "@gigger/schemas";
 import { onMount } from "svelte";
 import {
@@ -14,6 +17,8 @@ import {
   groupBookings,
   playedAtVenue,
 } from "./booking-list";
+import GigSheet from "./GigSheet.svelte";
+import PlayedForm from "./PlayedForm.svelte";
 import { bands, storage } from "./storage";
 
 let {
@@ -244,6 +249,16 @@ async function move(status: Gig["status"]) {
     await onchanged();
   });
 }
+async function savePlayed(survey: VenueSurvey, earnings: Earnings) {
+  if (!detail) return;
+  const gigId = detail.id;
+  await run(async () => {
+    detail = await bands.markPlayed(bandId, gigId, survey, earnings);
+    screen = "gig";
+    await load();
+    await onchanged();
+  });
+}
 async function saveRecord(
   event: SubmitEvent,
   kind: "venue" | "contact" | "otherBand",
@@ -348,7 +363,28 @@ async function saveRecord(
   {#if !bandId}
     <p>Choose a band above to add an enquiry or manage venues and contacts.</p>
   {/if}
-  {#if screen === "gigs"}
+  {#if screen === "sheet" && detail}
+    <GigSheet
+      gig={detail}
+      bandName={summaries.find((s) => s.band.id === bandId)?.band.name ?? ""}
+      venue={venues.find((v) => v.id === detail?.venueId)}
+      contacts={contacts.filter((c) => detail?.contactIds?.includes(c.id))}
+      onback={() => {
+        screen = "gig";
+      }}
+    />
+  {:else if screen === "played" && detail}
+    <PlayedForm
+      gig={detail}
+      currency={summaries.find((s) => s.band.id === bandId)?.band.currency ??
+        "EUR"}
+      {busy}
+      oncancel={() => {
+        screen = "gig";
+      }}
+      onsave={savePlayed}
+    />
+  {:else if screen === "gigs"}
     <h3>Gigs</h3>
     {#each groups as group (group.status)}
       <h4 class="status">{group.status}</h4>
@@ -617,6 +653,23 @@ async function saveRecord(
       {@const feeAmount =
         typeof detail.fee === "string" ? detail.fee : detail.fee?.amount}
       <h3>{detail.title}</h3>
+      <button
+        type="button"
+        onclick={() => {
+          screen = "sheet";
+        }}
+      >
+        View gig sheet
+      </button>
+      {#if detail.status === "played" && detail.earnings}
+        <p>
+          <strong
+            >Your band took home: {detail.earnings.takeHome.toFixed(2)}
+            {detail.earnings.currency}</strong
+          >
+        </p>
+        <p>Private, only you can see this</p>
+      {/if}
       {#if detail.otherBandIds?.length}
         <h4>Playing with</h4>
         <ul>
@@ -695,7 +748,14 @@ async function saveRecord(
         Edit gig
       </button>
       {#each statusMoves[detail.status] as status (status)}
-        <button type="button" disabled={busy} onclick={() => move(status)}>
+        <button
+          type="button"
+          disabled={busy}
+          onclick={() => {
+            if (status === "played") screen = "played";
+            else void move(status);
+          }}
+        >
           Mark {status}
         </button>
       {/each}
@@ -740,6 +800,36 @@ async function saveRecord(
       </fieldset>
     </form>
     {#if venue.id}
+      {@const surveys = venues.find((v) => v.id === venue.id)?.surveys ?? []}
+      {@const averages = venueAverages(surveys)}
+      <h4>Venue surveys</h4>
+      <p>Saved in your account; sharing with other bands comes later.</p>
+      {#if averages}
+        <p>
+          Average rating: {averages.rating.toFixed(1)} / 5 · Most common
+          capacity: {averages.capacities.join(" / ")} · Venue provided PA:
+          {averages.paProvided}
+          of {averages.count} surveys ({Math.round(
+            (averages.paProvided / averages.count) * 100,
+          )}%)
+        </p>
+        {#each [...surveys].sort((a, b) =>
+          b.date.localeCompare(a.date),
+        ) as survey (survey.gigId)}
+          <article>
+            <h5>{survey.date} · {survey.rating} / 5</h5>
+            <p>
+              Capacity: {survey.capacity} · {survey.setting} · PA: {survey.pa}
+            </p>
+            {#if survey.stageNotes?.trim()}
+              <p>{survey.stageNotes}</p>
+            {/if}
+            <p>Would play again: {survey.playAgain ? "Yes" : "No"}</p>
+          </article>
+        {/each}
+      {:else}
+        <p>No surveys yet.</p>
+      {/if}
       <h4>Gigs played here</h4>
       <ul>
         {#each playedAtVenue(
@@ -922,6 +1012,9 @@ textarea,
 button {
   font: inherit;
   padding: 0.5rem;
+  min-height: 44px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 textarea {
   min-height: 5rem;
@@ -964,5 +1057,15 @@ summary {
   background: white;
   padding-block: 0.7rem;
   z-index: 1;
+}
+@media print {
+  section:has(:global(.gig-sheet)) > :not(:global(.gig-sheet)) {
+    display: none;
+  }
+  section:has(:global(.gig-sheet)) {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
 }
 </style>
