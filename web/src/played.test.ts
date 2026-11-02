@@ -47,6 +47,11 @@ test("survey validation and earnings isolation using real private/public storage
   const store = (rs as RemoteStorage & { gigger: GiggerStore }).gigger;
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
   try {
+    await store.save("band", "a", {
+      id: "a",
+      name: "Touring band",
+      currency: "CZK",
+    });
     await store.save("venue", "a", {
       id: "v",
       name: "Club",
@@ -125,8 +130,29 @@ test("survey validation and earnings isolation using real private/public storage
       earnings,
     );
     expect((await store.list("gig", "a"))[0]?.earnings).toEqual(earnings);
+    await store.save("gig", "a", {
+      id: "germany",
+      title: "Germany",
+      date: "2030-01-02",
+      status: "confirmed",
+      venueId: "v",
+      contactIds: [],
+    });
+    await store.markPlayed("a", "germany", survey, {
+      ...earnings,
+      currency: "EUR",
+    });
+    const tour = await store.list("gig", "a");
+    expect(tour.find((gig) => gig.id === "g")?.earnings?.currency).toBe("CZK");
+    expect(tour.find((gig) => gig.id === "germany")?.earnings?.currency).toBe(
+      "EUR",
+    );
+    expect((await store.bands())[0]?.currency).toBe("CZK");
     const savedVenue = (await store.list("venue", "a"))[0];
-    expect(savedVenue?.surveys).toEqual([survey]);
+    expect(savedVenue?.surveys).toEqual([
+      survey,
+      { ...survey, gigId: "germany", date: "2030-01-02" },
+    ]);
     expect(JSON.stringify(savedVenue)).not.toContain("earnings");
     expect(JSON.stringify(savedVenue)).not.toContain("takeHome");
     expect(await store.list("gig", "b")).toEqual([]);

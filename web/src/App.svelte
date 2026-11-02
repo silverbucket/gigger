@@ -346,7 +346,7 @@ onMount(() => {
             >Currency<input
               bind:value={bandCurrency}
               required
-              pattern="[A-Za-z]{3}"
+              pattern={"[A-Za-z]{3}"}
               maxlength="3"
             ></label
           ><button type="submit" disabled={!ready || busy}>Create band</button>
@@ -374,7 +374,7 @@ onMount(() => {
             >Band currency<input
               name="currency"
               value={current.band.currency ?? "EUR"}
-              pattern="[A-Za-z]{3}"
+              pattern={"[A-Za-z]{3}"}
               maxlength="3"
               required
             ></label

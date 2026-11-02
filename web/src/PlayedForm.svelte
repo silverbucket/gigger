@@ -217,7 +217,7 @@ async function submit(event: SubmitEvent) {
     <label
       >Currency<input
         required
-        pattern="[A-Za-z]{3}"
+        pattern={"[A-Za-z]{3}"}
         maxlength="3"
         value={effectiveCurrency}
         oninput={(event) => {
