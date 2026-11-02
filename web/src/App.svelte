@@ -1,16 +1,39 @@
 <script lang="ts">
-import { type Band, type Gig, groupGigs, type Member } from "@gigger/schemas";
+import {
+  type Band,
+  type Contact,
+  type Gig,
+  groupGigs,
+  type Member,
+  type Venue,
+} from "@gigger/schemas";
 import { onMount } from "svelte";
-import { bands, connectSession, logout, storage } from "./storage";
+import Bookings from "./Bookings.svelte";
+import {
+  bands,
+  connectSession,
+  ensureSessionReady,
+  logout,
+  onSessionLogout,
+  storage,
+} from "./storage";
 
-type Summary = { band: Band; members: Member[]; gigs: Gig[] };
+type Summary = {
+  band: Band;
+  members: Member[];
+  gigs: Gig[];
+  venues: Venue[];
+  contacts: Contact[];
+};
 let summaries = $state<Summary[]>([]);
 let selected = $state("");
+let openedGig = $state("");
 let bandName = $state("");
 let memberName = $state("");
 let editingMember = $state("");
 let creatingBand = $state(false);
 let phone = $state("");
+let memberEmail = $state("");
 let messenger = $state("");
 let mode = $state(location.pathname === "/signup" ? "signup" : "login");
 let email = $state("");
@@ -30,6 +53,8 @@ async function load() {
       band,
       members: await bands.list("member", band.id),
       gigs: await bands.list("gig", band.id),
+      venues: await bands.list("venue", band.id),
+      contacts: await bands.list("contact", band.id),
     })),
   );
   if (signedIn && token === storage.remote.token) summaries = loaded;
@@ -62,8 +87,8 @@ function createBand(event: SubmitEvent) {
 }
 function saveMember(event: SubmitEvent) {
   event.preventDefault();
-  if (!selected || !memberName.trim() || (!phone.trim() && !messenger.trim())) {
-    error = "Enter a name and a phone number or Messenger handle.";
+  if (!selected || !memberName.trim()) {
+    error = "Enter a member name.";
     return;
   }
   void save(async () => {
@@ -71,6 +96,7 @@ function saveMember(event: SubmitEvent) {
       id: editingMember || crypto.randomUUID(),
       name: memberName.trim(),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(memberEmail.trim() ? { email: memberEmail.trim() } : {}),
       ...(messenger.trim() ? { messenger: messenger.trim() } : {}),
     });
     resetMember();
@@ -80,12 +106,14 @@ function resetMember() {
   editingMember = "";
   memberName = "";
   phone = "";
+  memberEmail = "";
   messenger = "";
 }
 function editMember(member: Member) {
   editingMember = member.id;
   memberName = member.name;
   phone = member.phone ?? "";
+  memberEmail = member.email ?? "";
   messenger = member.messenger ?? "";
 }
 function removeMember(member: Member) {
@@ -100,6 +128,7 @@ async function authenticate(event: SubmitEvent) {
   busy = true;
   error = "";
   try {
+    ensureSessionReady();
     if (mode === "login" && username.trim().includes("@")) {
       password = "";
       storage.connect(username.trim());
@@ -132,8 +161,7 @@ async function authenticate(event: SubmitEvent) {
     busy = false;
   }
 }
-function logOut(event: MouseEvent) {
-  event.preventDefault();
+function resetSession() {
   signedIn = false;
   ready = false;
   busy = false;
@@ -144,10 +172,16 @@ function logOut(event: MouseEvent) {
   mode = "login";
   creatingBand = false;
   bandName = "";
+  password = "";
+  openedGig = "";
   resetMember();
+}
+function logOut(event: MouseEvent) {
+  event.preventDefault();
   logout();
 }
 onMount(() => {
+  const unsubscribeLogout = onSessionLogout(resetSession);
   const refresh = () => {
     if (signedIn)
       void load().catch(() => {
@@ -168,14 +202,7 @@ onMount(() => {
     error =
       "Could not save or load changes. Please check your connection and try again.";
   });
-  storage.on("disconnected", () => {
-    mode = "login";
-    ready = false;
-    error = "";
-    signedIn = false;
-    summaries = [];
-    selected = "";
-  });
+  storage.on("disconnected", resetSession);
   let changed = false;
   storage.scope("/gigger/").on("change", () => {
     changed = true;
@@ -187,6 +214,8 @@ onMount(() => {
     }
   });
   return () => {
+    unsubscribeLogout();
+    storage.removeEventListener("disconnected", resetSession);
     storage.stopSync();
   };
 });
@@ -202,7 +231,7 @@ onMount(() => {
   <header>
     <p class="eyebrow">Keep the band together</p>
     <h1>Gigger</h1>
-    <p>One place for every band you play with.</p>
+    <p>Book it, plan it, play it, post it.</p>
     {#if signedIn}
       <a class="logout" href="/login" onclick={logOut}>Log out</a>
     {/if}
@@ -264,7 +293,7 @@ onMount(() => {
             ></label
           >
         {/if}
-        <button type="submit" disabled={!ready || busy}>
+        <button type="submit" disabled={busy}>
           {busy ? "Please wait…" : mode === "signup" ? "Sign up" : "Log in"}
         </button>
       </form>
@@ -279,7 +308,13 @@ onMount(() => {
   {:else}
     <nav aria-label="Bands">
       <label
-        >View band<select bind:value={selected} onchange={() => resetMember()}>
+        >View band<select
+          bind:value={selected}
+          onchange={() => {
+            resetMember();
+            openedGig = "";
+          }}
+        >
           <option value="">All bands</option>
           {#each summaries as { band } (band.id)}
             <option value={band.id}>{band.name}</option>
@@ -314,7 +349,12 @@ onMount(() => {
           {#each current.members as member (member.id)}
             <li>
               <strong>{member.name}</strong>
-              — {[member.phone, member.messenger].filter(Boolean).join(" · ")}
+              {#if member.phone || member.email || member.messenger}
+                —
+                {[member.phone, member.email, member.messenger]
+                  .filter(Boolean)
+                  .join(" · ")}
+              {/if}
               <button
                 type="button"
                 class="text-button"
@@ -337,9 +377,11 @@ onMount(() => {
           {/each}
         </ul>
         <h3>{editingMember ? "Edit member" : "Add a member"}</h3>
-        <p>A name and at least one way to reach them.</p>
+        <p>Only a name is required. Contact details are optional.</p>
         <form onsubmit={saveMember}>
           <label>Name<input bind:value={memberName} required></label
+          ><label
+            >Email address<input type="email" bind:value={memberEmail}></label
           ><label>Phone number<input type="tel" bind:value={phone}></label
           ><label>Messenger handle<input bind:value={messenger}></label
           ><button type="submit" disabled={!ready || busy}>
@@ -351,6 +393,18 @@ onMount(() => {
         </form>
       </section>
     {/if}
+    {#key selected}
+      <Bookings
+        {summaries}
+        bandId={selected}
+        initialGigId={openedGig}
+        onopen={(bandId, gigId) => {
+          openedGig = gigId;
+          selected = bandId;
+        }}
+        onchanged={load}
+      />
+    {/key}
     <section aria-labelledby="overview-title">
       <h2 id="overview-title">
         {current ? current.band.name : "All bands"}
@@ -366,6 +420,7 @@ onMount(() => {
               class="band"
               onclick={() => {
                 selected = summary.band.id;
+                openedGig = "";
                 resetMember();
               }}
             >
@@ -378,12 +433,27 @@ onMount(() => {
               {#each group.gigs as gig (gig.id)}
                 <li>
                   <strong>{gig.title}</strong>
-                  · <time datetime={gig.date}>{gig.date}</time> · {gig.venue}
+                  · <time datetime={gig.date}>{gig.date}</time> ·
+                  {summary.venues.find((venue) => venue.id === gig.venueId)
+                    ?.name ?? gig.venue}
                   <details>
                     <summary>Gig details</summary>
-                    <p>{gig.address}</p>
-                    {#if gig.contacts.length}
-                      <p>Contacts: {gig.contacts.join(" · ")}</p>
+                    <p>
+                      {summary.venues.find((venue) => venue.id === gig.venueId)
+                        ?.address ?? gig.address}
+                    </p>
+                    {#if gig.contactIds?.length || gig.contacts?.length}
+                      <p>
+                        Contacts:
+                        {gig.contactIds
+                          ?.map(
+                            (id) =>
+                              summary.contacts.find(
+                                (contact) => contact.id === id,
+                              )?.name ?? id,
+                          )
+                          .join(" · ") ?? gig.contacts?.join(" · ")}
+                      </p>
                     {/if}
                     {#if gig.loadIn}
                       <p>Load-in: {gig.loadIn}</p>
@@ -395,7 +465,10 @@ onMount(() => {
                       <p>Set times: {gig.setTimes.join(", ")}</p>
                     {/if}
                     {#if gig.fee}
-                      <p>Fee: {gig.fee}</p>
+                      <p>
+                        Fee:
+                        {typeof gig.fee === "string" ? gig.fee : gig.fee.amount}
+                      </p>
                     {/if}
                     {#if gig.notes}
                       <p>{gig.notes}</p>

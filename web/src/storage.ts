@@ -1,5 +1,6 @@
 import { Gigger, type GiggerStore } from "@gigger/schemas";
 import RemoteStorage from "remotestoragejs";
+import { createLogoutSync } from "./logout-sync";
 export const storage = new RemoteStorage({
   discovery: { allowPrivateAddresses: true, timeout: 5000 },
   changeEvents: { local: true, window: false, remote: true, conflict: true },
@@ -10,7 +11,29 @@ storage.caching.enable("/gigger/");
 export const bands = (storage as RemoteStorage & { gigger: GiggerStore })
   .gigger;
 
+let sessionReady = false;
+const sessionEvents = new EventTarget();
+storage.on("ready", () => {
+  sessionReady = true;
+});
+const logoutSync =
+  typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
+    ? createLogoutSync(() => logout(false))
+    : undefined;
+
+export function onSessionLogout(callback: () => void) {
+  sessionEvents.addEventListener("logout", callback);
+  return () => sessionEvents.removeEventListener("logout", callback);
+}
+export function ensureSessionReady() {
+  if (!sessionReady)
+    throw new Error(
+      "Local storage is still opening or clearing. Close other Gigger tabs and try again.",
+    );
+}
+
 export function connectSession(username: string, token: string) {
+  ensureSessionReady();
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timeout);
@@ -32,8 +55,11 @@ export function connectSession(username: string, token: string) {
   });
 }
 
-export function logout() {
+export function logout(broadcast = true) {
   const { userAddress, token } = storage.remote;
+  sessionReady = false;
+  sessionEvents.dispatchEvent(new Event("logout"));
+  if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
   history.replaceState(null, "", "/login");
