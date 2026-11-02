@@ -68,6 +68,7 @@ test("linked booking schemas, band isolation and status enforcement", async () =
     expect((await store.list("gig", "a"))[0]).toMatchObject(gig);
     for (const patch of [
       { enquirySource: "sms" },
+      { enquirySource: "" },
       { venueId: "" },
       { contactIds: ["../escape"] },
       { public: { ticketUrl: "https://example.com", unexpected: true } },

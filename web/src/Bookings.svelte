@@ -59,7 +59,7 @@ let venueAddress = $state("");
 let contactName = $state("");
 let contactEmail = $state("");
 let contactPhone = $state("");
-let source = $state<EnquirySource>("other");
+let source = $state<EnquirySource | "">("");
 let syncedChanges = false;
 async function load() {
   const requested = bandId;
@@ -142,7 +142,7 @@ function edit(gig?: Gig) {
   timesText = gig?.setTimes?.join(", ") ?? "";
   ticketUrl = gig?.public?.ticketUrl ?? "";
   description = gig?.public?.description ?? "";
-  source = gig?.enquirySource ?? "other";
+  source = gig?.enquirySource ?? "";
   newVenue = false;
   newContact = false;
   venueName = "";
@@ -156,6 +156,11 @@ function edit(gig?: Gig) {
 async function submitGig(event: SubmitEvent) {
   event.preventDefault();
   if (!draft) return;
+  const enquirySource = source;
+  if (!enquirySource) {
+    error = "Choose an enquiry source.";
+    return;
+  }
   const value = $state.snapshot(draft);
   await run(async () => {
     if (newVenue) {
@@ -199,7 +204,7 @@ async function submitGig(event: SubmitEvent) {
       ...value,
       title: value.title.trim(),
       contactIds: value.contactIds ?? [],
-      enquirySource: source,
+      enquirySource,
       fee: {
         ...(amount.trim() ? { amount: amount.trim() } : {}),
         extras: extraText
@@ -401,7 +406,8 @@ async function saveRecord(
               ></textarea></label
             >
             <label
-              >Source<select bind:value={source}>
+              >Source<select bind:value={source} required>
+                <option value="" disabled>Choose a source</option>
                 {#each enquirySources as item (item)}
                   <option value={item}>{item}</option>
                 {/each}

@@ -9,7 +9,14 @@ import {
 } from "@gigger/schemas";
 import { onMount } from "svelte";
 import Bookings from "./Bookings.svelte";
-import { bands, connectSession, logout, storage } from "./storage";
+import {
+  bands,
+  connectSession,
+  ensureSessionReady,
+  logout,
+  onSessionLogout,
+  storage,
+} from "./storage";
 
 type Summary = {
   band: Band;
@@ -121,6 +128,7 @@ async function authenticate(event: SubmitEvent) {
   busy = true;
   error = "";
   try {
+    ensureSessionReady();
     if (mode === "login" && username.trim().includes("@")) {
       password = "";
       storage.connect(username.trim());
@@ -153,8 +161,7 @@ async function authenticate(event: SubmitEvent) {
     busy = false;
   }
 }
-function logOut(event: MouseEvent) {
-  event.preventDefault();
+function resetSession() {
   signedIn = false;
   ready = false;
   busy = false;
@@ -165,10 +172,16 @@ function logOut(event: MouseEvent) {
   mode = "login";
   creatingBand = false;
   bandName = "";
+  password = "";
+  openedGig = "";
   resetMember();
+}
+function logOut(event: MouseEvent) {
+  event.preventDefault();
   logout();
 }
 onMount(() => {
+  const unsubscribeLogout = onSessionLogout(resetSession);
   const refresh = () => {
     if (signedIn)
       void load().catch(() => {
@@ -189,14 +202,7 @@ onMount(() => {
     error =
       "Could not save or load changes. Please check your connection and try again.";
   });
-  storage.on("disconnected", () => {
-    mode = "login";
-    ready = false;
-    error = "";
-    signedIn = false;
-    summaries = [];
-    selected = "";
-  });
+  storage.on("disconnected", resetSession);
   let changed = false;
   storage.scope("/gigger/").on("change", () => {
     changed = true;
@@ -208,6 +214,8 @@ onMount(() => {
     }
   });
   return () => {
+    unsubscribeLogout();
+    storage.removeEventListener("disconnected", resetSession);
     storage.stopSync();
   };
 });
@@ -285,7 +293,7 @@ onMount(() => {
             ></label
           >
         {/if}
-        <button type="submit" disabled={!ready || busy}>
+        <button type="submit" disabled={busy}>
           {busy ? "Please wait…" : mode === "signup" ? "Sign up" : "Log in"}
         </button>
       </form>
