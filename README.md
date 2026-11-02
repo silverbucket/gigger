@@ -72,3 +72,17 @@ The header band picker also filters Bookings; choose All bands for a combined gi
 The Venues and Contacts screens list records and open their details for editing. Invalid status changes show “This gig changed somewhere else, reload to see the latest”; the gig date/status line stays visible, and Reload latest refreshes the record and any open edit form.
 
 Other bands you share a bill with are reusable `otherBand` records with `name`, `contactIds` and optional `notes`. Gigs link to them through `otherBandIds`; links and contacts must exist within the same managed band, matching venue/contact scoping. In the Who section, tap existing bands or create a new band inline. Use Other bands to edit a record and link contacts, or open a band from a gig's Playing with list. Updating the band's name or contact links applies wherever that record is reused. These bands do not appear in the managed-band picker.
+
+## Browser tests
+
+Run the real forms against the Compose app (use a disposable stack: browser tests create accounts and records):
+
+```sh
+bunx playwright install chromium webkit
+make up
+bun run test:e2e
+```
+
+Set `E2E_BASE_URL` when the stack uses another port, for example `E2E_BASE_URL=http://localhost:18086 bun run test:e2e`. Tests run in desktop Chromium and mobile WebKit, create independent accounts, and use the real account API and remoteStorage service without mocked form submissions. Coverage includes signup validation, band and gig currencies, booking drafts and required fields, survey cancellation, earnings calculations and persistence, venue/earnings separation, and gig-sheet print styles. `bun test` continues to run unit and storage tests separately.
+
+CI runs the browser suite after starting its fresh Compose stack. Failures retain screenshots and Playwright traces in the `browser-test-results` artifact for seven days. See [Playwright's trace options](https://playwright.dev/docs/test-use-options#recording-options) for inspecting failures. This checks browser print styles, not a physical printer.

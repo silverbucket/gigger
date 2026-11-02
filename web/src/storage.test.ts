@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  createGigger,
   type Gig,
   Gigger,
   type GiggerStore,
@@ -161,4 +162,32 @@ test("overview groups every status with upcoming confirmed gigs first", () => {
   expect(groups.flatMap((group) => group.gigs)).toHaveLength(gigs.length);
   expect(groupGigs([])).toEqual([]);
   expect(gigs[0]?.id).toBe("past");
+});
+
+test("listing fetches an uncached child even when its parent listing is fresh", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Gigger);
+  storage.access.claim("gigger", "rw");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const client = storage.scope("/gigger/");
+  const store = createGigger(client);
+  try {
+    await store.save("venue", "a", {
+      id: "v",
+      name: "Club",
+      address: "Main Street",
+    });
+    const original = client.getObject.bind(client);
+    const ages: (number | false | undefined)[] = [];
+    client.getObject = async (path, maxAge) => {
+      ages.push(maxAge);
+      return maxAge === undefined ? undefined : original(path);
+    };
+    expect(await store.list("venue", "a")).toMatchObject([
+      { id: "v", name: "Club" },
+    ]);
+    expect(ages).toEqual([undefined, 0]);
+  } finally {
+    await storage.disconnect();
+  }
 });

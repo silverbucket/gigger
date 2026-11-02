@@ -308,7 +308,7 @@ export type Kind = keyof Records;
 export interface Client {
   declareType(name: string, schema: object): unknown;
   storeObject(name: string, path: string, value: object): Promise<unknown>;
-  getObject(path: string): Promise<unknown>;
+  getObject(path: string, maxAge?: false | number): Promise<unknown>;
   getAll(path: string): Promise<unknown>;
   getListing(path: string): Promise<unknown>;
   validate(value: object): { valid?: boolean };
@@ -468,8 +468,17 @@ export function createGigger(client: Client) {
       kind: K,
       bandId: string,
     ): Promise<Records[K][]> {
-      const values = await client.getAll(`bands/${safeId(bandId)}/${kind}s/`);
-      return Object.values(values ?? {}).map((value) => read(kind, value));
+      const listing = await client.getListing(
+        `bands/${safeId(bandId)}/${kind}s/`,
+      );
+      return Promise.all(
+        Object.keys(listing ?? {}).map(async (recordId) => {
+          const path = recordPath(kind, bandId, recordId);
+          const cached = await client.getObject(path);
+          // A fresh folder listing can arrive before its children are cached.
+          return read(kind, cached ?? (await client.getObject(path, 0)));
+        }),
+      );
     },
   };
 }

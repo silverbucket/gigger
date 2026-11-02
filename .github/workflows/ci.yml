@@ -23,5 +23,13 @@ jobs:
           curl -fsS 'http://localhost:8080/.well-known/webfinger?resource=acct:alice@localhost:8080' | grep -q 'http://localhost:8080/storage/storage/alice'
           curl -fsS 'http://localhost:8080/sockethub/?EIO=4&transport=polling' | grep -q 'sid'
       - run: AUTH_TEST_URL=http://localhost:8080/api bun test api/test/auth.integration.test.ts
+      - run: bunx playwright install --with-deps chromium webkit
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: test-results/
+          retention-days: 7
       - if: always()
         run: docker compose logs && docker compose down -v
