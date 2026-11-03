@@ -7,6 +7,8 @@ import {
   type Gig,
   groupGigs,
   type Member,
+  slugify,
+  slugPattern,
   type Venue,
 } from "@gigger/schemas";
 import { onMount } from "svelte";
@@ -56,6 +58,60 @@ let currencyText = $derived(
     ? currencyDraft.text
     : (current?.band.currency ?? "EUR"),
 );
+let slugDraft = $state<{ bandId: string; text: string } | null>(null);
+let slugText = $derived(
+  slugDraft && slugDraft.bandId === current?.band.id
+    ? slugDraft.text
+    : (current?.band.slug ?? slugify(current?.band.name ?? "")),
+);
+let pageUrl = $derived(
+  current?.band.slug ? `${location.origin}/b/${current.band.slug}` : "",
+);
+
+async function publishPage(event: SubmitEvent) {
+  event.preventDefault();
+  const band = current?.band;
+  if (!band) return;
+  const slug = slugText.trim();
+  busy = true;
+  error = "";
+  try {
+    const { userAddress, token } = storage.remote;
+    if (!userAddress.endsWith(`@${location.host}`))
+      throw new Error("Public pages are available for accounts on this site.");
+    const username = decodeURIComponent(
+      userAddress.slice(0, userAddress.lastIndexOf("@")),
+    );
+    const response = await fetch("/api/public/pages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: band.id, slug }),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.json()).error ??
+          "Could not publish the page. Please retry.",
+      );
+    await bands.save("band", band.id, {
+      ...band,
+      slug,
+      locale: navigator.language,
+    });
+    await bands.publishBand(band.id, band.slug);
+    slugDraft = null;
+    await load();
+  } catch (cause) {
+    error =
+      cause instanceof Error
+        ? cause.message
+        : "Could not publish the page. Please retry.";
+  } finally {
+    busy = false;
+  }
+}
 
 async function load() {
   const token = storage.remote.token;
@@ -398,6 +454,53 @@ onMount(() => {
           >
           <button type="submit" disabled={busy}>Save currency</button>
         </form>
+        <h3>Public page</h3>
+        {#if pageUrl}
+          <p>
+            Fans can see your confirmed and played gigs at
+            <a href={pageUrl}>{pageUrl}</a>
+          </p>
+          <p>
+            <a
+              class="button"
+              href={`/b/${current.band.slug}/export.zip`}
+              download
+              >Export static page</a
+            >
+            Downloads a zip with the page, its JSON and a calendar file to host
+            anywhere.
+          </p>
+        {:else}
+          <p>
+            Publish a page of your confirmed gigs: date, start time, venue,
+            city, ticket link and public description. Fees, contacts, notes and
+            earnings stay private.
+          </p>
+        {/if}
+        <form onsubmit={publishPage}>
+          <label
+            >Page address
+            <span class="prefix"
+              ><span aria-hidden="true">{location.origin}/b/</span>
+              <input
+                name="slug"
+                value={slugText}
+                oninput={(event) => {
+                  slugDraft = {
+                    bandId: current.band.id,
+                    text: event.currentTarget.value,
+                  };
+                }}
+                pattern={slugPattern.slice(1, -1)}
+                maxlength="60"
+                required
+              ></span
+            ></label
+          >
+          <button type="submit" disabled={!ready || busy}>
+            {current.band.slug ? "Save address" : "Publish page"}
+          </button>
+        </form>
         <h3>Members</h3>
         <ul>
           {#each current.members as member (member.id)}
@@ -629,16 +732,36 @@ label {
 }
 input,
 select,
-button {
+button,
+.button {
   font: inherit;
   border: 1px solid #82958a;
   border-radius: 6px;
   padding: 0.65rem;
 }
-button {
+button,
+.button {
   background: #205b43;
   color: white;
   cursor: pointer;
+}
+.button {
+  display: inline-block;
+  text-decoration: none;
+  margin-right: 0.5rem;
+}
+.prefix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  color: #4e5f58;
+  overflow-wrap: anywhere;
+}
+.prefix input {
+  flex: 1;
+  min-width: 8rem;
+  max-width: 100%;
 }
 button:disabled {
   opacity: 0.5;

@@ -8,6 +8,7 @@ export const storage = new RemoteStorage({
 storage.addModule(Gigger);
 storage.access.claim("gigger", "rw");
 storage.caching.enable("/gigger/");
+storage.caching.enable("/public/gigger/");
 export const bands = (storage as RemoteStorage & { gigger: GiggerStore })
   .gigger;
 

@@ -2,6 +2,10 @@ export interface Band {
   id: string;
   name: string;
   currency?: string;
+  /** Public page address; set once the band publishes. */
+  slug?: string;
+  /** BCP 47 locale for public dates and times, e.g. "cs-CZ". */
+  locale?: string;
 }
 export interface Member {
   id: string;
@@ -49,6 +53,44 @@ export interface Venue {
   id: string;
   name: string;
   address: string;
+  city?: string;
+}
+/** The only gig fields that ever leave private storage. */
+export interface PublicGig {
+  date: string;
+  start?: string;
+  venue: string;
+  city?: string;
+  ticketUrl?: string;
+  description?: string;
+}
+export interface PublicPage {
+  name: string;
+  locale?: string;
+  gigs: Record<string, PublicGig>;
+}
+export const publicStatuses: readonly GigStatus[] = ["confirmed", "played"];
+export function publicGig(gig: Gig, venue?: Venue): PublicGig {
+  return {
+    date: gig.date,
+    ...(gig.setTimes?.[0] ? { start: gig.setTimes[0] } : {}),
+    venue: venue?.name ?? gig.venue ?? "",
+    ...(venue?.city ? { city: venue.city } : {}),
+    ...(gig.public?.ticketUrl ? { ticketUrl: gig.public.ticketUrl } : {}),
+    ...(gig.public?.description?.trim()
+      ? { description: gig.public.description.trim() }
+      : {}),
+  };
+}
+export const slugPattern = "^[a-z0-9]+(-[a-z0-9]+)*$";
+export function slugify(name: string) {
+  return name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
 }
 export const capacities = [
   "under 50",
@@ -249,6 +291,35 @@ function object(
 }
 const money = { type: "number", minimum: 0 };
 const currency = { type: "string", pattern: "^[A-Z]{3}$" };
+const ticketUrl = { type: "string", pattern: "^https?://[^\\s/]+[^\\s]*$" };
+const publicGigSchema = {
+  type: "object",
+  properties: {
+    "@context": { type: "string" },
+    date,
+    start: time,
+    venue: { type: "string" },
+    city: text,
+    ticketUrl,
+    description: { type: "string" },
+  },
+  required: ["date", "venue"],
+  additionalProperties: false,
+};
+export const publicSchemas = {
+  publicGig: publicGigSchema,
+  publicPage: {
+    type: "object",
+    properties: {
+      "@context": { type: "string" },
+      name: text,
+      locale: { type: "string", pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$" },
+      gigs: { type: "object", additionalProperties: publicGigSchema },
+    },
+    required: ["name", "gigs"],
+    additionalProperties: false,
+  },
+};
 const surveyFields = {
   venueId: id,
   date,
@@ -286,7 +357,15 @@ const earningsSchema = {
   not: { required: ["numberOfBands", "handedOver"] },
 };
 export const schemas = {
-  band: object({ name: text, currency }, ["name"]),
+  band: object(
+    {
+      name: text,
+      currency,
+      slug: { type: "string", pattern: slugPattern },
+      locale: publicSchemas.publicPage.properties.locale,
+    },
+    ["name"],
+  ),
   member: object({ name: text, phone: text, email, messenger: text }, ["name"]),
   gig: object(
     {
@@ -301,10 +380,7 @@ export const schemas = {
       setLength: { type: "integer", minimum: 1 },
       public: {
         type: "object",
-        properties: {
-          ticketUrl: { type: "string", pattern: "^https?://[^\\s/]+[^\\s]*$" },
-          description: { type: "string" },
-        },
+        properties: { ticketUrl, description: { type: "string" } },
         additionalProperties: false,
       },
       venue: text,
@@ -340,7 +416,7 @@ export const schemas = {
       ],
     },
   ),
-  venue: object({ name: text, address: text }, ["name", "address"]),
+  venue: object({ name: text, address: text, city: text }, ["name", "address"]),
   survey: surveySchema,
   otherBand: object(
     {
@@ -382,9 +458,11 @@ export function recordPath(kind: Kind, bandId: string, recordId = bandId) {
     ? `${base}band`
     : `${base}${kind}s/${safeId(recordId)}`;
 }
-export function createGigger(client: Client) {
+export function createGigger(client: Client, publicClient?: Client) {
   for (const [kind, schema] of Object.entries(schemas))
     client.declareType(kind, schema);
+  for (const [kind, schema] of Object.entries(publicSchemas))
+    publicClient?.declareType(kind, schema);
   function read<K extends Kind>(kind: K, value: unknown): Records[K] {
     if (
       !value ||
@@ -398,7 +476,87 @@ export function createGigger(client: Client) {
     }
     return value as Records[K];
   }
+  /** Undefined when the band record is missing; a band with no slug has no public page. */
+  async function publicBand(bandId: string) {
+    const stored = await client.getObject(recordPath("band", bandId));
+    const current = stored ? read("band", stored) : undefined;
+    return publicClient && current?.slug ? current : undefined;
+  }
+  /** Writes or removes the public copy of one gig; the page index is rebuilt separately. */
+  async function publishGig(slug: string, bandId: string, gig: Gig) {
+    if (!publicClient) return;
+    const path = `${slug}/gigs/${safeId(gig.id)}`;
+    if (!publicStatuses.includes(gig.status)) {
+      if (await publicClient.getObject(path)) await publicClient.remove(path);
+      return;
+    }
+    const venue = gig.venueId
+      ? read(
+          "venue",
+          await client.getObject(recordPath("venue", bandId, gig.venueId)),
+        )
+      : undefined;
+    await publicClient.storeObject("publicGig", path, publicGig(gig, venue));
+  }
+  /** Public folder listings need auth, so the page is one public document the API can read. */
+  async function publishPage(current: Band) {
+    if (!publicClient || !current.slug) return;
+    const docs = (await publicClient.getAll(`${current.slug}/gigs/`)) ?? {};
+    const gigs: Record<string, PublicGig> = {};
+    for (const [id, doc] of Object.entries(docs as Record<string, unknown>)) {
+      if (!doc || typeof doc !== "object") continue;
+      const { date, start, venue, city, ticketUrl, description } =
+        doc as PublicGig;
+      gigs[id] = { date, start, venue, city, ticketUrl, description };
+      for (const key of Object.keys(gigs[id]) as (keyof PublicGig)[])
+        if (gigs[id][key] === undefined) delete gigs[id][key];
+    }
+    await publicClient.storeObject("publicPage", `${current.slug}/page`, {
+      name: current.name,
+      ...(current.locale ? { locale: current.locale } : {}),
+      gigs,
+    });
+  }
+  async function publish(bandId: string, gig: Gig) {
+    const current = await publicBand(bandId);
+    if (!current?.slug) return;
+    await publishGig(current.slug, bandId, gig);
+    await publishPage(current);
+  }
+  async function removePublic(slug: string) {
+    if (!publicClient) return;
+    const listing = (await publicClient.getListing(`${slug}/gigs/`)) ?? {};
+    for (const id of Object.keys(listing))
+      await publicClient.remove(`${slug}/gigs/${id}`);
+    await publicClient.remove(`${slug}/page`);
+  }
+  async function list<K extends Exclude<Kind, "band">>(
+    kind: K,
+    bandId: string,
+  ): Promise<Records[K][]> {
+    const listing = await client.getListing(
+      `bands/${safeId(bandId)}/${kind}s/`,
+    );
+    return Promise.all(
+      Object.keys(listing ?? {}).map(async (recordId) => {
+        const path = recordPath(kind, bandId, recordId);
+        const cached = await client.getObject(path);
+        // A fresh folder listing can arrive before its children are cached.
+        return read(kind, cached ?? (await client.getObject(path, 0)));
+      }),
+    );
+  }
   return {
+    /** Rewrites every public copy for the band; call after changing its slug. */
+    async publishBand(bandId: string, previousSlug?: string) {
+      const current = await publicBand(bandId);
+      if (!current?.slug) return;
+      if (previousSlug && previousSlug !== current.slug)
+        await removePublic(previousSlug);
+      for (const gig of await list("gig", bandId))
+        await publishGig(current.slug, bandId, gig);
+      await publishPage(current);
+    },
     async save<K extends Kind>(kind: K, bandId: string, value: Records[K]) {
       if (kind === "band" && value.id !== bandId)
         throw new Error("Band ID must match its path");
@@ -437,6 +595,7 @@ export function createGigger(client: Client) {
         }
       }
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);
+      if (kind === "gig") await publish(bandId, value as Gig);
     },
     async markPlayed(
       bandId: string,
@@ -497,6 +656,7 @@ export function createGigger(client: Client) {
         cleanSurvey,
       );
       await client.storeObject("gig", path, updated);
+      await publish(bandId, updated);
       return updated;
     },
     async moveGigStatus(bandId: string, gigId: string, status: GigStatus) {
@@ -508,6 +668,7 @@ export function createGigger(client: Client) {
         );
       const updated = { ...current, status };
       await client.storeObject("gig", path, updated);
+      await publish(bandId, updated);
       return updated;
     },
     async removeMember(bandId: string, memberId: string) {
@@ -522,27 +683,14 @@ export function createGigger(client: Client) {
       );
       return bands.filter(Boolean).map((band) => read("band", band));
     },
-    async list<K extends Exclude<Kind, "band">>(
-      kind: K,
-      bandId: string,
-    ): Promise<Records[K][]> {
-      const listing = await client.getListing(
-        `bands/${safeId(bandId)}/${kind}s/`,
-      );
-      return Promise.all(
-        Object.keys(listing ?? {}).map(async (recordId) => {
-          const path = recordPath(kind, bandId, recordId);
-          const cached = await client.getObject(path);
-          // A fresh folder listing can arrive before its children are cached.
-          return read(kind, cached ?? (await client.getObject(path, 0)));
-        }),
-      );
-    },
+    list,
   };
 }
 export const Gigger = {
   name: "gigger",
-  builder: (client: Client) => ({ exports: createGigger(client) }),
+  builder: (client: Client, publicClient: Client) => ({
+    exports: createGigger(client, publicClient),
+  }),
 };
 export type GiggerStore = ReturnType<typeof createGigger>;
 export function groupGigs(

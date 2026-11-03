@@ -70,6 +70,7 @@ let newVenue = $state(false);
 let newContact = $state(false);
 let venueName = $state("");
 let venueAddress = $state("");
+let venueCity = $state("");
 let contactName = $state("");
 let contactEmail = $state("");
 let contactPhone = $state("");
@@ -169,6 +170,7 @@ function edit(gig?: Gig) {
   newContact = false;
   venueName = "";
   venueAddress = "";
+  venueCity = "";
   contactName = "";
   contactEmail = "";
   contactPhone = "";
@@ -190,6 +192,7 @@ async function submitGig(event: SubmitEvent) {
         id: crypto.randomUUID(),
         name: venueName.trim(),
         address: venueAddress.trim(),
+        ...(venueCity.trim() ? { city: venueCity.trim() } : {}),
       };
       await bands.save("venue", bandId, v);
       value.venueId = v.id;
@@ -291,6 +294,7 @@ async function saveRecord(
         ...$state.snapshot(venue),
         id: venue.id || crypto.randomUUID(),
       };
+      if (!value.city?.trim()) delete value.city;
       await bands.save("venue", bandId, value);
       venue = value;
     } else if (kind === "otherBand") {
@@ -539,6 +543,7 @@ async function saveRecord(
               <div id="create-venue-fields">
                 <label>Venue name<input bind:value={venueName} required></label>
                 <label>Address<input bind:value={venueAddress} required></label>
+                <label>City<input bind:value={venueCity}></label>
               </div>
             {/if}
           </details>
@@ -838,6 +843,7 @@ async function saveRecord(
       <fieldset disabled={busy}>
         <label>Name<input required bind:value={venue.name}></label>
         <label>Address<input required bind:value={venue.address}></label>
+        <label>City<input bind:value={venue.city}></label>
         <button type="submit">Save venue</button>
       </fieldset>
     </form>
