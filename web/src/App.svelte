@@ -360,31 +360,35 @@ onMount(() => {
     {#if current}
       <section>
         <h2>{current.band.name}</h2>
-        <form
-          onsubmit={(event) => {
-            event.preventDefault();
-            const currency = new FormData(event.currentTarget).get(
-              "currency",
-            ) as string;
-            void save(() =>
-              bands.save("band", current.band.id, {
-                ...current.band,
-                currency: currency.toUpperCase(),
-              }),
-            );
-          }}
-        >
-          <label
-            >Band currency<input
-              name="currency"
-              value={current.band.currency ?? "EUR"}
-              pattern={"[A-Za-z]{3}"}
-              maxlength="3"
-              required
-            ></label
+        <!-- defaultValue keeps what the user typed while a save or sync
+             reloads the band; the key resets it when another band is shown. -->
+        {#key current.band.id}
+          <form
+            onsubmit={(event) => {
+              event.preventDefault();
+              const currency = new FormData(event.currentTarget).get(
+                "currency",
+              ) as string;
+              void save(() =>
+                bands.save("band", current.band.id, {
+                  ...current.band,
+                  currency: currency.toUpperCase(),
+                }),
+              );
+            }}
           >
-          <button type="submit" disabled={busy}>Save currency</button>
-        </form>
+            <label
+              >Band currency<input
+                name="currency"
+                defaultValue={current.band.currency ?? "EUR"}
+                pattern={"[A-Za-z]{3}"}
+                maxlength="3"
+                required
+              ></label
+            >
+            <button type="submit" disabled={busy}>Save currency</button>
+          </form>
+        {/key}
         <h3>Members</h3>
         <ul>
           {#each current.members as member (member.id)}
