@@ -74,6 +74,7 @@ services:
     environment:
       DATABASE_PATH: /data/gigger.sqlite
       ARMADIETTO_AUTH_URL: http://armadietto:8001
+      ARMADIETTO_URL: http://armadietto:8000
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:${PORT:-8080}}
     volumes:
       - api_data:/data

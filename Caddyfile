@@ -19,6 +19,9 @@
   handle /sockethub* {
     reverse_proxy sockethub:10550
   }
+  handle /b/* {
+    reverse_proxy api:3000
+  }
   handle /api/* {
     uri strip_prefix /api
     reverse_proxy api:3000

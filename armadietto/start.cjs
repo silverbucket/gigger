@@ -65,6 +65,35 @@ http
         res.writeHead(400).end();
         return;
       }
+      if (req.url === "/public-gigs") {
+        const { username, slug } = input;
+        if (
+          typeof username !== "string" ||
+          !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(username) ||
+          typeof slug !== "string" ||
+          !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) ||
+          slug.length > 60
+        ) {
+          res.writeHead(400).end();
+          return;
+        }
+        const base = `/public/gigger/${slug}/gigs/`;
+        const listing = await store.get(username, base);
+        const gigs = {};
+        for (const id of Object.keys(listing.item?.items ?? {})) {
+          if (!/^[A-Za-z0-9_-]+$/.test(id)) continue;
+          const result = await store.get(username, base + id);
+          if (result.item?.value) {
+            try {
+              gigs[id] = JSON.parse(result.item.value.toString());
+            } catch {
+              // A malformed public record must not hide other gigs.
+            }
+          }
+        }
+        res.writeHead(200).end(JSON.stringify({ gigs }));
+        return;
+      }
       const result = await auth(req.url.slice(1), input);
       res.writeHead(result.status).end(JSON.stringify(result.body));
     } catch {

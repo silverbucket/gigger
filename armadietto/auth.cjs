@@ -82,9 +82,7 @@ function createAuthHandler(store, clientId) {
           const band = {
             id: randomUUID(),
             name: input.bandName.trim(),
-            ...(input.currency
-              ? { currency: input.currency.toUpperCase() }
-              : {}),
+            currency: (input.currency || "EUR").toUpperCase(),
             "@context": "http://remotestorage.io/spec/modules/gigger/band",
           };
           const saved = await store.put(

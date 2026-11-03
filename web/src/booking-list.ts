@@ -39,3 +39,19 @@ export function playedAtVenue(gigs: Gig[], venue: Venue) {
     )
     .sort((a, b) => b.date.localeCompare(a.date));
 }
+
+export function searchNamed<T extends { name: string }>(
+  items: T[],
+  query: string,
+): T[] {
+  const normalize = (value: string) =>
+    value.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+  const needle = normalize(query.trim());
+  if (!needle) return [];
+  const matches: T[] = [];
+  for (const item of items) {
+    if (normalize(item.name).includes(needle)) matches.push(item);
+    if (matches.length === 20) break;
+  }
+  return matches;
+}

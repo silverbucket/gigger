@@ -156,8 +156,8 @@ test("survey validation and earnings isolation using real private/public storage
     expect(
       Object.keys((await rs.scope("/public/gigger/").getAll("bands/")) ?? {}),
     ).toEqual([]);
-    await expect(store.markPlayed("a", "g", survey, earnings)).rejects.toThrow(
-      "Reload",
+    expect((await store.markPlayed("a", "g", survey, earnings)).status).toBe(
+      "played",
     );
   } finally {
     await rs.disconnect();

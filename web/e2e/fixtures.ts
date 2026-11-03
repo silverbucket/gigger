@@ -9,6 +9,8 @@ export const test = base.extend<{
     read: (path: string) => Promise<Record<string, unknown>>;
     exists: (path: string) => Promise<boolean>;
     seedGig: (gig: Partial<Gig> & Pick<Gig, "id" | "title">) => Promise<void>;
+    seedVenue: (id: string, name: string) => Promise<void>;
+    seedOtherBand: (id: string, name: string) => Promise<void>;
   };
 }>({
   account: async ({ request }, use) => {
@@ -20,6 +22,7 @@ export const test = base.extend<{
         password,
         email: `${username}@example.com`,
         bandName: "Touring Band",
+        currency: "CZK",
       },
     });
     expect(response.ok()).toBe(true);
@@ -44,11 +47,6 @@ export const test = base.extend<{
       });
       expect(saved.ok()).toBe(true);
     }
-    await put("band", "band", {
-      id: bandId,
-      name: "Touring Band",
-      currency: "CZK",
-    });
     await put("venue", "venues/club", {
       id: "club",
       name: "Test Club",
@@ -67,18 +65,33 @@ export const test = base.extend<{
       async read(location) {
         // Writes from the browser land asynchronously; retry briefly instead
         // of failing on a transient 404 or 5xx.
-        let result = await request.get(`${path}${location}`, { headers });
-        for (let attempt = 0; !result.ok() && attempt < 10; attempt++) {
+        for (let attempt = 0; attempt < 11; attempt++) {
+          const result = await request.get(`${path}${location}`, { headers });
+          if (result.ok()) {
+            try {
+              return await result.json();
+            } catch {
+              // A storage write can be in progress while the file is read.
+            }
+          }
           await new Promise((resolve) => setTimeout(resolve, 200));
-          result = await request.get(`${path}${location}`, { headers });
         }
-        expect(result.ok()).toBe(true);
-        return result.json();
+        throw new Error(`Could not read ${location} from storage`);
       },
       async exists(location) {
         const result = await request.get(`${path}${location}`, { headers });
         expect([200, 404]).toContain(result.status());
         return result.status() === 200;
+      },
+      async seedVenue(id, name) {
+        await put("venue", `venues/${id}`, { id, name, address: "Prague" });
+      },
+      async seedOtherBand(id, name) {
+        await put("otherBand", `otherBands/${id}`, {
+          id,
+          name,
+          contactIds: [],
+        });
       },
       async seedGig(gig) {
         await put("gig", `gigs/${gig.id}`, {
