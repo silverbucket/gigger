@@ -46,6 +46,7 @@ let username = $state("");
 let password = $state("");
 let signedIn = $state(false);
 let status = $state("Loading…");
+let pendingPublicDeletes = $state(false);
 let error = $state("");
 let ready = $state(false);
 let busy = $state(false);
@@ -124,7 +125,11 @@ async function load() {
       contacts: await bands.list("contact", band.id),
     })),
   );
-  if (signedIn && token === storage.remote.token) summaries = loaded;
+  const pending = (await bands.pendingDeletes()).length > 0;
+  if (signedIn && token === storage.remote.token) {
+    summaries = loaded;
+    pendingPublicDeletes = pending;
+  }
 }
 async function save(action: () => Promise<void>) {
   busy = true;
@@ -280,7 +285,13 @@ onMount(() => {
   storage.scope("/gigger/").on("change", () => {
     changed = true;
   });
-  storage.on("sync-done", () => {
+  storage.on("sync-done", (event) => {
+    if ((event as { completed?: boolean }).completed && signedIn) {
+      void bands
+        .retryPublicDeletes()
+        .then(refresh)
+        .catch(() => {});
+    }
     if (changed) {
       changed = false;
       refresh();
@@ -314,6 +325,12 @@ onMount(() => {
   {/if}
   {#if status}
     <p role="status">{status}</p>
+  {/if}
+  {#if signedIn && pendingPublicDeletes}
+    <p role="status">
+      A public gig removal is waiting to sync. It may remain visible until you
+      reconnect.
+    </p>
   {/if}
   {#if !signedIn}
     <section aria-labelledby="auth-title">

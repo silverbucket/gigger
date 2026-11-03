@@ -462,6 +462,17 @@ export function recordPath(kind: Kind, bandId: string, recordId = bandId) {
 export function createGigger(client: Client, publicClient?: Client) {
   for (const [kind, schema] of Object.entries(schemas))
     client.declareType(kind, schema);
+  client.declareType("pendingPublicDelete", {
+    type: "object",
+    properties: {
+      "@context": { type: "string" },
+      slug: { type: "string", pattern: slugPattern },
+      bandId: id,
+      gigId: id,
+    },
+    required: ["slug", "bandId", "gigId"],
+    additionalProperties: false,
+  });
   for (const [kind, schema] of Object.entries(publicSchemas))
     publicClient?.declareType(kind, schema);
   function read<K extends Kind>(kind: K, value: unknown): Records[K] {
@@ -483,19 +494,33 @@ export function createGigger(client: Client, publicClient?: Client) {
     const current = stored ? read("band", stored) : undefined;
     return publicClient && current?.slug ? current : undefined;
   }
-  /** Writes or removes the public copy of one gig; the page index is rebuilt separately. */
+  /** Writes or removes the public copy of one gig. */
   async function publishGig(slug: string, bandId: string, gig: Gig) {
     if (!publicClient) return;
     const path = `${slug}/gigs/${safeId(gig.id)}`;
     if (!publicStatuses.includes(gig.status)) {
-      const existing =
-        (await publicClient.getObject(path)) ??
-        (await publicClient.getObject(path, 0).catch((error: unknown) => {
-          if (String(error).includes("remote is not connected"))
-            return undefined;
-          throw error;
-        }));
-      if (existing) await publicClient.remove(path);
+      const pendingPath = `pending-public-deletes/${safeId(bandId)}/${safeId(gig.id)}`;
+      let existing = await publicClient.getObject(path);
+      if (!existing) {
+        try {
+          existing = await publicClient.getObject(path, 0);
+        } catch {
+          await client.storeObject("pendingPublicDelete", pendingPath, {
+            slug,
+            bandId,
+            gigId: gig.id,
+          });
+          return;
+        }
+      }
+      if (existing) {
+        await client.storeObject("pendingPublicDelete", pendingPath, {
+          slug,
+          bandId,
+          gigId: gig.id,
+        });
+        await publicClient.remove(path);
+      }
       return;
     }
     const venue = gig.venueId
@@ -505,24 +530,16 @@ export function createGigger(client: Client, publicClient?: Client) {
         )
       : undefined;
     await publicClient.storeObject("publicGig", path, publicGig(gig, venue));
+    const pendingPath = `pending-public-deletes/${safeId(bandId)}/${safeId(gig.id)}`;
+    if (await client.getObject(pendingPath)) await client.remove(pendingPath);
   }
-  /** Public folder listings need auth, so the page is one public document the API can read. */
+  /** Store band metadata separately from the individual public gig records. */
   async function publishPage(current: Band) {
     if (!publicClient || !current.slug) return;
-    const docs = (await publicClient.getAll(`${current.slug}/gigs/`)) ?? {};
-    const gigs: Record<string, PublicGig> = {};
-    for (const [id, doc] of Object.entries(docs as Record<string, unknown>)) {
-      if (!doc || typeof doc !== "object") continue;
-      const { date, start, venue, city, ticketUrl, description } =
-        doc as PublicGig;
-      gigs[id] = { date, start, venue, city, ticketUrl, description };
-      for (const key of Object.keys(gigs[id]) as (keyof PublicGig)[])
-        if (gigs[id][key] === undefined) delete gigs[id][key];
-    }
     await publicClient.storeObject("publicPage", `${current.slug}/page`, {
       name: current.name,
       ...(current.locale ? { locale: current.locale } : {}),
-      gigs,
+      gigs: {},
     });
   }
   const publications = new Map<string, Promise<void>>();
@@ -567,7 +584,42 @@ export function createGigger(client: Client, publicClient?: Client) {
       }),
     );
   }
+  async function pendingDeletes() {
+    const folders = (await client.getListing("pending-public-deletes/")) ?? {};
+    const paths: string[] = [];
+    for (const folder of Object.keys(folders)) {
+      if (!/^[A-Za-z0-9_-]+\/$/.test(folder)) continue;
+      const items =
+        (await client.getListing(`pending-public-deletes/${folder}`)) ?? {};
+      for (const gigId of Object.keys(items))
+        if (/^[A-Za-z0-9_-]+$/.test(gigId))
+          paths.push(`pending-public-deletes/${folder}${gigId}`);
+    }
+    return paths;
+  }
   return {
+    pendingDeletes,
+    async retryPublicDeletes() {
+      if (!publicClient) return;
+      for (const path of await pendingDeletes()) {
+        const pending = (await client.getObject(path)) as
+          | { slug: string; bandId: string; gigId: string }
+          | undefined;
+        if (!pending || !new RegExp(slugPattern).test(pending.slug)) continue;
+        const gig = await client.getObject(
+          recordPath("gig", pending.bandId, pending.gigId),
+          0,
+        );
+        if (gig && publicStatuses.includes(read("gig", gig).status)) {
+          await client.remove(path);
+          continue;
+        }
+        const publicPath = `${pending.slug}/gigs/${safeId(pending.gigId)}`;
+        const remote = await publicClient.getObject(publicPath, 0);
+        if (remote) await publicClient.remove(publicPath);
+        else await client.remove(path);
+      }
+    },
     /** Rewrites every public copy for the band; call after changing its slug. */
     async publishBand(bandId: string, previousSlug?: string) {
       await queuePublication(bandId, async () => {

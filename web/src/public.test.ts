@@ -78,7 +78,7 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
     });
     const page = await pub.getObject("cesti-kluci/page");
     expect(page).toMatchObject({ name: "Čeští Kluci", locale: "cs-CZ" });
-    expect(Object.keys((page as { gigs: object }).gigs)).toEqual(["g"]);
+    expect(Object.keys((page as { gigs: object }).gigs)).toEqual([]);
     for (const text of [JSON.stringify(copy), JSON.stringify(page)]) {
       for (const value of privateValues) expect(text).not.toContain(value);
       expect(text).not.toMatch(/fee|notes|contact|earnings|survey|enquiry/);
@@ -96,7 +96,7 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
       },
       { dealType: "fixed fee", total: 5000, takeHome: 5000, currency: "CZK" },
     );
-    const played = JSON.stringify(await pub.getObject("cesti-kluci/page"));
+    const played = JSON.stringify(await pub.getObject("cesti-kluci/gigs/g"));
     expect(played).toContain("Club");
     expect(played).not.toMatch(/Low ceiling|takeHome|rating|5000/);
     await store.save("gig", "a", { ...gig, id: "h", status: "confirmed" });
@@ -106,7 +106,7 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
       Object.keys(
         ((await pub.getObject("cesti-kluci/page")) as { gigs: object }).gigs,
       ),
-    ).toEqual(["g"]);
+    ).toEqual([]);
     await store.save("band", "a", {
       id: "a",
       name: "Renamed",
@@ -201,6 +201,62 @@ test("status publication can be retried after a public write fails", async () =>
     expect(
       ((await publicClient.getObject("band/page")) as { gigs: object }).gigs,
     ).toEqual({});
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("uncached offline removals are queued and retried without deleting a reconfirmed gig", async () => {
+  const storage = new RemoteStorage();
+  storage.access.claim("gigger", "rw");
+  storage.caching.enable("/gigger/");
+  storage.caching.enable("/public/gigger/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/gigger/");
+  const publicClient = storage.scope("/public/gigger/");
+  const { createGigger } = await import("@gigger/schemas");
+  const store = createGigger(privateClient, publicClient);
+  const getPrivate = privateClient.getObject.bind(privateClient);
+  privateClient.getObject = (path, _maxAge) => getPrivate(path);
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "band" });
+    const gig: Gig = {
+      id: "g",
+      title: "Gig",
+      venue: "Club",
+      address: "Street",
+      contacts: [],
+      date: "2030-01-01",
+      status: "confirmed",
+    };
+    await store.save("gig", "a", gig);
+    const getObject = publicClient.getObject.bind(publicClient);
+    let offline = true;
+    publicClient.getObject = async (path, maxAge) => {
+      if (path === "band/gigs/g" && offline) {
+        if (maxAge === 0) throw new Error("offline");
+        return undefined;
+      }
+      return getObject(path);
+    };
+    await store.moveGigStatus("a", "g", "cancelled");
+    expect(await store.pendingDeletes()).toHaveLength(1);
+    expect(await getObject("band/gigs/g")).toBeTruthy();
+    offline = false;
+    await store.retryPublicDeletes();
+    expect(await getObject("band/gigs/g")).toBeFalsy();
+    await store.retryPublicDeletes();
+    expect(await store.pendingDeletes()).toHaveLength(0);
+    await store.save("gig", "a", { ...gig, id: "h" });
+    const pendingPath = "pending-public-deletes/a/h";
+    await privateClient.storeObject("pendingPublicDelete", pendingPath, {
+      slug: "band",
+      bandId: "a",
+      gigId: "h",
+    });
+    await store.retryPublicDeletes();
+    expect(await getObject("band/gigs/h")).toBeTruthy();
+    expect(await store.pendingDeletes()).toHaveLength(0);
   } finally {
     storage.stopSync();
   }

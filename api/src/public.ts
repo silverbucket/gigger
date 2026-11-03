@@ -256,6 +256,7 @@ export function publicHandler(
   db: Database,
   armadiettoUrl = process.env.ARMADIETTO_URL ?? "http://armadietto:8000",
   appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+  internalUrl = process.env.ARMADIETTO_AUTH_URL ?? "http://armadietto:8001",
 ) {
   const owner = db.query<{ username: string; band_id: string }, [string]>(
     "SELECT username, band_id FROM public_pages WHERE slug = ?",
@@ -281,14 +282,24 @@ export function publicHandler(
       storageUrl(row.username, `public/gigger/${slug}/page`),
       { signal: AbortSignal.timeout(10000) },
     );
-    const page = response.ok ? cleanPage(await response.json()) : null;
+    if (!response.ok) return null;
+    const metadata = await response.json();
+    const listing = await fetch(`${internalUrl}/public-gigs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: row.username, slug }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!listing.ok) throw new Error("Public gig listing unavailable");
+    const { gigs } = await listing.json();
+    const page = cleanPage({ ...metadata, gigs });
     if (!page) return null;
     const identity = new Bun.CryptoHasher("sha256")
       .update(JSON.stringify([row.username, row.band_id]))
       .digest("hex");
     return { page, identity };
   }
-  const headers = { "Cache-Control": "public, max-age=60" };
+  const headers = { "Cache-Control": "no-cache" };
   return {
     /** GET /b/<slug>[/gigs.json|/gigs.ics|/export.zip] */
     async serve(path: string) {

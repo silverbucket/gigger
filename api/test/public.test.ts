@@ -22,6 +22,23 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     port: 0,
     fetch(req) {
       const path = new URL(req.url).pathname;
+      if (path === "/public-gigs")
+        return Response.json({
+          gigs: {
+            future: {
+              date: "2999-06-20",
+              start: "20:00",
+              venue: "Café V lese",
+              city: "Praha",
+              ticketUrl: "https://tickets.example/x",
+              description: "All ages, doors 19:00",
+              ...leaked,
+            },
+            past: { date: "2001-05-03", venue: "Rock Café", ...leaked },
+            bad: { date: "tomorrow", venue: "Nowhere" },
+            evil: { date: "2999-01-01", venue: "X", ticketUrl: "javascript:1" },
+          },
+        });
       if (
         [
           "/storage/storage/sam/public/gigger/the-band/page",
@@ -58,7 +75,12 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
   const request = handler(
     db,
     undefined,
-    publicHandler(db, storage.url.origin, "http://localhost:8080"),
+    publicHandler(
+      db,
+      storage.url.origin,
+      "http://localhost:8080",
+      storage.url.origin,
+    ),
   );
   const claim = (body: unknown, token = bandToken) =>
     request(
