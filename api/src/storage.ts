@@ -47,6 +47,7 @@ export function remoteStore(baseUrl: string, username: string, token: string) {
       for (let attempt = 0; attempt < 5; attempt++) {
         const { value, etag } = await get<T>(path);
         const next = change(value);
+        if (next === value) return next;
         const status = etag
           ? await put(path, next, "application/json", etag)
           : await put(path, next);

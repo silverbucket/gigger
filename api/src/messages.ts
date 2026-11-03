@@ -23,9 +23,11 @@ export function messageHandler(
   appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
 ) {
   const pageToken = db.query<
-    { page_id: string; token: string },
+    { page_id: string; ig_id: string | null; token: string },
     [string, string]
-  >("SELECT page_id, token FROM meta_pages WHERE username = ? AND band_id = ?");
+  >(
+    "SELECT page_id, ig_id, token FROM meta_pages WHERE username = ? AND band_id = ?",
+  );
   const streams = new Map<string, Set<ReadableStreamDefaultController>>();
   function notify(username: string, message: Message) {
     const data = `data: ${JSON.stringify({ conversation: message.conversation, id: message.id })}\n\n`;
@@ -36,16 +38,16 @@ export function messageHandler(
         streams.get(username)?.delete(controller);
       }
   }
-  /** Stores the message once (a repeat delivery is a 412) and folds it into the index. */
+  /** Stores the message once (a repeat delivery is a 412) and folds it into the index; the index step also runs on repeats so an earlier index failure heals. */
   async function save(store: RemoteStore, username: string, message: Message) {
     const status = await store.put(messagePath(message), {
       "@context": context("message"),
       ...message,
     });
-    if (status === 412) return false;
     await store.update<ConversationIndex>(conversationsPath, (index) =>
       withMessage(index ?? {}, message),
     );
+    if (status === 412) return false;
     notify(username, message);
     return true;
   }
@@ -54,7 +56,13 @@ export function messageHandler(
       { error },
       { status, headers: { "Cache-Control": "no-store" } },
     );
-  async function verified(req: Request, username: unknown, bandId: unknown) {
+  /** Checks the token can read the band; with `write`, also that it may write, using an If-Match that can never match so nothing changes. */
+  async function verified(
+    req: Request,
+    username: unknown,
+    bandId: unknown,
+    write = false,
+  ) {
     const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
     if (
       typeof username !== "string" ||
@@ -66,7 +74,18 @@ export function messageHandler(
       return null;
     const store = remoteStore(armadiettoUrl, username, token);
     try {
-      if (!(await store.get(`bands/${bandId}/band`)).value) return null;
+      const band = await store.get(`bands/${bandId}/band`);
+      if (!band.value) return null;
+      if (
+        write &&
+        (await store.put(
+          `bands/${bandId}/band`,
+          band.value,
+          "application/json",
+          '"none"',
+        )) !== 412
+      )
+        return null;
     } catch {
       return null;
     }
@@ -93,7 +112,7 @@ export function messageHandler(
         !text.trim()
       )
         return fail("Invalid request.", 400);
-      const store = await verified(req, username, bandId);
+      const store = await verified(req, username, bandId, true);
       if (!store) return fail("Log in again to send messages.", 401);
       let index: ConversationIndex | undefined;
       try {
@@ -112,13 +131,20 @@ export function messageHandler(
           : pageToken.get(username as string, bandId as string);
       if (thread.channel !== "email" && !page)
         return fail("Connect your Facebook Page before replying.", 409);
+      if (thread.channel === "instagram" && !page?.ig_id)
+        return fail("The connected Page has no Instagram account.", 409);
       const message: Message = {
         id: crypto.randomUUID(),
         channel: thread.channel,
         direction: "out",
         conversation,
         bandId: bandId as string,
-        actor: { id: page?.page_id ?? (username as string) },
+        actor: {
+          id:
+            thread.channel === "instagram"
+              ? (page?.ig_id as string)
+              : (page?.page_id ?? (username as string)),
+        },
         target: thread.peer,
         object: { type: "Note", content: text.trim() },
         published: new Date().toISOString(),

@@ -325,7 +325,10 @@ export function withMessage(
 ): ConversationIndex {
   const previous = index[message.conversation];
   const key = message.direction === "in" ? "lastIn" : "lastOut";
-  if (previous && (previous[key] ?? "") > message.published) return index;
+  if (previous && (previous[key] ?? "") >= message.published) return index;
+  const newest =
+    message.published >= (previous?.lastIn ?? "") &&
+    message.published >= (previous?.lastOut ?? "");
   return {
     ...index,
     [message.conversation]: {
@@ -335,7 +338,9 @@ export function withMessage(
       ...(previous?.lastIn ? { lastIn: previous.lastIn } : {}),
       ...(previous?.lastOut ? { lastOut: previous.lastOut } : {}),
       [key]: message.published,
-      preview: message.object.content.slice(0, 120),
+      preview: newest
+        ? message.object.content.slice(0, 120)
+        : (previous?.preview ?? ""),
     },
   };
 }

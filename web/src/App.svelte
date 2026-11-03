@@ -546,6 +546,7 @@ onMount(() => {
           onchange={() => {
             resetMember();
             openedGig = "";
+            inboxEnquiry = undefined;
           }}
         >
           <option value="">All bands</option>
@@ -790,6 +791,7 @@ onMount(() => {
               onclick={() => {
                 selected = summary.band.id;
                 openedGig = "";
+                inboxEnquiry = undefined;
                 resetMember();
               }}
             >

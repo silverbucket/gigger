@@ -88,10 +88,19 @@ let linkedGig = $derived(
     ?.gigs.find((g) => g.conversationId === opened),
 );
 async function load() {
-  index = await bands.conversations();
-  if (opened) messages = await bands.messages(opened);
+  const requested = opened;
+  const [conversations, thread] = await Promise.all([
+    bands.conversations(),
+    requested ? bands.messages(requested) : [],
+  ]);
+  index = conversations;
+  // A slower read for a thread that was closed or swapped must not land in the new one.
+  if (requested && requested === opened) messages = thread;
   now = Date.now();
 }
+$effect(() => {
+  if (thread && bandId && thread.bandId !== bandId) opened = "";
+});
 async function run(action: () => Promise<void>) {
   busy = true;
   error = "";
@@ -130,13 +139,15 @@ async function send(event: SubmitEvent) {
         text: reply,
       }),
     });
+    const result = await response.json();
+    if (response.ok) reply = "";
+    // A 502 means the message was saved but not delivered; show it with its error.
+    if (response.ok || response.status === 502) {
+      await storage.startSync();
+      await load();
+    }
     if (!response.ok)
-      throw new Error(
-        (await response.json()).error ?? "Could not send. Please retry.",
-      );
-    reply = "";
-    await storage.startSync();
-    await load();
+      throw new Error(result.error ?? "Could not send. Please retry.");
   });
 }
 function createGig() {
@@ -170,28 +181,28 @@ onMount(() => {
   const scope = storage.scope("/gigger/conversations/");
   const changed = () => void load().catch(() => {});
   scope.on("change", changed);
-  const { userAddress, token } = storage.remote;
-  const username = decodeURIComponent(
-    userAddress.slice(0, userAddress.lastIndexOf("@")),
-  );
-  // One stream per band keeps the server check simple; the stream only says "sync now".
-  const streamBand = bandId || summaries[0]?.band.id;
-  const events =
-    streamBand && userAddress.endsWith(`@${location.host}`)
-      ? new EventSource(
-          `/api/messages/events?${new URLSearchParams({ username, bandId: streamBand, token: token || "" })}`,
-        )
-      : undefined;
-  if (events) events.onmessage = () => void storage.startSync();
   const tick = setInterval(() => {
     now = Date.now();
   }, 60000);
   return () => {
     scope.removeEventListener("change", changed);
-    events?.close();
     clearInterval(tick);
     for (const url of Object.values(files)) URL.revokeObjectURL(url);
   };
+});
+// One stream per account; it only says "sync now". Reopened whenever the band it is checked against changes.
+$effect(() => {
+  const streamBand = bandId || summaries[0]?.band.id;
+  const { userAddress, token } = storage.remote;
+  if (!streamBand || !userAddress.endsWith(`@${location.host}`)) return;
+  const username = decodeURIComponent(
+    userAddress.slice(0, userAddress.lastIndexOf("@")),
+  );
+  const events = new EventSource(
+    `/api/messages/events?${new URLSearchParams({ username, bandId: streamBand, token: token || "" })}`,
+  );
+  events.onmessage = () => void storage.startSync();
+  return () => events.close();
 });
 </script>
 

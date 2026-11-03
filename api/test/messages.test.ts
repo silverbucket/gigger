@@ -34,10 +34,20 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
       }
       if (path === "/logout") return Response.json({ ok: true });
       const auth = req.headers.get("authorization");
-      if (!["Bearer user-token", "Bearer server-token"].includes(auth ?? ""))
+      if (
+        ![
+          "Bearer user-token",
+          "Bearer server-token",
+          "Bearer read-only",
+        ].includes(auth ?? "")
+      )
         return new Response("", { status: 401 });
       if (path.endsWith("/gigger/bands/band1/band"))
-        return Response.json({ id: "band1", name: "The Band" });
+        return req.method === "GET"
+          ? Response.json({ id: "band1", name: "The Band" })
+          : new Response("", {
+              status: auth === "Bearer read-only" ? 403 : 412,
+            });
       const doc = docs.get(path);
       if (req.method === "GET")
         return doc
@@ -67,7 +77,14 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
     const doc = docs.get(`/storage/storage/sam/gigger/${path}`);
     return doc ? JSON.parse(new TextDecoder().decode(doc.body)) : undefined;
   };
-  return { server, docs, json, minted, stop: () => server.stop(true) };
+  return {
+    server,
+    docs,
+    json,
+    minted,
+    stop: () => server.stop(true),
+    stopStorage: () => server.stop(true),
+  };
 }
 function stubSenders() {
   const sent: { message: Message; credentials?: Record<string, unknown> }[] =
@@ -461,6 +478,37 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     ).toBe(401);
     expect(
       (
+        await reply(
+          { username: "sam", bandId: "band1", conversation, text: "x" },
+          "read-only",
+        )
+      ).status,
+    ).toBe(401);
+    const ig = conversationId("instagram", "fan-9");
+    const withIg = t.json("conversations/index");
+    withIg[ig] = {
+      bandId: "band1",
+      channel: "instagram",
+      peer: { id: "fan-9" },
+      lastIn: recent,
+      preview: "",
+    };
+    t.docs.set(indexPath, {
+      body: new TextEncoder().encode(JSON.stringify(withIg)),
+      type: "application/json",
+      etag: '"ig"',
+    });
+    const igReply = await reply({
+      username: "sam",
+      bandId: "band1",
+      conversation: ig,
+      text: "hello from ig",
+    });
+    expect(igReply.status).toBe(200);
+    expect((await igReply.json()).actor).toEqual({ id: "ig-1" });
+    expect(t.sent).toHaveLength(2);
+    expect(
+      (
         await reply({
           username: "sam",
           bandId: "band1",
@@ -504,7 +552,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     });
     expect(blocked.status).toBe(403);
     expect((await blocked.json()).error).toMatch(/24 hours/);
-    expect(t.sent).toHaveLength(1);
+    expect(t.sent).toHaveLength(2);
   } finally {
     t.stop();
   }
@@ -571,6 +619,15 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
           "/meta/connect",
           { username: "sam", bandId: "band1", accessToken: "short" },
           "bad",
+        )
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await post(
+          "/meta/connect",
+          { username: "sam", bandId: "band1", accessToken: "short" },
+          "read-only",
         )
       ).status,
     ).toBe(401);

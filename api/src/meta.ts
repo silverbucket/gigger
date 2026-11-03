@@ -36,6 +36,7 @@ interface Event {
     mid: string;
     text?: string;
     is_echo?: boolean;
+    app_id?: number | string;
     attachments?: { type: string; payload?: { url?: string } }[];
   };
 }
@@ -44,9 +45,13 @@ export function fromWebhook(
   channel: Channel,
   bandId: string,
   event: Event,
+  ownAppId?: string,
 ): Message | null {
   if (!event.message?.mid) return null;
   const out = event.message.is_echo === true;
+  // Echoes of replies this app sent are already stored by the reply endpoint.
+  if (out && ownAppId && String(event.message.app_id ?? "") === ownAppId)
+    return null;
   const peer = out ? event.recipient : event.sender;
   return {
     id: event.message.mid.replace(/[^A-Za-z0-9_-]/g, "_"),
@@ -186,21 +191,31 @@ export function metaHandler(
             ? "instagram"
             : null;
       if (!channel) return new Response("EVENT_RECEIVED");
+      let failed = false;
       for (const entry of body.entry ?? []) {
         const row =
           channel === "messenger" ? byPage.get(entry.id) : byIg.get(entry.id);
         if (!row) continue;
         for (const event of entry.messaging ?? []) {
-          const message = fromWebhook(channel, row.band_id, event);
+          const message = fromWebhook(
+            channel,
+            row.band_id,
+            event,
+            env.META_APP_ID,
+          );
           if (message)
             try {
               await store(row, message);
             } catch (error) {
+              failed = true;
               console.error("Could not store message", message.id, error);
             }
         }
       }
-      return new Response("EVENT_RECEIVED");
+      // A 500 makes Meta redeliver; stored events are then skipped by their 412.
+      return failed
+        ? new Response("Storage unavailable", { status: 500 })
+        : new Response("EVENT_RECEIVED");
     },
     /** GET /meta/config: what the browser needs to start Facebook Login for Business. */
     config() {
@@ -233,7 +248,7 @@ export function metaHandler(
       const { username, bandId, accessToken, pageId } = input ?? {};
       if (typeof accessToken !== "string" || !accessToken)
         return fail("Invalid request.", 400);
-      if (!(await messages.verified(req, username, bandId)))
+      if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again to connect a page.", 401);
       if (!env.META_APP_ID || !env.META_APP_SECRET)
         return fail("Facebook is not configured on this server.", 503);
@@ -309,7 +324,7 @@ export function metaHandler(
         return fail("Invalid request.", 400);
       }
       const { username, bandId } = input ?? {};
-      if (!(await messages.verified(req, username, bandId)))
+      if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again.", 401);
       const row = byBand.get(username as string, bandId as string);
       if (row) {
@@ -317,9 +332,13 @@ export function metaHandler(
           `/${row.page_id}/subscribed_apps?access_token=${encodeURIComponent(row.token)}`,
           { method: "DELETE" },
         ).catch(() => {});
-        await hook("logout", { username, token: row.storage_token }).catch(
-          () => {},
-        );
+        // Keep the row until Armadietto confirms revocation, so a retry can still revoke the token.
+        const revoked = await hook("logout", {
+          username,
+          token: row.storage_token,
+        }).catch(() => null);
+        if (!revoked?.ok)
+          return fail("Could not disconnect. Please retry.", 503);
         db.query("DELETE FROM meta_pages WHERE page_id = ?").run(row.page_id);
       }
       return Response.json({ ok: true }, { headers: noStore });
