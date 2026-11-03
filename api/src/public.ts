@@ -181,13 +181,13 @@ export function renderJson(page: PublicPage) {
 
 const icsText = (text: string) =>
   text.replace(/\\/g, "\\\\").replace(/[,;]/g, "\\$&").replace(/\r?\n/g, "\\n");
-export function renderIcs(page: PublicPage, slug: string) {
+export function renderIcs(page: PublicPage, identity: string) {
   const stamp = `${new Date().toISOString().replace(/[-:]|\.\d{3}/g, "")}`;
   const events = Object.entries(page.gigs).map(([id, gig]) => {
     const date = gig.date.replace(/-/g, "");
     return [
       "BEGIN:VEVENT",
-      `UID:${id}@${slug}`,
+      `UID:${id}@${identity}`,
       `DTSTAMP:${stamp}`,
       // Floating local time: the gig happens at the venue's wall-clock time.
       gig.start
@@ -216,9 +216,6 @@ export function publicHandler(
   armadiettoUrl = process.env.ARMADIETTO_URL ?? "http://armadietto:8000",
   appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
 ) {
-  const find = db.query<{ username: string }, [string]>(
-    "SELECT username FROM public_pages WHERE slug = ?",
-  );
   const owner = db.query<{ username: string; band_id: string }, [string]>(
     "SELECT username, band_id FROM public_pages WHERE slug = ?",
   );
@@ -237,13 +234,18 @@ export function publicHandler(
   const storageUrl = (username: string, path: string) =>
     `${armadiettoUrl}/storage/storage/${encodeURIComponent(username)}/${path}`;
   async function loadPage(slug: string) {
-    const row = find.get(slug);
+    const row = owner.get(slug);
     if (!row) return null;
     const response = await fetch(
       storageUrl(row.username, `public/gigger/${slug}/page`),
       { signal: AbortSignal.timeout(10000) },
     );
-    return response.ok ? cleanPage(await response.json()) : null;
+    const page = response.ok ? cleanPage(await response.json()) : null;
+    if (!page) return null;
+    const identity = new Bun.CryptoHasher("sha256")
+      .update(JSON.stringify([row.username, row.band_id]))
+      .digest("hex");
+    return { page, identity };
   }
   const headers = { "Cache-Control": "public, max-age=60" };
   return {
@@ -255,16 +257,17 @@ export function publicHandler(
         );
       if (!match) return new Response("Not found", { status: 404 });
       const [, slug, file] = match;
-      const page = slugRe.test(slug) ? await loadPage(slug) : null;
-      if (!page)
+      const result = slugRe.test(slug) ? await loadPage(slug) : null;
+      if (!result)
         return new Response("This band has no public page.", { status: 404 });
+      const { page, identity } = result;
       const today = new Date().toISOString().slice(0, 10);
       if (file === "gigs.json")
         return new Response(renderJson(page), {
           headers: { ...headers, "Content-Type": "application/json" },
         });
       if (file === "gigs.ics")
-        return new Response(renderIcs(page, slug), {
+        return new Response(renderIcs(page, identity), {
           headers: {
             ...headers,
             "Content-Type": "text/calendar; charset=utf-8",
@@ -275,7 +278,7 @@ export function publicHandler(
           zip({
             "index.html": renderPage(page, "", today),
             "gigs.json": renderJson(page),
-            "gigs.ics": renderIcs(page, slug),
+            "gigs.ics": renderIcs(page, identity),
           }),
           {
             headers: {

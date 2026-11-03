@@ -22,7 +22,12 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     port: 0,
     fetch(req) {
       const path = new URL(req.url).pathname;
-      if (path === "/storage/storage/sam/public/gigger/the-band/page")
+      if (
+        [
+          "/storage/storage/sam/public/gigger/the-band/page",
+          "/storage/storage/sam/public/gigger/renamed/page",
+        ].includes(path)
+      )
         return Response.json({
           name: "The Band <script>",
           locale: "cs-CZ",
@@ -126,7 +131,9 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     expect(ics).toContain("DTSTART;VALUE=DATE:20010503\r\n");
     expect(ics).toContain("LOCATION:Café V lese\\, Praha");
     expect(ics).toContain("DESCRIPTION:All ages\\, doors 19:00");
-    expect(ics).toContain("UID:future@the-band");
+    const uid = ics.match(/UID:future@[^\r]+/)?.[0];
+    if (!uid) throw new Error("Missing event UID");
+
     expect(ics).not.toMatch(privateText);
 
     const zipped = await get("/b/the-band/export.zip");
@@ -137,6 +144,14 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     for (const name of ["index.html", "gigs.json", "gigs.ics"])
       expect(text).toContain(name);
     expect(text).toContain('href="gigs.ics"');
+    expect(text).toContain(uid);
+    db.query(
+      "UPDATE public_pages SET slug = 'renamed' WHERE slug = 'the-band'",
+    ).run();
+    expect(await (await get("/b/renamed/gigs.ics")).text()).toContain(uid);
+    db.query(
+      "UPDATE public_pages SET slug = 'the-band' WHERE slug = 'renamed'",
+    ).run();
     expect(text).not.toMatch(privateText);
 
     expect((await get("/b/the-band/other.txt")).status).toBe(404);

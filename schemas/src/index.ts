@@ -621,6 +621,10 @@ export function createGigger(client: Client, publicClient?: Client) {
     ) {
       const path = recordPath("gig", bandId, gigId);
       const current = read("gig", await client.getObject(path));
+      if (current.status === "played") {
+        await publish(bandId, current);
+        return current;
+      }
       if (current.status !== "confirmed")
         throw new Error("Reload this gig before marking it played.");
       const venueId = current.venueId ?? `gig-${current.id}`;
@@ -678,6 +682,10 @@ export function createGigger(client: Client, publicClient?: Client) {
     async moveGigStatus(bandId: string, gigId: string, status: GigStatus) {
       const path = recordPath("gig", bandId, gigId);
       const current = read("gig", await client.getObject(path));
+      if (current.status === status) {
+        await publish(bandId, current);
+        return current;
+      }
       if (!canMoveStatus(current.status, status))
         throw new Error(
           "This gig changed somewhere else, reload to see the latest",

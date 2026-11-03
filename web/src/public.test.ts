@@ -147,3 +147,46 @@ test("public copy omits unset fields and slugs are URL safe", () => {
   expect(slugify("---")).toBe("");
   expect(slugify(`${"a".repeat(59)} b`)).toBe("a".repeat(59));
 });
+
+test("status publication can be retried after a public write fails", async () => {
+  const storage = new RemoteStorage();
+  storage.access.claim("gigger", "rw");
+  storage.caching.enable("/gigger/");
+  storage.caching.enable("/public/gigger/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/gigger/");
+  const publicClient = storage.scope("/public/gigger/");
+  const { createGigger } = await import("@gigger/schemas");
+  const store = createGigger(privateClient, publicClient);
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "band" });
+    await store.save("gig", "a", {
+      id: "g",
+      title: "Gig",
+      venue: "Club",
+      address: "Street",
+      contacts: [],
+      date: "2030-01-01",
+      status: "confirmed",
+    });
+    const remove = publicClient.remove.bind(publicClient);
+    let fail = true;
+    publicClient.remove = async (path) => {
+      if (fail && path === "band/gigs/g") {
+        fail = false;
+        throw new Error("Public write failed");
+      }
+      return remove(path);
+    };
+    await expect(store.moveGigStatus("a", "g", "cancelled")).rejects.toThrow(
+      "Public write failed",
+    );
+    await store.moveGigStatus("a", "g", "cancelled");
+    expect(await publicClient.getObject("band/gigs/g")).toBeFalsy();
+    expect(
+      ((await publicClient.getObject("band/page")) as { gigs: object }).gigs,
+    ).toEqual({});
+  } finally {
+    storage.stopSync();
+  }
+});
