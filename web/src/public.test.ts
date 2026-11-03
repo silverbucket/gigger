@@ -145,4 +145,5 @@ test("public copy omits unset fields and slugs are URL safe", () => {
   ).toEqual({ date: "2030-01-01", venue: "Legacy Hall" });
   expect(slugify("  Čeští Kluci & The Band! ")).toBe("cesti-kluci-the-band");
   expect(slugify("---")).toBe("");
+  expect(slugify(`${"a".repeat(59)} b`)).toBe("a".repeat(59));
 });

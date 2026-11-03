@@ -25,6 +25,12 @@ export function cleanPage(input: unknown): PublicPage | null {
       continue;
     const gig = value as Record<string, unknown>;
     if (typeof gig.date !== "string" || !dateRe.test(gig.date)) continue;
+    const parsedDate = new Date(`${gig.date}T00:00:00Z`);
+    if (
+      Number.isNaN(parsedDate.valueOf()) ||
+      parsedDate.toISOString().slice(0, 10) !== gig.date
+    )
+      continue;
     clean.gigs[id] = {
       date: gig.date,
       venue: typeof gig.venue === "string" ? gig.venue : "",
@@ -33,7 +39,7 @@ export function cleanPage(input: unknown): PublicPage | null {
         : {}),
       ...(typeof gig.city === "string" && gig.city ? { city: gig.city } : {}),
       ...(typeof gig.ticketUrl === "string" &&
-      /^https?:\/\//.test(gig.ticketUrl)
+      /^https?:\/\/[^\s/]+[^\s]*$/.test(gig.ticketUrl)
         ? { ticketUrl: gig.ticketUrl }
         : {}),
       ...(typeof gig.description === "string" && gig.description

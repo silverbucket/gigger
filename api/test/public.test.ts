@@ -153,6 +153,18 @@ test("cleanPage drops anything that is not an allowed public field", () => {
   ).toEqual({ name: "B", gigs: { g: { date: "2030-01-01", venue: "" } } });
   expect(cleanPage({ gigs: {} })).toBeNull();
   expect(
+    cleanPage({
+      name: "B",
+      gigs: {
+        invalid: { date: "2030-02-31" },
+        valid: {
+          date: "2032-02-29",
+          ticketUrl: "https://example.com/\r\nBEGIN:VALARM",
+        },
+      },
+    })?.gigs,
+  ).toEqual({ valid: { date: "2032-02-29", venue: "" } });
+  expect(
     cleanPage({ name: "B", locale: "nope_nope", gigs: {} })?.locale,
   ).toBeUndefined();
   expect(renderIcs({ name: "A;B", gigs: {} }, "s")).toContain(

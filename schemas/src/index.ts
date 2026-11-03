@@ -90,7 +90,8 @@ export function slugify(name: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
+    .slice(0, 60)
+    .replace(/-+$/, "");
 }
 export const capacities = [
   "under 50",
@@ -487,7 +488,7 @@ export function createGigger(client: Client, publicClient?: Client) {
     if (!publicClient) return;
     const path = `${slug}/gigs/${safeId(gig.id)}`;
     if (!publicStatuses.includes(gig.status)) {
-      if (await publicClient.getObject(path)) await publicClient.remove(path);
+      await publicClient.remove(path);
       return;
     }
     const venue = gig.venueId
@@ -517,11 +518,24 @@ export function createGigger(client: Client, publicClient?: Client) {
       gigs,
     });
   }
+  const publications = new Map<string, Promise<void>>();
+  async function queuePublication(bandId: string, work: () => Promise<void>) {
+    const previous = publications.get(bandId) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(work);
+    publications.set(bandId, next);
+    try {
+      await next;
+    } finally {
+      if (publications.get(bandId) === next) publications.delete(bandId);
+    }
+  }
   async function publish(bandId: string, gig: Gig) {
-    const current = await publicBand(bandId);
-    if (!current?.slug) return;
-    await publishGig(current.slug, bandId, gig);
-    await publishPage(current);
+    await queuePublication(bandId, async () => {
+      const current = await publicBand(bandId);
+      if (!current?.slug) return;
+      await publishGig(current.slug, bandId, gig);
+      await publishPage(current);
+    });
   }
   async function removePublic(slug: string) {
     if (!publicClient) return;
@@ -549,13 +563,15 @@ export function createGigger(client: Client, publicClient?: Client) {
   return {
     /** Rewrites every public copy for the band; call after changing its slug. */
     async publishBand(bandId: string, previousSlug?: string) {
-      const current = await publicBand(bandId);
-      if (!current?.slug) return;
-      if (previousSlug && previousSlug !== current.slug)
-        await removePublic(previousSlug);
-      for (const gig of await list("gig", bandId))
-        await publishGig(current.slug, bandId, gig);
-      await publishPage(current);
+      await queuePublication(bandId, async () => {
+        const current = await publicBand(bandId);
+        if (!current?.slug) return;
+        if (previousSlug && previousSlug !== current.slug)
+          await removePublic(previousSlug);
+        for (const gig of await list("gig", bandId))
+          await publishGig(current.slug, bandId, gig);
+        await publishPage(current);
+      });
     },
     async save<K extends Kind>(kind: K, bandId: string, value: Records[K]) {
       if (kind === "band" && value.id !== bandId)
