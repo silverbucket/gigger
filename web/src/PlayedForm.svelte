@@ -81,6 +81,7 @@ function changeCurrency(event: Event & { currentTarget: HTMLInputElement }) {
   if (!feeMatchesCurrency() && totalOverride === fee?.amount)
     totalOverride = undefined;
 }
+const keepFocus = (event: PointerEvent) => event.preventDefault();
 async function submit(event: SubmitEvent) {
   event.preventDefault();
   if (!rating || !capacity || !setting || !pa || !playAgain) return;
@@ -193,7 +194,6 @@ async function submit(event: SubmitEvent) {
         min="0"
         step="0.01"
         bind:value={totalOverride}
-        placeholder={summed.toFixed(2)}
       ></label
     >
     <label for="split">Split with other bands</label>
@@ -232,7 +232,6 @@ async function submit(event: SubmitEvent) {
         min="0"
         step="0.01"
         bind:value={takeHomeOverride}
-        placeholder={calculated.toFixed(2)}
       ></label
     >
     <label
@@ -245,10 +244,19 @@ async function submit(event: SubmitEvent) {
       ></label
     >
   </fieldset>
-  <button type="submit" disabled={busy}>
+  <!-- Pressing a button must not blur the focused field: closing a phone
+       keyboard reflows the page mid-tap and swallows the first click. -->
+  <button type="submit" disabled={busy} onpointerdown={keepFocus}>
     {busy ? "Saving…" : "Save and mark played"}
   </button>
-  <button type="button" disabled={busy} onclick={oncancel}>Cancel</button>
+  <button
+    type="button"
+    disabled={busy}
+    onpointerdown={keepFocus}
+    onclick={oncancel}
+  >
+    Cancel
+  </button>
 </form>
 <style>
 form {

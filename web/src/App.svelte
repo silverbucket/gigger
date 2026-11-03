@@ -148,7 +148,9 @@ async function authenticate(event: SubmitEvent) {
         username,
         email,
         password,
-        ...(mode === "signup" ? { bandName } : {}),
+        ...(mode === "signup"
+          ? { bandName, currency: bandCurrency.toUpperCase() }
+          : {}),
       }),
     });
     const session = await response.json();
