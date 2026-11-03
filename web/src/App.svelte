@@ -96,6 +96,8 @@ async function publishPage(event: SubmitEvent) {
         (await response.json()).error ??
           "Could not publish the page. Please retry.",
       );
+    if (band.slug && band.slug !== slug)
+      await bands.queueOldSlugCleanup(band.id, band.slug);
     await bands.save("band", band.id, {
       ...band,
       slug,

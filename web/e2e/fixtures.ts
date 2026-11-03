@@ -67,13 +67,18 @@ export const test = base.extend<{
       async read(location) {
         // Writes from the browser land asynchronously; retry briefly instead
         // of failing on a transient 404 or 5xx.
-        let result = await request.get(`${path}${location}`, { headers });
-        for (let attempt = 0; !result.ok() && attempt < 10; attempt++) {
+        for (let attempt = 0; attempt < 11; attempt++) {
+          const result = await request.get(`${path}${location}`, { headers });
+          if (result.ok()) {
+            try {
+              return await result.json();
+            } catch {
+              // A storage write can be in progress while the file is read.
+            }
+          }
           await new Promise((resolve) => setTimeout(resolve, 200));
-          result = await request.get(`${path}${location}`, { headers });
         }
-        expect(result.ok()).toBe(true);
-        return result.json();
+        throw new Error(`Could not read ${location} from storage`);
       },
       async exists(location) {
         const result = await request.get(`${path}${location}`, { headers });

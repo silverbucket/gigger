@@ -83,8 +83,13 @@ http
         for (const id of Object.keys(listing.item?.items ?? {})) {
           if (!/^[A-Za-z0-9_-]+$/.test(id)) continue;
           const result = await store.get(username, base + id);
-          if (result.item?.value)
-            gigs[id] = JSON.parse(result.item.value.toString());
+          if (result.item?.value) {
+            try {
+              gigs[id] = JSON.parse(result.item.value.toString());
+            } catch {
+              // A malformed public record must not hide other gigs.
+            }
+          }
         }
         res.writeHead(200).end(JSON.stringify({ gigs }));
         return;

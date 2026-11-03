@@ -116,6 +116,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
 
     const html = await (await get("/b/the-band")).text();
     expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain('<html lang="cs">');
     expect(html).toContain('lang="cs-CZ"');
     expect(html).toContain("Café V lese, Praha");
     expect(html).toMatch(
@@ -239,7 +240,15 @@ test("public page translates labels and shows years on upcoming cards when neede
     "",
     "2030-01-01",
   );
+  expect(english).toContain('<html lang="en">');
   expect(english).toContain("Upcoming gigs");
+  const germanDates = renderPage(
+    { name: "Band", locale: "de-DE", gigs },
+    "",
+    "2030-01-01",
+  );
+  expect(germanDates).toContain('<html lang="en">');
+  expect(germanDates).toContain('lang="de-DE"');
   expect(english).toContain("No gigs announced yet.");
 });
 

@@ -49,6 +49,15 @@ test("publishing a page copies only public gig fields and the page serves them",
   await expect
     .poll(async () => (await request.get(`/b/${slug}`)).status())
     .toBe(200);
+  const loginResponse = await request.post("/api/auth/login", {
+    data: { username: account.username, password: account.password },
+  });
+  const { token } = await loginResponse.json();
+  const malformed = await request.put(`${publicPath}gigs/broken`, {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/plain" },
+    data: "not json",
+  });
+  expect(malformed.ok()).toBe(true);
   const html = await (await request.get(`/b/${slug}`)).text();
   expect(html).toContain("Touring Band");
   expect(html).toContain("All ages");

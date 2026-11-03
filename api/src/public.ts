@@ -149,10 +149,10 @@ export function renderPage(page: PublicPage, base: string, today: string) {
   const upcomingItems = upcoming
     .map(
       (gig) => `<li>
-<time datetime="${gig.date}${gig.start ? `T${gig.start}` : ""}"><span class="day">${esc(fmt(gig, { day: "numeric" }))}</span><span class="month">${esc(fmt(gig, { month: "short" }))}</span>${gig.date.slice(0, 4) !== today.slice(0, 4) ? `<span class="year">${gig.date.slice(0, 4)}</span>` : ""}</time>
+<time lang="${esc(lang)}" datetime="${gig.date}${gig.start ? `T${gig.start}` : ""}"><span class="day">${esc(fmt(gig, { day: "numeric" }))}</span><span class="month">${esc(fmt(gig, { month: "short" }))}</span>${gig.date.slice(0, 4) !== today.slice(0, 4) ? `<span class="year">${gig.date.slice(0, 4)}</span>` : ""}</time>
 <div>
 <p class="where">${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</p>
-<p class="when">${esc(fmt(gig, { weekday: "long" }))}${gig.start ? `, ${esc(fmt(gig, { hour: "numeric", minute: "2-digit" }))}` : ""}</p>
+<p class="when" lang="${esc(lang)}">${esc(fmt(gig, { weekday: "long" }))}${gig.start ? `, ${esc(fmt(gig, { hour: "numeric", minute: "2-digit" }))}` : ""}</p>
 ${gig.description ? `<p class="desc">${esc(gig.description)}</p>` : ""}
 ${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">${labels.tickets}</a>` : ""}
 </div>
@@ -162,11 +162,11 @@ ${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">${labels.tick
   const pastItems = past
     .map(
       (gig) =>
-        `<li><time datetime="${gig.date}">${esc(fmt(gig, { dateStyle: "medium" }))}</time><span>${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</span></li>`,
+        `<li><time lang="${esc(lang)}" datetime="${gig.date}">${esc(fmt(gig, { dateStyle: "medium" }))}</time><span>${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</span></li>`,
     )
     .join("\n");
   return `<!doctype html>
-<html lang="${esc(lang)}">
+<html lang="${cs ? "cs" : "en"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

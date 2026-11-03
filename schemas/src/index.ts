@@ -445,7 +445,7 @@ export interface Client {
   storeObject(name: string, path: string, value: object): Promise<unknown>;
   getObject(path: string, maxAge?: false | number): Promise<unknown>;
   getAll(path: string): Promise<unknown>;
-  getListing(path: string): Promise<unknown>;
+  getListing(path: string, maxAge?: false | number): Promise<unknown>;
   validate(value: object): { valid?: boolean };
   remove(path: string): Promise<unknown>;
 }
@@ -471,6 +471,16 @@ export function createGigger(client: Client, publicClient?: Client) {
       gigId: id,
     },
     required: ["slug", "bandId", "gigId"],
+    additionalProperties: false,
+  });
+  client.declareType("pendingPublicSlug", {
+    type: "object",
+    properties: {
+      "@context": { type: "string" },
+      slug: { type: "string", pattern: slugPattern },
+      bandId: id,
+    },
+    required: ["slug", "bandId"],
     additionalProperties: false,
   });
   for (const [kind, schema] of Object.entries(publicSchemas))
@@ -562,11 +572,31 @@ export function createGigger(client: Client, publicClient?: Client) {
     });
   }
   async function removePublic(slug: string) {
-    if (!publicClient) return;
-    const listing = (await publicClient.getListing(`${slug}/gigs/`)) ?? {};
-    for (const id of Object.keys(listing))
-      await publicClient.remove(`${slug}/gigs/${id}`);
-    await publicClient.remove(`${slug}/page`);
+    if (!publicClient) return false;
+    let fresh = true;
+    let listing: unknown;
+    try {
+      listing = await publicClient.getListing(`${slug}/gigs/`, 0);
+    } catch {
+      fresh = false;
+      listing = await publicClient.getListing(`${slug}/gigs/`);
+    }
+    const ids = Object.keys(listing ?? {}).filter((id) =>
+      /^[A-Za-z0-9_-]+$/.test(id),
+    );
+    for (const id of ids) {
+      const path = `${slug}/gigs/${id}`;
+      const copy =
+        (await publicClient.getObject(path)) ??
+        (fresh ? await publicClient.getObject(path, 0) : undefined);
+      if (copy) await publicClient.remove(path);
+    }
+    const pagePath = `${slug}/page`;
+    const page =
+      (await publicClient.getObject(pagePath)) ??
+      (fresh ? await publicClient.getObject(pagePath, 0) : undefined);
+    if (page) await publicClient.remove(pagePath);
+    return fresh && ids.length === 0 && !page;
   }
   async function list<K extends Exclude<Kind, "band">>(
     kind: K,
@@ -584,24 +614,48 @@ export function createGigger(client: Client, publicClient?: Client) {
       }),
     );
   }
-  async function pendingDeletes() {
-    const folders = (await client.getListing("pending-public-deletes/")) ?? {};
+  async function pendingPaths(root: string) {
+    const folders = (await client.getListing(`${root}/`)) ?? {};
     const paths: string[] = [];
     for (const folder of Object.keys(folders)) {
       if (!/^[A-Za-z0-9_-]+\/$/.test(folder)) continue;
-      const items =
-        (await client.getListing(`pending-public-deletes/${folder}`)) ?? {};
+      const items = (await client.getListing(`${root}/${folder}`)) ?? {};
       for (const gigId of Object.keys(items))
         if (/^[A-Za-z0-9_-]+$/.test(gigId))
-          paths.push(`pending-public-deletes/${folder}${gigId}`);
+          paths.push(`${root}/${folder}${gigId}`);
     }
     return paths;
   }
   return {
-    pendingDeletes,
+    async pendingDeletes() {
+      return [
+        ...(await pendingPaths("pending-public-deletes")),
+        ...(await pendingPaths("pending-public-slugs")),
+      ];
+    },
+    async queueOldSlugCleanup(bandId: string, slug: string) {
+      if (!new RegExp(slugPattern).test(slug)) throw new Error("Invalid slug");
+      await client.storeObject(
+        "pendingPublicSlug",
+        `pending-public-slugs/${safeId(bandId)}/${slug}`,
+        { bandId, slug },
+      );
+    },
     async retryPublicDeletes() {
       if (!publicClient) return;
-      for (const path of await pendingDeletes()) {
+      for (const path of await pendingPaths("pending-public-slugs")) {
+        const pending = (await client.getObject(path)) as
+          | { bandId: string; slug: string }
+          | undefined;
+        if (!pending || !new RegExp(slugPattern).test(pending.slug)) continue;
+        const band = await client.getObject(
+          recordPath("band", pending.bandId),
+          0,
+        );
+        if (!band || read("band", band).slug === pending.slug) continue;
+        if (await removePublic(pending.slug)) await client.remove(path);
+      }
+      for (const path of await pendingPaths("pending-public-deletes")) {
         const pending = (await client.getObject(path)) as
           | { slug: string; bandId: string; gigId: string }
           | undefined;

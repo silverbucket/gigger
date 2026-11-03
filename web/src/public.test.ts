@@ -261,3 +261,56 @@ test("uncached offline removals are queued and retried without deleting a reconf
     storage.stopSync();
   }
 });
+
+test("old address cleanup survives interruption and finds uncached public records", async () => {
+  const storage = new RemoteStorage();
+  storage.access.claim("gigger", "rw");
+  storage.caching.enable("/gigger/");
+  storage.caching.enable("/public/gigger/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/gigger/");
+  const publicClient = storage.scope("/public/gigger/");
+  const { createGigger } = await import("@gigger/schemas");
+  const store = createGigger(privateClient, publicClient);
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "old" });
+    await store.save("gig", "a", {
+      id: "g",
+      title: "Gig",
+      venue: "Club",
+      address: "Street",
+      contacts: [],
+      date: "2030-01-01",
+      status: "confirmed",
+    });
+    await store.queueOldSlugCleanup("a", "old");
+    await store.save("band", "a", { id: "a", name: "Band", slug: "new" });
+    const getPrivate = privateClient.getObject.bind(privateClient);
+    privateClient.getObject = (path, _maxAge) => getPrivate(path);
+    const getPublic = publicClient.getObject.bind(publicClient);
+    const getListing = publicClient.getListing.bind(publicClient);
+    publicClient.getListing = async (path, maxAge) =>
+      path === "old/gigs/" && maxAge === undefined ? {} : getListing(path);
+    publicClient.getObject = async (path, maxAge) =>
+      path === "old/gigs/g" && maxAge === undefined
+        ? undefined
+        : getPublic(path);
+    const remove = publicClient.remove.bind(publicClient);
+    let fail = true;
+    publicClient.remove = async (path) => {
+      if (path === "old/gigs/g" && fail) {
+        fail = false;
+        throw new Error("interrupted");
+      }
+      return remove(path);
+    };
+    await expect(store.retryPublicDeletes()).rejects.toThrow("interrupted");
+    expect(await store.pendingDeletes()).toHaveLength(1);
+    await store.retryPublicDeletes();
+    expect(await getPublic("old/gigs/g")).toBeFalsy();
+    await store.retryPublicDeletes();
+    expect(await store.pendingDeletes()).toHaveLength(0);
+  } finally {
+    storage.stopSync();
+  }
+});

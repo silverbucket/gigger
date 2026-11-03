@@ -57,14 +57,14 @@ test("band currency inputs accept real codes and reject malformed ones", async (
     .getByRole("button", { name: "Save currency", exact: true })
     .click();
   await expect
-    .poll(async () => (await account.read("band")).currency)
+    .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
     .toBe("EUR");
   await currency.fill("czk");
   await page
     .getByRole("button", { name: "Save currency", exact: true })
     .click();
   await expect
-    .poll(async () => (await account.read("band")).currency)
+    .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
     .toBe("CZK");
   await page.getByRole("button", { name: "+ New band", exact: true }).click();
   const create = page.locator("#new-band");
