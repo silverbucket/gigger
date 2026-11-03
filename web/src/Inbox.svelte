@@ -68,7 +68,8 @@ let groups = $derived.by(() => {
     group.rows.push({ id, conversation });
     byKey.set(key, group);
   }
-  const latest = (c: Conversation) => [c.lastIn, c.lastOut].sort().at(-1) ?? "";
+  const latest = (c: Conversation) =>
+    [c.lastIn ?? "", c.lastOut ?? ""].sort().at(-1) ?? "";
   return [...byKey.values()]
     .map((group) => ({
       ...group,
@@ -121,6 +122,8 @@ function open(id: string) {
 async function send(event: SubmitEvent) {
   event.preventDefault();
   if (!thread || !reply.trim()) return;
+  const target = opened;
+  const text = reply;
   await run(async () => {
     const { userAddress, token } = storage.remote;
     const username = decodeURIComponent(
@@ -135,12 +138,13 @@ async function send(event: SubmitEvent) {
       body: JSON.stringify({
         username,
         bandId: thread.bandId,
-        conversation: opened,
-        text: reply,
+        conversation: target,
+        text,
       }),
     });
     const result = await response.json();
-    if (response.ok) reply = "";
+    // Another thread may have been opened meanwhile; only clear the draft we sent.
+    if (response.ok && opened === target && reply === text) reply = "";
     // A 502 means the message was saved but not delivered; show it with its error.
     if (response.ok || response.status === 502) {
       await storage.startSync();

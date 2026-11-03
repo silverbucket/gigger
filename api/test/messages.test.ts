@@ -23,6 +23,7 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
     { body: Uint8Array; type: string; etag: string }
   >();
   let conflict = options.conflictOnce ?? false;
+  const flags = { failFiles: false };
   const minted: string[] = [];
   const server = Bun.serve({
     port: 0,
@@ -42,7 +43,7 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
         ].includes(auth ?? "")
       )
         return new Response("", { status: 401 });
-      if (path.endsWith("/gigger/bands/band1/band"))
+      if (/\/gigger\/bands\/band[12]\/band$/.test(path))
         return req.method === "GET"
           ? Response.json({ id: "band1", name: "The Band" })
           : new Response("", {
@@ -56,6 +57,8 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
             })
           : new Response("", { status: 404 });
       if (req.method === "PUT") {
+        if (flags.failFiles && path.includes("/files/"))
+          return new Response("", { status: 500 });
         const ifMatch = req.headers.get("if-match");
         if (req.headers.get("if-none-match") === "*" && doc)
           return new Response("", { status: 412 });
@@ -82,6 +85,7 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
     docs,
     json,
     minted,
+    flags,
     stop: () => server.stop(true),
     stopStorage: () => server.stop(true),
   };
@@ -331,6 +335,21 @@ test("echo events are outgoing messages and attachments are copied into storage"
         timestamp: 1,
       }),
     ).toBeNull();
+    // A failed attachment write must not be acknowledged with an expiring CDN link stored instead.
+    t.flags.failFiles = true;
+    const retry = body.replace("m_echo", "m_echo2");
+    expect(
+      (
+        await fetch(t.url("/meta/webhook"), {
+          method: "POST",
+          body: retry,
+          headers: { "X-Hub-Signature-256": sign(retry) },
+        })
+      ).status,
+    ).toBe(500);
+    expect(
+      t.json(`conversations/${conversation}/2025-01/m_echo2`),
+    ).toBeUndefined();
   } finally {
     cdn.stop(true);
     t.stop();
@@ -507,6 +526,31 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     expect(igReply.status).toBe(200);
     expect((await igReply.json()).actor).toEqual({ id: "ig-1" });
     expect(t.sent).toHaveLength(2);
+    expect(t.json("conversations/index")[ig].account).toBe("ig-1");
+    // A conversation that ran through a Page no longer connected cannot be answered with the new one.
+    const foreign = t.json("conversations/index");
+    foreign[conversation].account = "old-page";
+    t.docs.set(indexPath, {
+      body: new TextEncoder().encode(JSON.stringify(foreign)),
+      type: "application/json",
+      etag: '"foreign"',
+    });
+    expect(
+      (
+        await reply({
+          username: "sam",
+          bandId: "band1",
+          conversation,
+          text: "x",
+        })
+      ).status,
+    ).toBe(409);
+    foreign[conversation].account = "page-1";
+    t.docs.set(indexPath, {
+      body: new TextEncoder().encode(JSON.stringify(foreign)),
+      type: "application/json",
+      etag: '"restored"',
+    });
     expect(
       (
         await reply({
@@ -560,6 +604,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
 
 test("connecting a page stores the long-lived token and subscribes the app; disconnecting removes it", async () => {
   const calls: string[] = [];
+  let unsubscribeFails = false;
   const graph = Bun.serve({
     port: 0,
     fetch(req) {
@@ -579,7 +624,12 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
           ],
         });
       if (url.pathname === "/page-2/subscribed_apps")
-        return Response.json({ success: true });
+        return unsubscribeFails && req.method === "DELETE"
+          ? Response.json(
+              { error: { message: "down", code: 2 } },
+              { status: 500 },
+            )
+          : Response.json({ success: true });
       return Response.json({ error: { message: "nope" } }, { status: 400 });
     },
   });
@@ -657,6 +707,29 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       { headers: { Authorization: "Bearer user-token" } },
     );
     expect(await page.json()).toEqual({ pageId: "page-2", instagram: true });
+    // Reconnecting the same Page keeps its storage token instead of minting an untracked one.
+    await post("/meta/connect", {
+      username: "sam",
+      bandId: "band1",
+      accessToken: "short",
+    });
+    expect(armadietto.minted).toHaveLength(1);
+    expect(
+      (
+        await post("/meta/connect", {
+          username: "sam",
+          bandId: "band2",
+          accessToken: "short",
+        })
+      ).status,
+    ).toBe(409);
+    unsubscribeFails = true;
+    expect(
+      (await post("/meta/disconnect", { username: "sam", bandId: "band1" }))
+        .status,
+    ).toBe(503);
+    expect(db.query("SELECT * FROM meta_pages").all()).toHaveLength(1);
+    unsubscribeFails = false;
     expect(
       (await post("/meta/disconnect", { username: "sam", bandId: "band1" }))
         .status,

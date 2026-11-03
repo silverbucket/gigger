@@ -282,6 +282,8 @@ export interface Conversation {
   channel: Channel;
   /** The other party; contacts match on their messenger, instagram or email field. */
   peer: Party;
+  /** Our side: the Page or Instagram account ID the conversation runs through. */
+  account?: string;
   lastIn?: string;
   lastOut?: string;
   preview: string;
@@ -335,6 +337,7 @@ export function withMessage(
       bandId: message.bandId,
       channel: message.channel,
       peer: { ...previous?.peer, ...messagePeer(message) },
+      account: (message.direction === "in" ? message.target : message.actor).id,
       ...(previous?.lastIn ? { lastIn: previous.lastIn } : {}),
       ...(previous?.lastOut ? { lastOut: previous.lastOut } : {}),
       [key]: message.published,
@@ -518,6 +521,7 @@ export const conversationsSchema = {
       bandId: id,
       channel: { enum: [...channels] },
       peer: party,
+      account: text,
       lastIn: dateTime,
       lastOut: dateTime,
       preview: { type: "string" },

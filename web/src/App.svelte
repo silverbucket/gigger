@@ -154,6 +154,7 @@ async function connectPage(pageId?: string, accessToken?: string) {
       body: JSON.stringify({ username, bandId: band.id, accessToken, pageId }),
     });
     const result = await response.json();
+    if (current?.band.id !== band.id) return; // the user moved to another band meanwhile
     if (response.status === 409 && result.pages?.length) {
       // Several pages: remember the token and let the user pick one.
       metaPages = result.pages.map((p: { id: string; name: string }) => ({
@@ -192,8 +193,11 @@ async function disconnectPage() {
       },
       body: JSON.stringify({ username, bandId: band.id }),
     });
-    if (!response.ok) throw new Error("Could not disconnect. Please retry.");
-    metaPage = null;
+    if (!response.ok)
+      throw new Error(
+        (await response.json()).error ?? "Could not disconnect. Please retry.",
+      );
+    if (current?.band.id === band.id) metaPage = null;
   } catch (cause) {
     error = cause instanceof Error ? cause.message : "Could not disconnect.";
   } finally {

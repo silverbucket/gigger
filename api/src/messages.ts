@@ -133,25 +133,41 @@ export function messageHandler(
         return fail("Connect your Facebook Page before replying.", 409);
       if (thread.channel === "instagram" && !page?.ig_id)
         return fail("The connected Page has no Instagram account.", 409);
+      const actorId =
+        thread.channel === "instagram"
+          ? (page?.ig_id as string)
+          : (page?.page_id ?? (username as string));
+      if (thread.account && thread.account !== actorId)
+        return fail(
+          "This conversation belongs to a Page that is no longer connected.",
+          409,
+        );
       const message: Message = {
         id: crypto.randomUUID(),
         channel: thread.channel,
         direction: "out",
         conversation,
         bandId: bandId as string,
-        actor: {
-          id:
-            thread.channel === "instagram"
-              ? (page?.ig_id as string)
-              : (page?.page_id ?? (username as string)),
-        },
+        actor: { id: actorId },
         target: thread.peer,
         object: { type: "Note", content: text.trim() },
         published: new Date().toISOString(),
       };
+      const markFailed = async (error: string) => {
+        const { etag } = await store.get(messagePath(message));
+        if (etag)
+          await store.put(
+            messagePath(message),
+            { "@context": context("message"), ...message, error },
+            "application/json",
+            etag,
+          );
+      };
       try {
         await save(store, username as string, message);
       } catch {
+        // The message may be stored while the index failed; flag it so it never reads as sent.
+        await markFailed("Not sent: storage error").catch(() => {});
         return fail("Storage service unavailable. Please retry.", 503);
       }
       try {
@@ -161,13 +177,7 @@ export function messageHandler(
         );
       } catch (cause) {
         const error = cause instanceof Error ? cause.message : "Send failed";
-        const { etag } = await store.get(messagePath(message));
-        await store.put(
-          messagePath(message),
-          { "@context": context("message"), ...message, error },
-          "application/json",
-          etag,
-        );
+        await markFailed(error);
         return fail(`Saved, but not delivered: ${error}`, 502);
       }
       return Response.json(message, {

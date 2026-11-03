@@ -111,7 +111,10 @@ export function metaHandler(
     });
     const body = await response.json();
     if (!response.ok)
-      throw new Error(body?.error?.message ?? "Facebook request failed");
+      throw Object.assign(
+        new Error(body?.error?.message ?? "Facebook request failed"),
+        { code: body?.error?.code },
+      );
     return body;
   };
   const hook = (action: string, body: unknown) =>
@@ -121,23 +124,44 @@ export function metaHandler(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     });
+  /** Unsubscribes the Page and revokes its storage token; the row stays until both succeed. Error code 190 means the Page token is already dead. */
+  async function release(row: PageRow) {
+    try {
+      await fb(
+        `/${row.page_id}/subscribed_apps?access_token=${encodeURIComponent(row.token)}`,
+        { method: "DELETE" },
+      );
+    } catch (error) {
+      if ((error as { code?: number }).code !== 190)
+        throw new Error("Could not unsubscribe from Facebook. Please retry.");
+    }
+    const revoked = await hook("logout", {
+      username: row.username,
+      token: row.storage_token,
+    }).catch(() => null);
+    if (!revoked?.ok) throw new Error("Could not disconnect. Please retry.");
+    db.query("DELETE FROM meta_pages WHERE page_id = ?").run(row.page_id);
+  }
   async function store(row: PageRow, message: Message) {
     const rs = remoteStore(armadiettoUrl, row.username, row.storage_token);
     const copies: Attachment[] = [];
     for (const [n, attachment] of (message.object.attachment ?? []).entries()) {
+      let file: Response | undefined;
       try {
-        const file = await fetch(attachment.url, {
+        file = await fetch(attachment.url, {
           signal: AbortSignal.timeout(20000),
         });
-        if (!file.ok) throw new Error("download failed");
-        const mediaType =
-          file.headers.get("content-type") ?? "application/octet-stream";
-        const path = attachmentPath(message, n);
-        await rs.put(path, new Uint8Array(await file.arrayBuffer()), mediaType);
-        copies.push({ ...attachment, url: `gigger/${path}`, mediaType });
-      } catch {
+      } catch {}
+      if (!file?.ok) {
         copies.push(attachment); // keep the original CDN link rather than lose the attachment
+        continue;
       }
+      const mediaType =
+        file.headers.get("content-type") ?? "application/octet-stream";
+      const path = attachmentPath(message, n);
+      // A failed storage write propagates so the webhook answers 500 and Meta redelivers.
+      await rs.put(path, new Uint8Array(await file.arrayBuffer()), mediaType);
+      copies.push({ ...attachment, url: `gigger/${path}`, mediaType });
     }
     if (copies.length) message.object.attachment = copies;
     if (
@@ -281,13 +305,22 @@ export function metaHandler(
             },
             { status: 409, headers: noStore },
           );
+        const owner = byPage.get(page.id);
+        if (owner && (owner.username !== username || owner.band_id !== bandId))
+          return fail("This Page is already connected to another band.", 409);
+        const existing = byBand.get(username as string, bandId as string);
+        // Switching Pages releases the old one first; reconnecting the same Page keeps its storage token.
+        if (existing && existing.page_id !== page.id) await release(existing);
         await fb(
           `/${page.id}/subscribed_apps?subscribed_fields=messages,message_echoes&access_token=${encodeURIComponent(page.access_token)}`,
           { method: "POST" },
         );
-        const minted = await hook("token", { username });
-        if (!minted.ok) throw new Error("Could not create a storage token");
-        const { token } = await minted.json();
+        let token = existing?.page_id === page.id ? existing.storage_token : "";
+        if (!token) {
+          const minted = await hook("token", { username });
+          if (!minted.ok) throw new Error("Could not create a storage token");
+          token = (await minted.json()).token;
+        }
         db.query(
           "INSERT OR REPLACE INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES (?, ?, ?, ?, ?, ?)",
         ).run(
@@ -327,20 +360,15 @@ export function metaHandler(
       if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again.", 401);
       const row = byBand.get(username as string, bandId as string);
-      if (row) {
-        await fb(
-          `/${row.page_id}/subscribed_apps?access_token=${encodeURIComponent(row.token)}`,
-          { method: "DELETE" },
-        ).catch(() => {});
-        // Keep the row until Armadietto confirms revocation, so a retry can still revoke the token.
-        const revoked = await hook("logout", {
-          username,
-          token: row.storage_token,
-        }).catch(() => null);
-        if (!revoked?.ok)
-          return fail("Could not disconnect. Please retry.", 503);
-        db.query("DELETE FROM meta_pages WHERE page_id = ?").run(row.page_id);
-      }
+      if (row)
+        try {
+          await release(row);
+        } catch (cause) {
+          return fail(
+            cause instanceof Error ? cause.message : "Could not disconnect.",
+            503,
+          );
+        }
       return Response.json({ ok: true }, { headers: noStore });
     },
   };
