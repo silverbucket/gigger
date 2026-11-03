@@ -18,6 +18,7 @@ const privateValues = [
   "takeHome",
   "rating",
   "stageNotes",
+  "published",
 ];
 
 test("confirmed gigs publish only public fields and unpublish when cancelled or private", async () => {
@@ -169,6 +170,12 @@ test("status publication can be retried after a public write fails", async () =>
       date: "2030-01-01",
       status: "confirmed",
     });
+    const getPublic = publicClient.getObject.bind(publicClient);
+    const lookups: string[] = [];
+    publicClient.getObject = async (path, maxAge) => {
+      lookups.push(path);
+      return getPublic(path, maxAge);
+    };
     const remove = publicClient.remove.bind(publicClient);
     const removed: string[] = [];
     publicClient.remove = async (path) => {
@@ -185,6 +192,28 @@ test("status publication can be retried after a public write fails", async () =>
       status: "offered",
     });
     expect(removed).not.toContain("band/gigs/never");
+    expect(lookups).not.toContain("band/gigs/never");
+    await privateClient.storeObject("gig", "bands/a/gigs/legacy", {
+      id: "legacy",
+      title: "Old",
+      venue: "Club",
+      address: "Street",
+      contacts: [],
+      date: "2030-01-01",
+      status: "confirmed",
+    });
+    await publicClient.storeObject("publicGig", "band/gigs/legacy", {
+      date: "2030-01-01",
+      venue: "Club",
+    });
+    await store.moveGigStatus("a", "legacy", "cancelled");
+    expect(await getPublic("band/gigs/legacy")).toBeFalsy();
+    expect(
+      ((await privateClient.getObject("bands/a/gigs/never")) as Gig).published,
+    ).toBe(false);
+    expect(
+      ((await privateClient.getObject("bands/a/gigs/g")) as Gig).published,
+    ).toBe(true);
     let fail = true;
     publicClient.remove = async (path) => {
       if (fail && path === "band/gigs/g") {

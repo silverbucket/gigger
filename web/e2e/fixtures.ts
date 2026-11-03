@@ -20,6 +20,7 @@ export const test = base.extend<{
         password,
         email: `${username}@example.com`,
         bandName: "Touring Band",
+        currency: "CZK",
       },
     });
     expect(response.ok()).toBe(true);
@@ -44,11 +45,6 @@ export const test = base.extend<{
       });
       expect(saved.ok()).toBe(true);
     }
-    await put("band", "band", {
-      id: bandId,
-      name: "Touring Band",
-      currency: "CZK",
-    });
     await put("venue", "venues/club", {
       id: "club",
       name: "Test Club",

@@ -37,6 +37,8 @@ export interface Gig {
   enquirySource?: EnquirySource;
   setLength?: number;
   public?: { ticketUrl?: string; description?: string };
+  /** Whether a public copy may have been written; absent on legacy gigs. */
+  published?: boolean;
   date: string;
   loadIn?: string;
   soundcheck?: string;
@@ -371,6 +373,7 @@ export const schemas = {
   gig: object(
     {
       earnings: earningsSchema,
+      published: { type: "boolean" },
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
@@ -509,6 +512,7 @@ export function createGigger(client: Client, publicClient?: Client) {
     if (!publicClient) return;
     const path = `${slug}/gigs/${safeId(gig.id)}`;
     if (!publicStatuses.includes(gig.status)) {
+      if (gig.published === false) return;
       const pendingPath = `pending-public-deletes/${safeId(bandId)}/${safeId(gig.id)}`;
       let existing = await publicClient.getObject(path);
       if (!existing) {
@@ -539,6 +543,10 @@ export function createGigger(client: Client, publicClient?: Client) {
           await client.getObject(recordPath("venue", bandId, gig.venueId)),
         )
       : undefined;
+    if (gig.published !== true) {
+      gig = { ...gig, published: true };
+      await client.storeObject("gig", recordPath("gig", bandId, gig.id), gig);
+    }
     await publicClient.storeObject("publicGig", path, publicGig(gig, venue));
     const pendingPath = `pending-public-deletes/${safeId(bandId)}/${safeId(gig.id)}`;
     if (await client.getObject(pendingPath)) await client.remove(pendingPath);
@@ -696,6 +704,7 @@ export function createGigger(client: Client, publicClient?: Client) {
         );
         if (previous) {
           const old = read("gig", previous);
+          value = { ...gig, published: old.published ?? true } as Records[K];
           if (
             old.status !== gig.status &&
             !canMoveStatus(old.status, gig.status)
@@ -703,7 +712,7 @@ export function createGigger(client: Client, publicClient?: Client) {
             throw new Error(
               "This gig changed somewhere else, reload to see the latest",
             );
-        }
+        } else value = { ...gig, published: false } as Records[K];
         for (const [relatedKind, relatedId] of [
           ...(gig.venueId ? [["venue", gig.venueId] as const] : []),
           ...(gig.contactIds ?? []).map((id) => ["contact", id] as const),

@@ -92,6 +92,18 @@ test("signup, login, duplicate email and logout through the API without an accou
     expect(session.token).toBeString();
     expect([...records.values()][0].name).toBe("The Testers");
     expect([...records.values()][0].currency).toBe("CZK");
+    const defaultCurrency = await post("signup", {
+      ...credentials,
+      username: "default-currency",
+      email: "default@example.com",
+      currency: undefined,
+    });
+    expect(defaultCurrency.status).toBe(201);
+    expect(
+      [...records.entries()].find(([key]) =>
+        key.startsWith("default-currency/"),
+      )?.[1].currency,
+    ).toBe("EUR");
     expect([...records.keys()][0]).toMatch(/^sam\/gigger\/bands\/[^/]+\/band$/);
     expect(
       (
