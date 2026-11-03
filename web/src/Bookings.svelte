@@ -22,6 +22,7 @@ import {
   searchNamed,
 } from "./booking-list";
 import GigSheet from "./GigSheet.svelte";
+import type { InboxEnquiry } from "./Inbox.svelte";
 import PlayedForm from "./PlayedForm.svelte";
 import { bands, storage } from "./storage";
 
@@ -29,12 +30,15 @@ let {
   summaries,
   bandId,
   initialGigId = "",
+  initialEnquiry,
   onopen,
   onchanged,
 }: {
   summaries: BookingSummary[];
   bandId: string;
   initialGigId?: string;
+  /** Prefills a new enquiry from an inbox conversation. */
+  initialEnquiry?: InboxEnquiry;
   onopen: (bandId: string, gigId: string) => void;
   onchanged: () => Promise<void>;
 } = $props();
@@ -133,6 +137,16 @@ onMount(() => {
       if (initialGigId) {
         detail = gigs.find((gig) => gig.id === initialGigId) ?? null;
         if (detail) screen = "gig";
+      } else if (initialEnquiry) {
+        edit();
+        if (draft) {
+          draft.conversationId = initialEnquiry.conversationId;
+          draft.enquiryText = initialEnquiry.enquiryText;
+          draft.contactIds = initialEnquiry.contactId
+            ? [initialEnquiry.contactId]
+            : [];
+        }
+        source = initialEnquiry.enquirySource;
       }
     });
   const scope = storage.scope("/gigger/");
