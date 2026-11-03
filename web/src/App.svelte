@@ -48,6 +48,14 @@ let error = $state("");
 let ready = $state(false);
 let busy = $state(false);
 let current = $derived(summaries.find((item) => item.band.id === selected));
+// An unsaved currency edit survives reloads from saves and syncs; once saved
+// or when another band is shown, the field follows the stored currency again.
+let currencyDraft = $state<{ bandId: string; text: string } | null>(null);
+let currencyText = $derived(
+  currencyDraft && currencyDraft.bandId === current?.band.id
+    ? currencyDraft.text
+    : (current?.band.currency ?? "EUR"),
+);
 
 async function load() {
   const token = storage.remote.token;
@@ -360,35 +368,36 @@ onMount(() => {
     {#if current}
       <section>
         <h2>{current.band.name}</h2>
-        <!-- defaultValue keeps what the user typed while a save or sync
-             reloads the band; the key resets it when another band is shown. -->
-        {#key current.band.id}
-          <form
-            onsubmit={(event) => {
-              event.preventDefault();
-              const currency = new FormData(event.currentTarget).get(
-                "currency",
-              ) as string;
-              void save(() =>
-                bands.save("band", current.band.id, {
-                  ...current.band,
-                  currency: currency.toUpperCase(),
-                }),
-              );
-            }}
+        <form
+          onsubmit={(event) => {
+            event.preventDefault();
+            const band = current.band;
+            void save(async () => {
+              await bands.save("band", band.id, {
+                ...band,
+                currency: currencyText.toUpperCase(),
+              });
+              currencyDraft = null;
+            });
+          }}
+        >
+          <label
+            >Band currency<input
+              name="currency"
+              value={currencyText}
+              oninput={(event) => {
+                currencyDraft = {
+                  bandId: current.band.id,
+                  text: event.currentTarget.value,
+                };
+              }}
+              pattern={"[A-Za-z]{3}"}
+              maxlength="3"
+              required
+            ></label
           >
-            <label
-              >Band currency<input
-                name="currency"
-                defaultValue={current.band.currency ?? "EUR"}
-                pattern={"[A-Za-z]{3}"}
-                maxlength="3"
-                required
-              ></label
-            >
-            <button type="submit" disabled={busy}>Save currency</button>
-          </form>
-        {/key}
+          <button type="submit" disabled={busy}>Save currency</button>
+        </form>
         <h3>Members</h3>
         <ul>
           {#each current.members as member (member.id)}
