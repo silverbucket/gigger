@@ -290,12 +290,16 @@ export interface Conversation {
 }
 export type ConversationIndex = Record<string, Conversation>;
 export const conversationsPath = "conversations/index";
-/** Meta IDs are already path-safe; other peers (email addresses) are base64url-encoded. */
-export function conversationId(channel: Channel, peerId: string) {
+/** Scoped to the band so a Page moved between bands never merges their threads; Meta IDs are path-safe, email addresses are base64url-encoded. */
+export function conversationId(
+  channel: Channel,
+  bandId: string,
+  peerId: string,
+) {
   const safe = /^[A-Za-z0-9_-]+$/.test(peerId)
     ? peerId
     : btoa(peerId).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  return `${channel}-${safe}`;
+  return `${channel}-${safeId(bandId)}-${safe}`;
 }
 export function messagePath(
   message: Pick<Message, "conversation" | "published" | "id">,

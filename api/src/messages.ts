@@ -136,7 +136,7 @@ export function messageHandler(
       const actorId =
         thread.channel === "instagram"
           ? (page?.ig_id as string)
-          : (page?.page_id ?? (username as string));
+          : (page?.page_id ?? thread.account ?? (username as string));
       if (thread.account && thread.account !== actorId)
         return fail(
           "This conversation belongs to a Page that is no longer connected.",

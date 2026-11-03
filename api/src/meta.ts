@@ -57,7 +57,7 @@ export function fromWebhook(
     id: event.message.mid.replace(/[^A-Za-z0-9_-]/g, "_"),
     channel,
     direction: out ? "out" : "in",
-    conversation: conversationId(channel, peer.id),
+    conversation: conversationId(channel, bandId, peer.id),
     bandId,
     actor: { id: event.sender.id },
     target: { id: event.recipient.id },
@@ -141,6 +141,13 @@ export function metaHandler(
     }).catch(() => null);
     if (!revoked?.ok) throw new Error("Could not disconnect. Please retry.");
     db.query("DELETE FROM meta_pages WHERE page_id = ?").run(row.page_id);
+  }
+  // Connect and disconnect run one at a time so two requests cannot both see "no connection" and mint twice.
+  let queue: Promise<unknown> = Promise.resolve();
+  function serial<T>(work: () => Promise<T>) {
+    const next = queue.then(work, work);
+    queue = next.catch(() => {});
+    return next;
   }
   async function store(row: PageRow, message: Message) {
     const rs = remoteStore(armadiettoUrl, row.username, row.storage_token);
@@ -276,77 +283,83 @@ export function metaHandler(
         return fail("Log in again to connect a page.", 401);
       if (!env.META_APP_ID || !env.META_APP_SECRET)
         return fail("Facebook is not configured on this server.", 503);
-      try {
-        const longLived = await fb(
-          `/oauth/access_token?grant_type=fb_exchange_token&client_id=${env.META_APP_ID}&client_secret=${env.META_APP_SECRET}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
-        );
-        const { data: pages } = (await fb(
-          `/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${encodeURIComponent(longLived.access_token)}`,
-        )) as {
-          data: {
-            id: string;
-            name: string;
-            access_token: string;
-            instagram_business_account?: { id: string };
-          }[];
-        };
-        const page = pageId
-          ? pages.find((p) => p.id === pageId)
-          : pages.length === 1
-            ? pages[0]
-            : undefined;
-        if (!page)
+      return serial(async () => {
+        try {
+          const longLived = await fb(
+            `/oauth/access_token?grant_type=fb_exchange_token&client_id=${env.META_APP_ID}&client_secret=${env.META_APP_SECRET}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
+          );
+          const { data: pages } = (await fb(
+            `/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${encodeURIComponent(longLived.access_token)}`,
+          )) as {
+            data: {
+              id: string;
+              name: string;
+              access_token: string;
+              instagram_business_account?: { id: string };
+            }[];
+          };
+          const page = pageId
+            ? pages.find((p) => p.id === pageId)
+            : pages.length === 1
+              ? pages[0]
+              : undefined;
+          if (!page)
+            return Response.json(
+              {
+                error: pages.length
+                  ? "Choose a page."
+                  : "No Facebook Pages found for this login.",
+                pages: pages.map(({ id, name }) => ({ id, name })),
+              },
+              { status: 409, headers: noStore },
+            );
+          const owner = byPage.get(page.id);
+          if (
+            owner &&
+            (owner.username !== username || owner.band_id !== bandId)
+          )
+            return fail("This Page is already connected to another band.", 409);
+          const existing = byBand.get(username as string, bandId as string);
+          // Switching Pages releases the old one first; reconnecting the same Page keeps its storage token.
+          if (existing && existing.page_id !== page.id) await release(existing);
+          await fb(
+            `/${page.id}/subscribed_apps?subscribed_fields=messages,message_echoes&access_token=${encodeURIComponent(page.access_token)}`,
+            { method: "POST" },
+          );
+          let token =
+            existing?.page_id === page.id ? existing.storage_token : "";
+          if (!token) {
+            const minted = await hook("token", { username });
+            if (!minted.ok) throw new Error("Could not create a storage token");
+            token = (await minted.json()).token;
+          }
+          db.query(
+            "INSERT OR REPLACE INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES (?, ?, ?, ?, ?, ?)",
+          ).run(
+            page.id,
+            page.instagram_business_account?.id ?? null,
+            username as string,
+            bandId as string,
+            page.access_token,
+            token,
+          );
           return Response.json(
             {
-              error: pages.length
-                ? "Choose a page."
-                : "No Facebook Pages found for this login.",
-              pages: pages.map(({ id, name }) => ({ id, name })),
+              pageId: page.id,
+              name: page.name,
+              instagram: !!page.instagram_business_account,
             },
-            { status: 409, headers: noStore },
+            { headers: noStore },
           );
-        const owner = byPage.get(page.id);
-        if (owner && (owner.username !== username || owner.band_id !== bandId))
-          return fail("This Page is already connected to another band.", 409);
-        const existing = byBand.get(username as string, bandId as string);
-        // Switching Pages releases the old one first; reconnecting the same Page keeps its storage token.
-        if (existing && existing.page_id !== page.id) await release(existing);
-        await fb(
-          `/${page.id}/subscribed_apps?subscribed_fields=messages,message_echoes&access_token=${encodeURIComponent(page.access_token)}`,
-          { method: "POST" },
-        );
-        let token = existing?.page_id === page.id ? existing.storage_token : "";
-        if (!token) {
-          const minted = await hook("token", { username });
-          if (!minted.ok) throw new Error("Could not create a storage token");
-          token = (await minted.json()).token;
+        } catch (cause) {
+          return fail(
+            cause instanceof Error
+              ? cause.message
+              : "Could not connect the page.",
+            502,
+          );
         }
-        db.query(
-          "INSERT OR REPLACE INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES (?, ?, ?, ?, ?, ?)",
-        ).run(
-          page.id,
-          page.instagram_business_account?.id ?? null,
-          username as string,
-          bandId as string,
-          page.access_token,
-          token,
-        );
-        return Response.json(
-          {
-            pageId: page.id,
-            name: page.name,
-            instagram: !!page.instagram_business_account,
-          },
-          { headers: noStore },
-        );
-      } catch (cause) {
-        return fail(
-          cause instanceof Error
-            ? cause.message
-            : "Could not connect the page.",
-          502,
-        );
-      }
+      });
     },
     /** POST /meta/disconnect {username, bandId} */
     async disconnect(req: Request) {
@@ -359,17 +372,19 @@ export function metaHandler(
       const { username, bandId } = input ?? {};
       if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again.", 401);
-      const row = byBand.get(username as string, bandId as string);
-      if (row)
-        try {
-          await release(row);
-        } catch (cause) {
-          return fail(
-            cause instanceof Error ? cause.message : "Could not disconnect.",
-            503,
-          );
-        }
-      return Response.json({ ok: true }, { headers: noStore });
+      return serial(async () => {
+        const row = byBand.get(username as string, bandId as string);
+        if (row)
+          try {
+            await release(row);
+          } catch (cause) {
+            return fail(
+              cause instanceof Error ? cause.message : "Could not disconnect.",
+              503,
+            );
+          }
+        return Response.json({ ok: true }, { headers: noStore });
+      });
     },
   };
 }

@@ -232,7 +232,7 @@ test("a signed Messenger event becomes a stored message with an index entry, onc
         headers: { "X-Hub-Signature-256": sign(body) },
       });
     expect((await post()).status).toBe(200);
-    const conversation = conversationId("messenger", "psid-1");
+    const conversation = conversationId("messenger", "band1", "psid-1");
     const stored = t.json(`conversations/${conversation}/2025-01/m_abc_1`);
     expect(stored).toMatchObject({
       channel: "messenger",
@@ -299,7 +299,7 @@ test("echo events are outgoing messages and attachments are copied into storage"
       body,
       headers: { "X-Hub-Signature-256": sign(body) },
     });
-    const conversation = conversationId("instagram", "fan-9");
+    const conversation = conversationId("instagram", "band1", "fan-9");
     const path = `conversations/${conversation}/2025-01/m_echo`;
     expect(t.json(path)).toMatchObject({
       direction: "out",
@@ -419,7 +419,7 @@ test("the 24-hour rule blocks Meta replies but never email", () => {
 test("reply saves the outgoing message, retries the index on 412, hands it to the sender and streams an event", async () => {
   const t = setup({ conflictOnce: true });
   try {
-    const conversation = conversationId("messenger", "psid-1");
+    const conversation = conversationId("messenger", "band1", "psid-1");
     const seed = webhookBody("Hello", {});
     await fetch(t.url("/meta/webhook"), {
       method: "POST",
@@ -503,7 +503,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
         )
       ).status,
     ).toBe(401);
-    const ig = conversationId("instagram", "fan-9");
+    const ig = conversationId("instagram", "band1", "fan-9");
     const withIg = t.json("conversations/index");
     withIg[ig] = {
       bandId: "band1",
@@ -551,6 +551,29 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
       type: "application/json",
       etag: '"restored"',
     });
+    // Email replies go out as the address the enquiry was sent to, not the storage username.
+    const mail = conversationId("email", "band1", "jo@example.com");
+    foreign[mail] = {
+      bandId: "band1",
+      channel: "email",
+      peer: { id: "jo@example.com" },
+      account: "band@example.com",
+      preview: "",
+    };
+    t.docs.set(indexPath, {
+      body: new TextEncoder().encode(JSON.stringify(foreign)),
+      type: "application/json",
+      etag: '"mail"',
+    });
+    const mailReply = await reply({
+      username: "sam",
+      bandId: "band1",
+      conversation: mail,
+      text: "by mail",
+    });
+    expect(mailReply.status).toBe(200);
+    expect((await mailReply.json()).actor).toEqual({ id: "band@example.com" });
+    t.sent.pop();
     expect(
       (
         await reply({
@@ -707,6 +730,26 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       { headers: { Authorization: "Bearer user-token" } },
     );
     expect(await page.json()).toEqual({ pageId: "page-2", instagram: true });
+    // Concurrent connects are serialized: the second band sees the Page taken, and only one token exists.
+    await post("/meta/disconnect", { username: "sam", bandId: "band1" });
+    armadietto.minted.length = 0;
+    const race = await Promise.all([
+      post("/meta/connect", {
+        username: "sam",
+        bandId: "band1",
+        accessToken: "short",
+      }),
+      post("/meta/connect", {
+        username: "sam",
+        bandId: "band2",
+        accessToken: "short",
+      }),
+    ]);
+    expect(race.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(armadietto.minted).toHaveLength(1);
+    expect(db.query("SELECT band_id FROM meta_pages").all()).toEqual([
+      { band_id: "band1" },
+    ]);
     // Reconnecting the same Page keeps its storage token instead of minting an untracked one.
     await post("/meta/connect", {
       username: "sam",

@@ -19,8 +19,8 @@ test("the app reads server-written messages and the conversation index through t
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
     expect(await store.conversations()).toEqual({});
-    const conversation = conversationId("email", "jo@example.com");
-    expect(conversation).toBe("email-am9AZXhhbXBsZS5jb20");
+    const conversation = conversationId("email", "a", "jo@example.com");
+    expect(conversation).toBe("email-a-am9AZXhhbXBsZS5jb20");
     const first: Message = {
       id: "m1",
       channel: "email",
