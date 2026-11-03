@@ -19,6 +19,7 @@ import {
   type BookingSummary,
   groupBookings,
   playedAtVenue,
+  searchNamed,
 } from "./booking-list";
 import GigSheet from "./GigSheet.svelte";
 import PlayedForm from "./PlayedForm.svelte";
@@ -69,6 +70,16 @@ let description = $state("");
 let newVenue = $state(false);
 let newContact = $state(false);
 let venueName = $state("");
+let venueQuery = $state("");
+let venueSearching = $state(false);
+let bandQuery = $state("");
+let venueMatches = $derived(searchNamed(venues, venueQuery));
+let bandMatches = $derived(
+  searchNamed(
+    otherBands.filter((band) => !draft?.otherBandIds?.includes(band.id)),
+    bandQuery,
+  ),
+);
 let venueAddress = $state("");
 let venueCity = $state("");
 let contactName = $state("");
@@ -154,6 +165,9 @@ function edit(gig?: Gig) {
   otherBandName = "";
   otherBandContactIds = [];
   draft.venueId ??= "";
+  venueQuery = venues.find((v) => v.id === draft?.venueId)?.name ?? "";
+  venueSearching = false;
+  bandQuery = "";
   const previousFee = typeof gig?.fee === "string" ? gig.fee : gig?.fee?.amount;
   amount = typeof previousFee === "number" ? previousFee : undefined;
   // Legacy free-text fees stay as written until an amount replaces them.
@@ -180,6 +194,10 @@ function edit(gig?: Gig) {
 async function submitGig(event: SubmitEvent) {
   event.preventDefault();
   if (!draft) return;
+  if (!newVenue && !draft.venueId) {
+    error = "Choose a venue from the suggestions.";
+    return;
+  }
   const enquirySource = source;
   if (!enquirySource) {
     error = "Choose an enquiry source.";
@@ -197,6 +215,8 @@ async function submitGig(event: SubmitEvent) {
       await bands.save("venue", bandId, v);
       value.venueId = v.id;
       venues = [...venues, v];
+      venueQuery = v.name;
+      venueSearching = false;
       newVenue = false;
       draft = { ...value };
     }
@@ -519,17 +539,47 @@ async function saveRecord(
           <details open>
             <summary>Where</summary>
             <label
-              >Venue<select
-                bind:value={draft.venueId}
+              >Venue<input
+                type="search"
+                value={venueQuery}
                 required={!newVenue}
                 disabled={newVenue}
-              >
-                <option value="">Choose venue</option>
-                {#each venues as v (v.id)}
-                  <option value={v.id}>{v.name}</option>
-                {/each}
-              </select></label
+                autocomplete="off"
+                placeholder="Type a venue name"
+                oninput={(event) => {
+                  venueQuery = event.currentTarget.value;
+                  venueSearching = true;
+                  if (draft) draft.venueId = "";
+                }}
+              ></label
             >
+            {#if venueSearching && venueQuery.trim() && !newVenue}
+              <p>
+                Choose a venue{venueMatches.length === 20
+                  ? " (first 20 matches)"
+                  : ""}:
+              </p>
+              <ul class="suggestions" aria-label="Venue suggestions">
+                {#each venueMatches as v (v.id)}
+                  <li>
+                    <button
+                      type="button"
+                      onclick={() => {
+                        if (draft) draft.venueId = v.id;
+                        venueQuery = v.name;
+                        venueSearching = false;
+                      }}
+                    >
+                      {v.name}{v.city || v.address
+                        ? ` — ${v.city || v.address}`
+                        : ""}
+                    </button>
+                  </li>
+                {:else}
+                  <li>No matching venues. You can create a new venue below.</li>
+                {/each}
+              </ul>
+            {/if}
             <label class="toggle"
               ><input
                 type="checkbox"
@@ -550,18 +600,63 @@ async function saveRecord(
           <details>
             <summary>Who</summary>
             <fieldset>
-              <legend>Other bands playing — tap to add or remove</legend>
-              {#each otherBands as b (b.id)}
-                <label class="toggle"
-                  ><input
-                    type="checkbox"
-                    value={b.id}
-                    bind:group={draft.otherBandIds}
-                  >{b.name}</label
-                >
-              {:else}
-                <p>No other bands yet.</p>
+              <legend>Other bands playing</legend>
+              {#each draft.otherBandIds ?? [] as id (id)}
+                {@const selectedBand = otherBands.find(
+                  (band) => band.id === id,
+                )}
+                <p>
+                  {selectedBand?.name ?? id}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${selectedBand?.name ?? id}`}
+                    onclick={() => {
+                      if (draft)
+                        draft.otherBandIds = (draft.otherBandIds ?? []).filter(
+                          (value) => value !== id,
+                        );
+                    }}
+                  >
+                    Remove
+                  </button>
+                </p>
               {/each}
+              <label
+                >Search other bands<input
+                  type="search"
+                  bind:value={bandQuery}
+                  autocomplete="off"
+                  placeholder="Type a band name"
+                ></label
+              >
+              {#if bandQuery.trim()}
+                <p>
+                  Choose a band{bandMatches.length === 20
+                    ? " (first 20 matches)"
+                    : ""}:
+                </p>
+                <ul class="suggestions" aria-label="Band suggestions">
+                  {#each bandMatches as b (b.id)}
+                    <li>
+                      <button
+                        type="button"
+                        onclick={() => {
+                          if (draft)
+                            draft.otherBandIds = [
+                              ...(draft.otherBandIds ?? []),
+                              b.id,
+                            ];
+                          bandQuery = "";
+                        }}
+                      >
+                        {b.name}
+                      </button>
+                    </li>
+                  {:else}
+                    <li>No matching bands. You can create a new band below.</li>
+                  {/each}
+                </ul>
+              {/if}
             </fieldset>
             <label class="toggle"
               ><input
@@ -1095,6 +1190,15 @@ summary {
 .toggle input {
   width: 1.2rem;
   height: 1.2rem;
+}
+.suggestions {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+.suggestions button {
+  width: 100%;
+  text-align: left;
 }
 .status {
   text-transform: capitalize;

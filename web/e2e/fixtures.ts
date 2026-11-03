@@ -9,6 +9,8 @@ export const test = base.extend<{
     read: (path: string) => Promise<Record<string, unknown>>;
     exists: (path: string) => Promise<boolean>;
     seedGig: (gig: Partial<Gig> & Pick<Gig, "id" | "title">) => Promise<void>;
+    seedVenue: (id: string, name: string) => Promise<void>;
+    seedOtherBand: (id: string, name: string) => Promise<void>;
   };
 }>({
   account: async ({ request }, use) => {
@@ -80,6 +82,16 @@ export const test = base.extend<{
         const result = await request.get(`${path}${location}`, { headers });
         expect([200, 404]).toContain(result.status());
         return result.status() === 200;
+      },
+      async seedVenue(id, name) {
+        await put("venue", `venues/${id}`, { id, name, address: "Prague" });
+      },
+      async seedOtherBand(id, name) {
+        await put("otherBand", `otherBands/${id}`, {
+          id,
+          name,
+          contactIds: [],
+        });
       },
       async seedGig(gig) {
         await put("gig", `gigs/${gig.id}`, {

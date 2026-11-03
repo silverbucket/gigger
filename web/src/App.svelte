@@ -447,10 +447,11 @@ onMount(() => {
           onsubmit={(event) => {
             event.preventDefault();
             const band = current.band;
+            const currency = currencyText.toUpperCase();
             void save(async () => {
               await bands.save("band", band.id, {
                 ...band,
-                currency: currencyText.toUpperCase(),
+                currency,
               });
               currencyDraft = null;
             });
@@ -459,6 +460,7 @@ onMount(() => {
           <label
             >Band currency<input
               name="currency"
+              disabled={busy}
               value={currencyText}
               oninput={(event) => {
                 currencyDraft = {

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Gig, Venue } from "@gigger/schemas";
-import { groupBookings, playedAtVenue } from "./booking-list";
+import { groupBookings, playedAtVenue, searchNamed } from "./booking-list";
 
 const venue: Venue = { id: "v", name: "Club", address: "Main St" };
 const gig: Gig = {
@@ -80,4 +80,23 @@ test("venue history includes only played gigs at that venue, including exact leg
   ]);
   expect(gigs[0]?.id).toBe("played");
   expect(playedAtVenue([], venue)).toEqual([]);
+});
+
+test("name search ignores case and accents and limits suggestions", () => {
+  const items = [{ name: "Čáslav" }, { name: "CASA" }, { name: "Other" }];
+  expect(searchNamed(items, "cAs").map((item) => item.name)).toEqual([
+    "Čáslav",
+    "CASA",
+  ]);
+  expect(searchNamed(items, "ČÁS").map((item) => item.name)).toEqual([
+    "Čáslav",
+    "CASA",
+  ]);
+  expect(searchNamed(items, "")).toEqual([]);
+  expect(
+    searchNamed(
+      Array.from({ length: 100 }, (_, i) => ({ name: `Club ${i}` })),
+      "club",
+    ),
+  ).toHaveLength(20);
 });

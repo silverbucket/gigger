@@ -59,6 +59,10 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   await expect
     .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
     .toBe("EUR");
+  await expect(
+    page.getByRole("button", { name: "Save currency", exact: true }),
+  ).toBeEnabled();
+  await expect(currency).toHaveValue("EUR");
   await currency.fill("czk");
   await page
     .getByRole("button", { name: "Save currency", exact: true })
@@ -90,9 +94,8 @@ test("booking validation opens collapsed invalid fields and preserves the draft"
   await page
     .getByLabel("Proposed gig date", { exact: true })
     .fill("2030-07-01");
-  await page
-    .getByRole("combobox", { name: "Venue", exact: true })
-    .selectOption("club");
+  await page.getByLabel("Venue", { exact: true }).fill("test");
+  await page.getByRole("button", { name: /Test Club/ }).click();
   await page.getByText("Enquiry", { exact: true }).click();
   await page.getByRole("button", { name: "Save enquiry", exact: true }).click();
   await expect(
@@ -477,4 +480,48 @@ test("legacy free-text fees survive unrelated edits until replaced", async ({
   await expect(
     bookings.getByText(`Fee: ${money(250, "CZK")}`, { exact: true }),
   ).toBeVisible();
+});
+
+test("venue and other-band searches match accents and preserve selections", async ({
+  page,
+  account,
+}) => {
+  await account.seedVenue("cafe", "Čáslav Café");
+  await account.seedOtherBand("band-a", "Žáby");
+  await account.seedOtherBand("band-b", "Áčko");
+  await page.reload();
+  await page.getByLabel("View band").selectOption(account.bandId);
+  await page.getByRole("button", { name: "New enquiry", exact: true }).click();
+  await page.getByLabel("Title", { exact: true }).fill("Accent test");
+  await page
+    .getByLabel("Proposed gig date", { exact: true })
+    .fill("2030-07-01");
+  const venue = page.getByLabel("Venue", { exact: true });
+  await venue.fill("caslav cafe");
+  await page.getByRole("button", { name: /Čáslav Café/ }).click();
+  await expect(venue).toHaveValue("Čáslav Café");
+  await page.getByText("Who", { exact: true }).click();
+  const bandSearch = page.getByLabel("Search other bands");
+  await bandSearch.fill("zaby");
+  await page.getByRole("button", { name: "Žáby", exact: true }).click();
+  await bandSearch.fill("acko");
+  await page.getByRole("button", { name: "Áčko", exact: true }).click();
+  await page.getByRole("button", { name: "Remove Žáby" }).click();
+  await page
+    .getByRole("combobox", { name: "Source", exact: true })
+    .selectOption("email");
+  await page.getByRole("button", { name: "Save enquiry", exact: true }).click();
+  await expect(
+    page.getByText("Venue: Čáslav Café", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Áčko", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Žáby", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit gig", exact: true }).click();
+  await expect(venue).toHaveValue("Čáslav Café");
+  await page.getByText("Who", { exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove Áčko" })).toBeVisible();
 });
