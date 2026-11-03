@@ -4,3 +4,6 @@ api/dist/
 
 web/dist/
 *.sqlite*
+
+test-results/
+playwright-report/

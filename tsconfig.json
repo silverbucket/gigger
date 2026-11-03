@@ -14,6 +14,7 @@
     "api/**/*.ts",
     "schemas/**/*.ts",
     "web/**/*.ts",
-    "web/**/*.svelte"
+    "web/**/*.svelte",
+    "playwright.config.ts"
   ]
 }

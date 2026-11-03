@@ -1,12 +1,18 @@
 <script lang="ts">
 import {
   type Contact,
+  type Earnings,
   type EnquirySource,
   enquirySources,
+  formatFee,
+  formatMoney,
   type Gig,
   type OtherBand,
+  type SurveyInput,
   statusMoves,
   type Venue,
+  type VenueSurvey,
+  venueAverages,
 } from "@gigger/schemas";
 import { onMount } from "svelte";
 import {
@@ -14,6 +20,8 @@ import {
   groupBookings,
   playedAtVenue,
 } from "./booking-list";
+import GigSheet from "./GigSheet.svelte";
+import PlayedForm from "./PlayedForm.svelte";
 import { bands, storage } from "./storage";
 
 let {
@@ -32,6 +40,7 @@ let {
 let groups = $derived(groupBookings(summaries, bandId));
 let gigs = $state<Gig[]>([]);
 let venues = $state<Venue[]>([]);
+let surveys = $state<VenueSurvey[]>([]);
 let contacts = $state<Contact[]>([]);
 let otherBands = $state<OtherBand[]>([]);
 let otherBand = $state<OtherBand>({ id: "", name: "", contactIds: [] });
@@ -49,7 +58,12 @@ let error = $state("");
 let loadedBand = $state("");
 let extraText = $state("");
 let timesText = $state("");
-let amount = $state("");
+let amount = $state<number>();
+let feeCurrency = $state("");
+let legacyFee = $state("");
+let bandCurrency = $derived(
+  summaries.find((s) => s.band.id === bandId)?.band.currency ?? "EUR",
+);
 let ticketUrl = $state("");
 let description = $state("");
 let newVenue = $state(false);
@@ -63,15 +77,17 @@ let source = $state<EnquirySource | "">("");
 let syncedChanges = false;
 async function load() {
   const requested = bandId;
-  const [g, v, c, b] = await Promise.all([
+  const [g, v, c, b, sv] = await Promise.all([
     bands.list("gig", requested),
     bands.list("venue", requested),
     bands.list("contact", requested),
     bands.list("otherBand", requested),
+    bands.list("survey", requested),
   ]);
   if (requested !== bandId) return;
   gigs = g;
   venues = v;
+  surveys = sv;
   contacts = c;
   otherBands = b;
   loadedBand = requested;
@@ -137,7 +153,13 @@ function edit(gig?: Gig) {
   otherBandName = "";
   otherBandContactIds = [];
   draft.venueId ??= "";
-  amount = typeof gig?.fee === "string" ? gig.fee : (gig?.fee?.amount ?? "");
+  const previousFee = typeof gig?.fee === "string" ? gig.fee : gig?.fee?.amount;
+  amount = typeof previousFee === "number" ? previousFee : undefined;
+  // Legacy free-text fees stay as written until an amount replaces them.
+  legacyFee = typeof previousFee === "string" ? previousFee.trim() : "";
+  feeCurrency =
+    (typeof gig?.fee === "object" ? gig.fee.currency : undefined) ??
+    bandCurrency;
   extraText = typeof gig?.fee === "object" ? gig.fee.extras.join("\n") : "";
   timesText = gig?.setTimes?.join(", ") ?? "";
   ticketUrl = gig?.public?.ticketUrl ?? "";
@@ -206,7 +228,11 @@ async function submitGig(event: SubmitEvent) {
       contactIds: value.contactIds ?? [],
       enquirySource,
       fee: {
-        ...(amount.trim() ? { amount: amount.trim() } : {}),
+        ...(amount !== undefined
+          ? { amount, currency: feeCurrency.toUpperCase() }
+          : legacyFee
+            ? { amount: legacyFee }
+            : {}),
         extras: extraText
           .split("\n")
           .map((s) => s.trim())
@@ -240,6 +266,16 @@ async function move(status: Gig["status"]) {
   const gigId = detail.id;
   await run(async () => {
     detail = await bands.moveGigStatus(bandId, gigId, status);
+    await load();
+    await onchanged();
+  });
+}
+async function savePlayed(survey: SurveyInput, earnings: Earnings) {
+  if (!detail) return;
+  const gigId = detail.id;
+  await run(async () => {
+    detail = await bands.markPlayed(bandId, gigId, survey, earnings);
+    screen = "gig";
     await load();
     await onchanged();
   });
@@ -348,7 +384,28 @@ async function saveRecord(
   {#if !bandId}
     <p>Choose a band above to add an enquiry or manage venues and contacts.</p>
   {/if}
-  {#if screen === "gigs"}
+  {#if screen === "sheet" && detail}
+    <GigSheet
+      gig={detail}
+      bandName={summaries.find((s) => s.band.id === bandId)?.band.name ?? ""}
+      currency={bandCurrency}
+      venue={venues.find((v) => v.id === detail?.venueId)}
+      contacts={contacts.filter((c) => detail?.contactIds?.includes(c.id))}
+      onback={() => {
+        screen = "gig";
+      }}
+    />
+  {:else if screen === "played" && detail}
+    <PlayedForm
+      gig={detail}
+      currency={bandCurrency}
+      {busy}
+      oncancel={() => {
+        screen = "gig";
+      }}
+      onsave={savePlayed}
+    />
+  {:else if screen === "gigs"}
     <h3>Gigs</h3>
     {#each groups as group (group.status)}
       <h4 class="status">{group.status}</h4>
@@ -571,7 +628,25 @@ async function saveRecord(
           </details>
           <details>
             <summary>Money</summary>
-            <label>Fee (including currency)<input bind:value={amount}></label>
+            {#if legacyFee}
+              <p>Current fee: {legacyFee}. Enter an amount to replace it.</p>
+            {/if}
+            <label
+              >Fee<input
+                type="number"
+                min="0"
+                step="0.01"
+                bind:value={amount}
+              ></label
+            >
+            <label
+              >Fee currency<input
+                bind:value={feeCurrency}
+                required={amount !== undefined}
+                pattern={"[A-Za-z]{3}"}
+                maxlength="3"
+              ></label
+            >
             <label
               >Fee extras (one per line)<textarea
                 bind:value={extraText}
@@ -614,9 +689,29 @@ async function saveRecord(
         (detail.contactIds ?? [])
           .map((id) => contacts.find((c) => c.id === id)?.name ?? id)
           .join(", ") || detail.contacts?.join(", ")}
-      {@const feeAmount =
-        typeof detail.fee === "string" ? detail.fee : detail.fee?.amount}
+      {@const feeText = formatFee(detail.fee, bandCurrency, navigator.language)}
       <h3>{detail.title}</h3>
+      <button
+        type="button"
+        onclick={() => {
+          screen = "sheet";
+        }}
+      >
+        View gig sheet
+      </button>
+      {#if detail.status === "played" && detail.earnings}
+        <p>
+          <strong
+            >Your band took home:
+            {formatMoney(
+              detail.earnings.takeHome,
+              detail.earnings.currency,
+              navigator.language,
+            )}</strong
+          >
+        </p>
+        <p>Private, only you can see this</p>
+      {/if}
       {#if detail.otherBandIds?.length}
         <h4>Playing with</h4>
         <ul>
@@ -669,8 +764,8 @@ async function saveRecord(
       {#if detail.setLength}
         <p>Set length: {detail.setLength} minutes</p>
       {/if}
-      {#if feeAmount?.trim()}
-        <p>Fee: {feeAmount}</p>
+      {#if feeText}
+        <p>Fee: {feeText}</p>
       {/if}
       {#if typeof detail.fee === "object" && detail.fee.extras.length}
         <p>Extras: {detail.fee.extras.join(", ")}</p>
@@ -695,7 +790,14 @@ async function saveRecord(
         Edit gig
       </button>
       {#each statusMoves[detail.status] as status (status)}
-        <button type="button" disabled={busy} onclick={() => move(status)}>
+        <button
+          type="button"
+          disabled={busy}
+          onclick={() => {
+            if (status === "played") screen = "played";
+            else void move(status);
+          }}
+        >
           Mark {status}
         </button>
       {/each}
@@ -740,6 +842,36 @@ async function saveRecord(
       </fieldset>
     </form>
     {#if venue.id}
+      {@const venueSurveys = surveys.filter((s) => s.venueId === venue.id)}
+      {@const averages = venueAverages(venueSurveys)}
+      <h4>Venue surveys</h4>
+      <p>Saved in your account; sharing with other bands comes later.</p>
+      {#if averages}
+        <p>
+          Average rating: {averages.rating.toFixed(1)} / 5 · Most common
+          capacity: {averages.capacities.join(" / ")} · Venue provided PA:
+          {averages.paProvided}
+          of {averages.count} surveys ({Math.round(
+            (averages.paProvided / averages.count) * 100,
+          )}%)
+        </p>
+        {#each [...venueSurveys].sort((a, b) =>
+          b.date.localeCompare(a.date),
+        ) as survey (survey.id)}
+          <article>
+            <h5>{survey.date} · {survey.rating} / 5</h5>
+            <p>
+              Capacity: {survey.capacity} · {survey.setting} · PA: {survey.pa}
+            </p>
+            {#if survey.stageNotes?.trim()}
+              <p>{survey.stageNotes}</p>
+            {/if}
+            <p>Would play again: {survey.playAgain ? "Yes" : "No"}</p>
+          </article>
+        {/each}
+      {:else}
+        <p>No surveys yet.</p>
+      {/if}
       <h4>Gigs played here</h4>
       <ul>
         {#each playedAtVenue(
@@ -922,6 +1054,9 @@ textarea,
 button {
   font: inherit;
   padding: 0.5rem;
+  min-height: 44px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 textarea {
   min-height: 5rem;
@@ -964,5 +1099,15 @@ summary {
   background: white;
   padding-block: 0.7rem;
   z-index: 1;
+}
+@media print {
+  section:has(:global(.gig-sheet)) > :not(:global(.gig-sheet)) {
+    display: none;
+  }
+  section:has(:global(.gig-sheet)) {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
 }
 </style>

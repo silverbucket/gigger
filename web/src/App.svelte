@@ -2,6 +2,8 @@
 import {
   type Band,
   type Contact,
+  currencyForLocale,
+  formatFee,
   type Gig,
   groupGigs,
   type Member,
@@ -29,6 +31,7 @@ let summaries = $state<Summary[]>([]);
 let selected = $state("");
 let openedGig = $state("");
 let bandName = $state("");
+let bandCurrency = $state(currencyForLocale(navigator.language));
 let memberName = $state("");
 let editingMember = $state("");
 let creatingBand = $state(false);
@@ -78,7 +81,11 @@ function createBand(event: SubmitEvent) {
     return;
   }
   void save(async () => {
-    const band = { id: crypto.randomUUID(), name: bandName.trim() };
+    const band = {
+      id: crypto.randomUUID(),
+      name: bandName.trim(),
+      currency: bandCurrency.toUpperCase(),
+    };
     await bands.save("band", band.id, band);
     selected = band.id;
     bandName = "";
@@ -336,7 +343,14 @@ onMount(() => {
       <section id="new-band" aria-labelledby="create-title">
         <h2 id="create-title">Create a band</h2>
         <form onsubmit={createBand}>
-          <label>Band name<input bind:value={bandName} required></label
+          <label>Band name<input bind:value={bandName} required></label>
+          <label
+            >Currency<input
+              bind:value={bandCurrency}
+              required
+              pattern={"[A-Za-z]{3}"}
+              maxlength="3"
+            ></label
           ><button type="submit" disabled={!ready || busy}>Create band</button>
         </form>
       </section>
@@ -344,6 +358,31 @@ onMount(() => {
     {#if current}
       <section>
         <h2>{current.band.name}</h2>
+        <form
+          onsubmit={(event) => {
+            event.preventDefault();
+            const currency = new FormData(event.currentTarget).get(
+              "currency",
+            ) as string;
+            void save(() =>
+              bands.save("band", current.band.id, {
+                ...current.band,
+                currency: currency.toUpperCase(),
+              }),
+            );
+          }}
+        >
+          <label
+            >Band currency<input
+              name="currency"
+              value={current.band.currency ?? "EUR"}
+              pattern={"[A-Za-z]{3}"}
+              maxlength="3"
+              required
+            ></label
+          >
+          <button type="submit" disabled={busy}>Save currency</button>
+        </form>
         <h3>Members</h3>
         <ul>
           {#each current.members as member (member.id)}
@@ -464,10 +503,14 @@ onMount(() => {
                     {#if gig.setTimes?.length}
                       <p>Set times: {gig.setTimes.join(", ")}</p>
                     {/if}
-                    {#if gig.fee}
+                    {#if formatFee(gig.fee, summary.band.currency ?? "EUR")}
                       <p>
                         Fee:
-                        {typeof gig.fee === "string" ? gig.fee : gig.fee.amount}
+                        {formatFee(
+                          gig.fee,
+                          summary.band.currency ?? "EUR",
+                          navigator.language,
+                        )}
                       </p>
                     {/if}
                     {#if gig.notes}
@@ -606,5 +649,16 @@ article {
 :global(:focus-visible) {
   outline: 3px solid #c18716;
   outline-offset: 3px;
+}
+@media print {
+  :global(body:has(.gig-sheet)) {
+    background: white;
+  }
+  main:has(:global(.gig-sheet)) > :not(:has(:global(.gig-sheet))) {
+    display: none;
+  }
+  main {
+    padding: 0;
+  }
 }
 </style>

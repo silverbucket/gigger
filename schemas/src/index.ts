@@ -1,6 +1,7 @@
 export interface Band {
   id: string;
   name: string;
+  currency?: string;
 }
 export interface Member {
   id: string;
@@ -36,14 +37,148 @@ export interface Gig {
   loadIn?: string;
   soundcheck?: string;
   setTimes?: string[];
-  fee?: string | { amount?: string; extras: string[] };
+  /** Legacy fees are free text or a text amount; new fees are a number plus currency. */
+  fee?:
+    | string
+    | { amount?: string | number; currency?: string; extras: string[] };
   notes?: string;
+  earnings?: Earnings;
   status: GigStatus;
 }
 export interface Venue {
   id: string;
   name: string;
   address: string;
+}
+export const capacities = [
+  "under 50",
+  "50–100",
+  "100–250",
+  "250–500",
+  "500+",
+] as const;
+export const paOptions = [
+  "venue provided",
+  "we brought our own",
+  "mixed",
+] as const;
+export const dealTypes = [
+  "fixed fee",
+  "door",
+  "pass the hat",
+  "bar percentage",
+  "mixed",
+] as const;
+/** One record per played gig, keyed by the gig ID, so concurrent saves never overwrite each other. */
+export interface VenueSurvey {
+  id: string;
+  venueId: string;
+  date: string;
+  rating: number;
+  capacity: (typeof capacities)[number];
+  setting: "indoor" | "outdoor";
+  pa: (typeof paOptions)[number];
+  stageNotes?: string;
+  playAgain: boolean;
+}
+export type SurveyInput = Pick<
+  VenueSurvey,
+  "rating" | "capacity" | "setting" | "pa" | "stageNotes" | "playAgain"
+>;
+export interface Earnings {
+  dealType: (typeof dealTypes)[number];
+  door?: number;
+  hat?: number;
+  bar?: number;
+  total: number;
+  numberOfBands?: number;
+  handedOver?: number;
+  takeHome: number;
+  currency: string;
+}
+export function calculateTakeHome(
+  total: number,
+  numberOfBands?: number,
+  handedOver?: number,
+) {
+  return (
+    Math.round(
+      (handedOver !== undefined
+        ? total - handedOver
+        : total / (numberOfBands ?? 1)) * 100,
+    ) / 100
+  );
+}
+const zeroDecimalCurrencies = new Set(["CZK"]);
+/** Formats money in the browser's locale, e.g. "14 000 Kč" for cs-CZ. */
+export function formatMoney(amount: number, currency: string, locale?: string) {
+  const code = currency.toUpperCase();
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: code,
+      ...(zeroDecimalCurrencies.has(code) ? { maximumFractionDigits: 0 } : {}),
+    }).format(amount);
+  } catch {
+    return `${amount} ${code}`;
+  }
+}
+/** Numeric fee amount, or undefined for legacy text fees. */
+export function feeAmount(fee: Gig["fee"]) {
+  return typeof fee === "object" && typeof fee.amount === "number"
+    ? fee.amount
+    : undefined;
+}
+export function formatFee(
+  fee: Gig["fee"],
+  bandCurrency: string,
+  locale?: string,
+) {
+  if (typeof fee === "string") return fee.trim() || undefined;
+  if (typeof fee?.amount === "number")
+    return formatMoney(fee.amount, fee.currency ?? bandCurrency, locale);
+  return fee?.amount?.trim() || undefined;
+}
+const regionCurrencies: Record<string, string> = {
+  CZ: "CZK",
+  PL: "PLN",
+  HU: "HUF",
+  CH: "CHF",
+  GB: "GBP",
+  US: "USD",
+  CA: "CAD",
+  AU: "AUD",
+  NZ: "NZD",
+  SE: "SEK",
+  NO: "NOK",
+  DK: "DKK",
+  IS: "ISK",
+  RO: "RON",
+  JP: "JPY",
+  BR: "BRL",
+  MX: "MXN",
+};
+/** Currency for a browser locale, e.g. "cs" or "cs-CZ" gives CZK; euro countries and unknown regions get EUR. */
+export function currencyForLocale(locale?: string) {
+  try {
+    const region = new Intl.Locale(locale ?? "").maximize().region;
+    return (region && regionCurrencies[region]) || "EUR";
+  } catch {
+    return "EUR";
+  }
+}
+export function venueAverages(surveys: VenueSurvey[]) {
+  if (!surveys.length) return null;
+  const counts = capacities.map(
+    (capacity) => surveys.filter((s) => s.capacity === capacity).length,
+  );
+  const most = Math.max(...counts);
+  return {
+    rating: surveys.reduce((sum, s) => sum + s.rating, 0) / surveys.length,
+    capacities: capacities.filter((_, i) => counts[i] === most),
+    paProvided: surveys.filter((s) => s.pa === "venue provided").length,
+    count: surveys.length,
+  };
 }
 export interface OtherBand {
   id: string;
@@ -82,6 +217,7 @@ export interface Records {
   member: Member;
   gig: Gig;
   venue: Venue;
+  survey: VenueSurvey;
   contact: Contact;
   otherBand: OtherBand;
 }
@@ -111,11 +247,50 @@ function object(
     ...extra,
   };
 }
+const money = { type: "number", minimum: 0 };
+const currency = { type: "string", pattern: "^[A-Z]{3}$" };
+const surveyFields = {
+  venueId: id,
+  date,
+  rating: { type: "integer", minimum: 1, maximum: 5 },
+  capacity: { enum: [...capacities] },
+  setting: { enum: ["indoor", "outdoor"] },
+  pa: { enum: [...paOptions] },
+  stageNotes: { type: "string" },
+  playAgain: { type: "boolean" },
+};
+export const surveySchema = object(surveyFields, [
+  "venueId",
+  "date",
+  "rating",
+  "capacity",
+  "setting",
+  "pa",
+  "playAgain",
+]);
+const earningsSchema = {
+  type: "object",
+  properties: {
+    dealType: { enum: [...dealTypes] },
+    door: money,
+    hat: money,
+    bar: money,
+    total: money,
+    numberOfBands: { type: "integer", minimum: 1 },
+    handedOver: money,
+    takeHome: money,
+    currency,
+  },
+  required: ["dealType", "total", "takeHome", "currency"],
+  additionalProperties: false,
+  not: { required: ["numberOfBands", "handedOver"] },
+};
 export const schemas = {
-  band: object({ name: text }, ["name"]),
+  band: object({ name: text, currency }, ["name"]),
   member: object({ name: text, phone: text, email, messenger: text }, ["name"]),
   gig: object(
     {
+      earnings: earningsSchema,
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
@@ -145,7 +320,8 @@ export const schemas = {
           {
             type: "object",
             properties: {
-              amount: text,
+              amount: { anyOf: [text, money] },
+              currency,
               extras: { type: "array", items: text },
             },
             required: ["extras"],
@@ -165,6 +341,7 @@ export const schemas = {
     },
   ),
   venue: object({ name: text, address: text }, ["name", "address"]),
+  survey: surveySchema,
   otherBand: object(
     {
       name: text,
@@ -189,7 +366,7 @@ export type Kind = keyof Records;
 export interface Client {
   declareType(name: string, schema: object): unknown;
   storeObject(name: string, path: string, value: object): Promise<unknown>;
-  getObject(path: string): Promise<unknown>;
+  getObject(path: string, maxAge?: false | number): Promise<unknown>;
   getAll(path: string): Promise<unknown>;
   getListing(path: string): Promise<unknown>;
   validate(value: object): { valid?: boolean };
@@ -261,6 +438,67 @@ export function createGigger(client: Client) {
       }
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);
     },
+    async markPlayed(
+      bandId: string,
+      gigId: string,
+      survey: SurveyInput,
+      earnings: Earnings,
+    ) {
+      const path = recordPath("gig", bandId, gigId);
+      const current = read("gig", await client.getObject(path));
+      if (current.status !== "confirmed")
+        throw new Error("Reload this gig before marking it played.");
+      const venueId = current.venueId ?? `gig-${current.id}`;
+      const existing = await client.getObject(
+        recordPath("venue", bandId, venueId),
+      );
+      const venue = existing
+        ? read("venue", existing)
+        : read("venue", {
+            id: venueId,
+            name: current.venue,
+            address: current.address,
+          });
+      // Explicitly select survey fields: private earnings must never enter survey data.
+      const cleanSurvey = read("survey", {
+        id: current.id,
+        venueId,
+        date: current.date,
+        rating: survey.rating,
+        capacity: survey.capacity,
+        setting: survey.setting,
+        pa: survey.pa,
+        ...(survey.stageNotes?.trim()
+          ? { stageNotes: survey.stageNotes.trim() }
+          : {}),
+        playAgain: survey.playAgain,
+      });
+      const updated = read("gig", {
+        ...current,
+        venueId,
+        status: "played",
+        earnings,
+      });
+      if (
+        earnings.handedOver !== undefined &&
+        earnings.handedOver > earnings.total
+      )
+        throw new Error("Amount handed over cannot exceed total takings.");
+      if (!existing)
+        await client.storeObject(
+          "venue",
+          recordPath("venue", bandId, venueId),
+          venue,
+        );
+      // Each survey is its own record keyed by gig; a retry simply rewrites it.
+      await client.storeObject(
+        "survey",
+        recordPath("survey", bandId, current.id),
+        cleanSurvey,
+      );
+      await client.storeObject("gig", path, updated);
+      return updated;
+    },
     async moveGigStatus(bandId: string, gigId: string, status: GigStatus) {
       const path = recordPath("gig", bandId, gigId);
       const current = read("gig", await client.getObject(path));
@@ -288,8 +526,17 @@ export function createGigger(client: Client) {
       kind: K,
       bandId: string,
     ): Promise<Records[K][]> {
-      const values = await client.getAll(`bands/${safeId(bandId)}/${kind}s/`);
-      return Object.values(values ?? {}).map((value) => read(kind, value));
+      const listing = await client.getListing(
+        `bands/${safeId(bandId)}/${kind}s/`,
+      );
+      return Promise.all(
+        Object.keys(listing ?? {}).map(async (recordId) => {
+          const path = recordPath(kind, bandId, recordId);
+          const cached = await client.getObject(path);
+          // A fresh folder listing can arrive before its children are cached.
+          return read(kind, cached ?? (await client.getObject(path, 0)));
+        }),
+      );
     },
   };
 }
