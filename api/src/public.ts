@@ -101,6 +101,7 @@ ol,ul{list-style:none;margin:0;padding:0}
 .gigs time{display:flex;flex-direction:column;line-height:1}
 .day{font-size:3.25rem;letter-spacing:-.04em}
 .month{font-style:italic;margin-top:.35rem}
+.year{margin-top:.35rem}
 .where{margin:.25rem 0 0;font-size:1.375rem;line-height:1.2;overflow-wrap:anywhere}
 .when{margin:.3rem 0 0;color:#4f4729}
 .desc{margin:.75rem 0 0;white-space:pre-line}
@@ -119,15 +120,41 @@ export function renderPage(page: PublicPage, base: string, today: string) {
   const { upcoming, past } = splitGigs(page, today);
   const fmt = formatter(page.locale);
   const lang = page.locale ?? "en";
+  const cs = lang.toLowerCase().split("-")[0] === "cs";
+  const labels = cs
+    ? {
+        title: "živě",
+        description: `Kde bude ${page.name} hrát.`,
+        upcoming: "Nadcházející koncerty",
+        past: "Minulé koncerty",
+        empty: "Zatím nejsou ohlášené žádné koncerty. Zkuste to později.",
+        none: "Momentálně nejsou naplánované žádné koncerty",
+        tickets: "Vstupenky",
+        calendar: "Přidat koncerty do kalendáře",
+        json: "Data koncertů ve formátu JSON",
+        count: `${upcoming.length} ${upcoming.length === 1 ? "nadcházející koncert" : upcoming.length < 5 ? "nadcházející koncerty" : "nadcházejících koncertů"}`,
+      }
+    : {
+        title: "live",
+        description: `Where ${page.name} plays next.`,
+        upcoming: "Upcoming gigs",
+        past: "Past gigs",
+        empty: "No gigs announced yet. Check back soon.",
+        none: "Nothing booked right now",
+        tickets: "Tickets",
+        calendar: "Add these gigs to your calendar",
+        json: "Gig data as JSON",
+        count: `${upcoming.length} upcoming ${upcoming.length === 1 ? "gig" : "gigs"}`,
+      };
   const upcomingItems = upcoming
     .map(
       (gig) => `<li>
-<time datetime="${gig.date}${gig.start ? `T${gig.start}` : ""}"><span class="day">${esc(fmt(gig, { day: "numeric" }))}</span><span class="month">${esc(fmt(gig, { month: "short" }))}</span></time>
+<time datetime="${gig.date}${gig.start ? `T${gig.start}` : ""}"><span class="day">${esc(fmt(gig, { day: "numeric" }))}</span><span class="month">${esc(fmt(gig, { month: "short" }))}</span>${gig.date.slice(0, 4) !== today.slice(0, 4) ? `<span class="year">${gig.date.slice(0, 4)}</span>` : ""}</time>
 <div>
 <p class="where">${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</p>
 <p class="when">${esc(fmt(gig, { weekday: "long" }))}${gig.start ? `, ${esc(fmt(gig, { hour: "numeric", minute: "2-digit" }))}` : ""}</p>
 ${gig.description ? `<p class="desc">${esc(gig.description)}</p>` : ""}
-${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">Tickets</a>` : ""}
+${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">${labels.tickets}</a>` : ""}
 </div>
 </li>`,
     )
@@ -143,25 +170,25 @@ ${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">Tickets</a>` 
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(page.name)} live</title>
-<meta name="description" content="Where ${esc(page.name)} plays next.">
+<title>${esc(page.name)} ${labels.title}</title>
+<meta name="description" content="${esc(labels.description)}">
 <style>${css}</style>
 </head>
 <body>
 <header>
 <h1>${esc(page.name)}</h1>
-<p>${upcoming.length ? `${upcoming.length} upcoming ${upcoming.length === 1 ? "gig" : "gigs"}` : "Nothing booked right now"}</p>
+<p>${upcoming.length ? labels.count : labels.none}</p>
 </header>
 <main>
 <section aria-labelledby="upcoming">
-<h2 id="upcoming">Upcoming gigs</h2>
-${upcoming.length ? `<ol class="gigs">\n${upcomingItems}\n</ol>` : `<p class="empty">No gigs announced yet. Check back soon.</p>`}
+<h2 id="upcoming">${labels.upcoming}</h2>
+${upcoming.length ? `<ol class="gigs">\n${upcomingItems}\n</ol>` : `<p class="empty">${labels.empty}</p>`}
 </section>
-${past.length ? `<section aria-labelledby="past">\n<h2 id="past">Past gigs</h2>\n<ul class="past">\n${pastItems}\n</ul>\n</section>` : ""}
+${past.length ? `<section aria-labelledby="past">\n<h2 id="past">${labels.past}</h2>\n<ul class="past">\n${pastItems}\n</ul>\n</section>` : ""}
 </main>
 <footer>
-<a href="${base}gigs.ics">Add these gigs to your calendar</a>
-<a href="${base}gigs.json">Gig data as JSON</a>
+<a href="${base}gigs.ics">${labels.calendar}</a>
+<a href="${base}gigs.json">${labels.json}</a>
 </footer>
 </body>
 </html>
@@ -189,9 +216,8 @@ export function renderIcs(page: PublicPage, identity: string) {
       "BEGIN:VEVENT",
       `UID:${id}@${identity}`,
       `DTSTAMP:${stamp}`,
-      // Floating local time: the gig happens at the venue's wall-clock time.
       gig.start
-        ? `DTSTART:${date}T${gig.start.replace(":", "")}00`
+        ? `DTSTART;TZID=Europe/Prague:${date}T${gig.start.replace(":", "")}00`
         : `DTSTART;VALUE=DATE:${date}`,
       `SUMMARY:${icsText(`${page.name} at ${gig.venue}`)}`,
       `LOCATION:${icsText([gig.venue, gig.city].filter(Boolean).join(", "))}`,
@@ -205,6 +231,21 @@ export function renderIcs(page: PublicPage, identity: string) {
     "VERSION:2.0",
     "PRODID:-//Gigger//Public gigs//EN",
     `X-WR-CALNAME:${icsText(page.name)}`,
+    "BEGIN:VTIMEZONE",
+    "TZID:Europe/Prague",
+    "BEGIN:DAYLIGHT",
+    "DTSTART:19700329T020000",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
+    "TZOFFSETFROM:+0100",
+    "TZOFFSETTO:+0200",
+    "END:DAYLIGHT",
+    "BEGIN:STANDARD",
+    "DTSTART:19701025T030000",
+    "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
+    "TZOFFSETFROM:+0200",
+    "TZOFFSETTO:+0100",
+    "END:STANDARD",
+    "END:VTIMEZONE",
     ...events.flat(),
     "END:VCALENDAR",
     "",

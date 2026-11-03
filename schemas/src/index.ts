@@ -488,7 +488,14 @@ export function createGigger(client: Client, publicClient?: Client) {
     if (!publicClient) return;
     const path = `${slug}/gigs/${safeId(gig.id)}`;
     if (!publicStatuses.includes(gig.status)) {
-      await publicClient.remove(path);
+      const existing =
+        (await publicClient.getObject(path)) ??
+        (await publicClient.getObject(path, 0).catch((error: unknown) => {
+          if (String(error).includes("remote is not connected"))
+            return undefined;
+          throw error;
+        }));
+      if (existing) await publicClient.remove(path);
       return;
     }
     const venue = gig.venueId

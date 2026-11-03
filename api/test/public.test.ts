@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { openDatabase } from "../src/db";
-import { cleanPage, publicHandler, renderIcs } from "../src/public";
+import { cleanPage, publicHandler, renderIcs, renderPage } from "../src/public";
 import { handler } from "../src/server";
 
 const leaked = {
@@ -127,7 +127,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     expect(JSON.stringify(json)).not.toMatch(privateText);
 
     const ics = await (await get("/b/the-band/gigs.ics")).text();
-    expect(ics).toContain("DTSTART:29990620T200000\r\n");
+    expect(ics).toContain("DTSTART;TZID=Europe/Prague:29990620T200000\r\n");
     expect(ics).toContain("DTSTART;VALUE=DATE:20010503\r\n");
     expect(ics).toContain("LOCATION:Café V lese\\, Praha");
     expect(ics).toContain("DESCRIPTION:All ages\\, doors 19:00");
@@ -185,4 +185,58 @@ test("cleanPage drops anything that is not an allowed public field", () => {
   expect(renderIcs({ name: "A;B", gigs: {} }, "s")).toContain(
     String.raw`X-WR-CALNAME:A\;B`,
   );
+});
+
+test("public page translates labels and shows years on upcoming cards when needed", () => {
+  const gigs = {
+    current: {
+      date: "2030-06-01",
+      venue: "Club",
+      ticketUrl: "https://example.com",
+    },
+    next: { date: "2031-01-01", venue: "Hall" },
+    past: { date: "2029-01-01", venue: "Old" },
+  };
+  const czech = renderPage(
+    { name: "Kapela", locale: "cs-CZ", gigs },
+    "",
+    "2030-01-01",
+  );
+  for (const label of [
+    "Nadcházející koncerty",
+    "Minulé koncerty",
+    "Vstupenky",
+    "Přidat koncerty do kalendáře",
+    "Data koncertů ve formátu JSON",
+  ])
+    expect(czech).toContain(label);
+  expect(czech).toContain('<span class="year">2031</span>');
+  expect(czech).not.toContain('<span class="year">2030</span>');
+  const english = renderPage(
+    { name: "Band", locale: "de-DE", gigs: {} },
+    "",
+    "2030-01-01",
+  );
+  expect(english).toContain("Upcoming gigs");
+  expect(english).toContain("No gigs announced yet.");
+});
+
+test("calendar uses Prague timezone for timed events and dates for all-day events", () => {
+  const ics = renderIcs(
+    {
+      name: "Band",
+      gigs: {
+        summer: { date: "2030-07-01", start: "20:00", venue: "Club" },
+        winter: { date: "2030-01-01", start: "20:00", venue: "Club" },
+        allDay: { date: "2030-01-02", venue: "Club" },
+      },
+    },
+    "band",
+  );
+  expect(ics).toContain("TZID:Europe/Prague\r\n");
+  expect(ics).toContain("DTSTART;TZID=Europe/Prague:20300701T200000\r\n");
+  expect(ics).toContain("DTSTART;TZID=Europe/Prague:20300101T200000\r\n");
+  expect(ics).toContain("DTSTART;VALUE=DATE:20300102\r\n");
+  expect(ics).toContain("TZOFFSETTO:+0200\r\n");
+  expect(ics).toContain("TZOFFSETTO:+0100\r\n");
 });

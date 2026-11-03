@@ -170,6 +170,21 @@ test("status publication can be retried after a public write fails", async () =>
       status: "confirmed",
     });
     const remove = publicClient.remove.bind(publicClient);
+    const removed: string[] = [];
+    publicClient.remove = async (path) => {
+      removed.push(path);
+      return remove(path);
+    };
+    await store.save("gig", "a", {
+      id: "never",
+      title: "Gig",
+      venue: "Club",
+      address: "Street",
+      contacts: [],
+      date: "2030-01-01",
+      status: "offered",
+    });
+    expect(removed).not.toContain("band/gigs/never");
     let fail = true;
     publicClient.remove = async (path) => {
       if (fail && path === "band/gigs/g") {
