@@ -39,6 +39,8 @@ export interface Gig {
   public?: { ticketUrl?: string; description?: string };
   /** Whether a public copy may have been written; absent on legacy gigs. */
   published?: boolean;
+  /** Inbox conversation this gig was created from. */
+  conversationId?: string;
   date: string;
   loadIn?: string;
   soundcheck?: string;
@@ -247,6 +249,108 @@ export const enquirySources = [
   "other",
 ] as const;
 export type EnquirySource = (typeof enquirySources)[number];
+export const channels = ["email", "messenger", "instagram"] as const;
+export type Channel = (typeof channels)[number];
+export interface Attachment {
+  type: string;
+  /** Storage path under /gigger/ once copied, or the original URL. */
+  url: string;
+  mediaType?: string;
+  name?: string;
+}
+export interface Party {
+  id: string;
+  name?: string;
+}
+/** ActivityStreams-shaped message: actor sent object to target over a channel. */
+export interface Message {
+  id: string;
+  channel: Channel;
+  direction: "in" | "out";
+  conversation: string;
+  bandId: string;
+  actor: Party;
+  target: Party;
+  object: { type: "Note"; content: string; attachment?: Attachment[] };
+  published: string;
+  received?: string;
+  /** Set when a reply could not be delivered. */
+  error?: string;
+}
+export interface Conversation {
+  bandId: string;
+  channel: Channel;
+  /** The other party; contacts match on their messenger, instagram or email field. */
+  peer: Party;
+  /** Our side: the Page or Instagram account ID the conversation runs through. */
+  account?: string;
+  lastIn?: string;
+  lastOut?: string;
+  preview: string;
+}
+export type ConversationIndex = Record<string, Conversation>;
+export const conversationsPath = "conversations/index";
+/** Scoped to the band so a Page moved between bands never merges their threads; Meta IDs are path-safe, email addresses are base64url-encoded. */
+export function conversationId(
+  channel: Channel,
+  bandId: string,
+  peerId: string,
+) {
+  const safe = /^[A-Za-z0-9_-]+$/.test(peerId)
+    ? peerId
+    : btoa(peerId).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${channel}-${safeId(bandId)}-${safe}`;
+}
+export function messagePath(
+  message: Pick<Message, "conversation" | "published" | "id">,
+) {
+  return `conversations/${safeId(message.conversation)}/${message.published.slice(0, 7)}/${safeId(message.id)}`;
+}
+/** Copied attachments live in a sibling folder so message listings hold only JSON documents. */
+export function attachmentPath(
+  message: Pick<Message, "conversation" | "published" | "id">,
+  n: number,
+) {
+  const path = messagePath(message);
+  return `${path.slice(0, path.lastIndexOf("/"))}/files/${safeId(message.id)}-${n}`;
+}
+export function messagePeer(message: Message) {
+  return message.direction === "in" ? message.actor : message.target;
+}
+/** Meta only allows replies within 24 hours of the contact's last message; returns the reason when blocked. */
+export function replyBlocked(conversation: Conversation, now = Date.now()) {
+  if (conversation.channel === "email") return "";
+  const since = now - Date.parse(conversation.lastIn ?? "");
+  if (since >= 0 && since < 24 * 60 * 60 * 1000) return "";
+  const name = conversation.channel === "messenger" ? "Messenger" : "Instagram";
+  return `${name} only allows replies within 24 hours of the contact's last message. Wait for them to write again.`;
+}
+export function withMessage(
+  index: ConversationIndex,
+  message: Message,
+): ConversationIndex {
+  const previous = index[message.conversation];
+  const key = message.direction === "in" ? "lastIn" : "lastOut";
+  if (previous && (previous[key] ?? "") >= message.published) return index;
+  const newest =
+    message.published >= (previous?.lastIn ?? "") &&
+    message.published >= (previous?.lastOut ?? "");
+  return {
+    ...index,
+    [message.conversation]: {
+      bandId: message.bandId,
+      channel: message.channel,
+      peer: { ...previous?.peer, ...messagePeer(message) },
+      account: (message.direction === "in" ? message.target : message.actor).id,
+      ...(previous?.lastIn ? { lastIn: previous.lastIn } : {}),
+      ...(previous?.lastOut ? { lastOut: previous.lastOut } : {}),
+      [key]: message.published,
+      preview: newest
+        ? message.object.content.slice(0, 120)
+        : (previous?.preview ?? ""),
+    },
+  };
+}
 export const statusMoves: Record<GigStatus, readonly GigStatus[]> = {
   enquiry: ["offered", "cancelled"],
   offered: ["confirmed", "cancelled"],
@@ -359,6 +463,77 @@ const earningsSchema = {
   additionalProperties: false,
   not: { required: ["numberOfBands", "handedOver"] },
 };
+const party = {
+  type: "object",
+  properties: { id: text, name: { type: "string" } },
+  required: ["id"],
+  additionalProperties: false,
+};
+const dateTime = { type: "string", format: "date-time" };
+export const messageSchema = object(
+  {
+    channel: { enum: [...channels] },
+    direction: { enum: ["in", "out"] },
+    conversation: id,
+    bandId: id,
+    actor: party,
+    target: party,
+    object: {
+      type: "object",
+      properties: {
+        type: { const: "Note" },
+        content: { type: "string" },
+        attachment: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: text,
+              url: text,
+              mediaType: { type: "string" },
+              name: { type: "string" },
+            },
+            required: ["type", "url"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["type", "content"],
+      additionalProperties: false,
+    },
+    published: dateTime,
+    received: dateTime,
+    error: { type: "string" },
+  },
+  [
+    "channel",
+    "direction",
+    "conversation",
+    "bandId",
+    "actor",
+    "target",
+    "object",
+    "published",
+  ],
+);
+export const conversationsSchema = {
+  type: "object",
+  properties: { "@context": { type: "string" } },
+  additionalProperties: {
+    type: "object",
+    properties: {
+      bandId: id,
+      channel: { enum: [...channels] },
+      peer: party,
+      account: text,
+      lastIn: dateTime,
+      lastOut: dateTime,
+      preview: { type: "string" },
+    },
+    required: ["bandId", "channel", "peer", "preview"],
+    additionalProperties: false,
+  },
+};
 export const schemas = {
   band: object(
     {
@@ -374,6 +549,7 @@ export const schemas = {
     {
       earnings: earningsSchema,
       published: { type: "boolean" },
+      conversationId: id,
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
@@ -486,6 +662,8 @@ export function createGigger(client: Client, publicClient?: Client) {
     required: ["slug", "bandId"],
     additionalProperties: false,
   });
+  client.declareType("message", messageSchema);
+  client.declareType("conversations", conversationsSchema);
   for (const [kind, schema] of Object.entries(publicSchemas))
     publicClient?.declareType(kind, schema);
   function read<K extends Kind>(kind: K, value: unknown): Records[K] {
@@ -634,7 +812,40 @@ export function createGigger(client: Client, publicClient?: Client) {
     }
     return paths;
   }
+  function valid<T>(kind: string, value: unknown): T {
+    const checked = client.validate({
+      ...(value as object),
+      "@context": `http://remotestorage.io/spec/modules/gigger/${kind}`,
+    });
+    if (!checked.valid) throw new Error(`Invalid ${kind} record in storage`);
+    return value as T;
+  }
   return {
+    /** The server writes messages; the app only reads them. */
+    async conversations(): Promise<ConversationIndex> {
+      const stored = await client.getObject(conversationsPath);
+      if (!stored) return {};
+      const { "@context": _, ...index } = stored as Record<string, unknown>;
+      return valid<ConversationIndex>("conversations", index);
+    },
+    async messages(conversation: string): Promise<Message[]> {
+      const root = `conversations/${safeId(conversation)}/`;
+      const months = Object.keys((await client.getListing(root)) ?? {}).filter(
+        (key) => /^\d{4}-\d{2}\/$/.test(key),
+      );
+      const messages: Message[] = [];
+      for (const month of months) {
+        const items = (await client.getListing(root + month)) ?? {};
+        for (const name of Object.keys(items)) {
+          if (!/^[A-Za-z0-9_-]+$/.test(name)) continue;
+          const path = root + month + name;
+          const value =
+            (await client.getObject(path)) ?? (await client.getObject(path, 0));
+          messages.push(valid<Message>("message", value));
+        }
+      }
+      return messages.sort((a, b) => a.published.localeCompare(b.published));
+    },
     async pendingDeletes() {
       return [
         ...(await pendingPaths("pending-public-deletes")),

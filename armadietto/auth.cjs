@@ -15,10 +15,17 @@ function createAuthHandler(store, clientId) {
             "Use a username of 2–64 letters, numbers, dots, underscores or dashes.",
         },
       };
-    if (!["signup", "login", "logout"].includes(action))
+    if (!["signup", "login", "logout", "token"].includes(action))
       return { status: 404, body: { error: "Not found" } };
     const email =
       typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+    if (action === "token") {
+      // Long-lived server token so webhooks can write into the account; the API verified the user first.
+      const token = await store.authorize(clientId, username, {
+        gigger: ["r", "w"],
+      });
+      return { status: 200, body: { token } };
+    }
     if (action === "logout") {
       if (typeof input.token !== "string" || !input.token)
         return { status: 400, body: { error: "Missing session." } };

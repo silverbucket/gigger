@@ -13,6 +13,7 @@ import {
 } from "@gigger/schemas";
 import { onMount } from "svelte";
 import Bookings from "./Bookings.svelte";
+import Inbox, { type InboxEnquiry } from "./Inbox.svelte";
 import {
   bands,
   connectSession,
@@ -68,6 +69,143 @@ let slugText = $derived(
 let pageUrl = $derived(
   current?.band.slug ? `${location.origin}/b/${current.band.slug}` : "",
 );
+let inboxEnquiry = $state<InboxEnquiry | undefined>();
+let inboxNonce = $state(0);
+let metaConfig = $state<{ appId: string; configId: string } | null>(null);
+let metaPage = $state<{ pageId: string; instagram: boolean } | null>(null);
+let metaPages = $state<{ id: string; name: string }[]>([]);
+let metaLoadedFor = $state("");
+function account() {
+  const { userAddress, token } = storage.remote;
+  if (!userAddress.endsWith(`@${location.host}`))
+    throw new Error("This feature is available for accounts on this site.");
+  return {
+    username: decodeURIComponent(
+      userAddress.slice(0, userAddress.lastIndexOf("@")),
+    ),
+    token,
+  };
+}
+async function loadMetaPage(bandId: string) {
+  metaLoadedFor = bandId;
+  const { username, token } = account();
+  const response = await fetch(
+    `/api/meta/page?${new URLSearchParams({ username, bandId })}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok) return;
+  const page = await response.json();
+  if (metaLoadedFor === bandId) metaPage = page;
+}
+$effect(() => {
+  const bandId = current?.band.id;
+  if (!bandId || bandId === metaLoadedFor) return;
+  metaPage = null;
+  metaPages = [];
+  void loadMetaPage(bandId).catch(() => {});
+});
+type FacebookSdk = {
+  init(options: object): void;
+  login(
+    callback: (response: { authResponse?: { accessToken?: string } }) => void,
+    options: object,
+  ): void;
+};
+const fb = () => (window as Window & { FB?: FacebookSdk }).FB;
+function facebookSdk() {
+  return new Promise<FacebookSdk>((resolve, reject) => {
+    const loaded = fb();
+    if (loaded) return resolve(loaded);
+    const script = document.createElement("script");
+    script.src = "https://connect.facebook.net/en_US/sdk.js";
+    script.onload = () => {
+      const sdk = fb();
+      sdk?.init({ appId: metaConfig?.appId, version: "v21.0" });
+      sdk ? resolve(sdk) : reject(new Error("Facebook SDK failed"));
+    };
+    script.onerror = () =>
+      reject(new Error("Could not load the Facebook SDK."));
+    document.head.append(script);
+  });
+}
+async function connectPage(pageId?: string, accessToken?: string) {
+  const band = current?.band;
+  if (!band) return;
+  busy = true;
+  error = "";
+  try {
+    const { username, token } = account();
+    if (!accessToken) {
+      const FB = await facebookSdk();
+      accessToken = await new Promise<string>((resolve, reject) =>
+        FB.login(
+          (response) =>
+            response.authResponse?.accessToken
+              ? resolve(response.authResponse.accessToken)
+              : reject(new Error("Facebook login was cancelled.")),
+          { config_id: metaConfig?.configId },
+        ),
+      );
+    }
+    const response = await fetch("/api/meta/connect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: band.id, accessToken, pageId }),
+    });
+    const result = await response.json();
+    if (current?.band.id !== band.id) return; // the user moved to another band meanwhile
+    if (response.status === 409 && result.pages?.length) {
+      // Several pages: remember the token and let the user pick one.
+      metaPages = result.pages.map((p: { id: string; name: string }) => ({
+        ...p,
+        token: accessToken,
+      }));
+      return;
+    }
+    if (!response.ok)
+      throw new Error(result.error ?? "Could not connect the page.");
+    metaPages = [];
+    metaPage = result;
+  } catch (cause) {
+    error =
+      cause instanceof Error ? cause.message : "Could not connect the page.";
+  } finally {
+    busy = false;
+  }
+}
+async function disconnectPage() {
+  const band = current?.band;
+  if (
+    !band ||
+    !confirm("Disconnect this Facebook Page? New messages will stop arriving.")
+  )
+    return;
+  busy = true;
+  error = "";
+  try {
+    const { username, token } = account();
+    const response = await fetch("/api/meta/disconnect", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: band.id }),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.json()).error ?? "Could not disconnect. Please retry.",
+      );
+    if (current?.band.id === band.id) metaPage = null;
+  } catch (cause) {
+    error = cause instanceof Error ? cause.message : "Could not disconnect.";
+  } finally {
+    busy = false;
+  }
+}
 
 async function publishPage(event: SubmitEvent) {
   event.preventDefault();
@@ -254,6 +392,9 @@ function resetSession() {
   bandName = "";
   password = "";
   openedGig = "";
+  inboxEnquiry = undefined;
+  metaLoadedFor = "";
+  metaPage = null;
   resetMember();
 }
 function logOut(event: MouseEvent) {
@@ -277,6 +418,12 @@ onMount(() => {
     status = "";
     history.replaceState(null, "", "/");
     refresh();
+    void fetch("/api/meta/config")
+      .then((r) => r.json())
+      .then((config) => {
+        metaConfig = config;
+      })
+      .catch(() => {});
   });
   storage.on("error", () => {
     error =
@@ -405,6 +552,7 @@ onMount(() => {
           onchange={() => {
             resetMember();
             openedGig = "";
+            inboxEnquiry = undefined;
           }}
         >
           <option value="">All bands</option>
@@ -522,6 +670,39 @@ onMount(() => {
             {current.band.slug ? "Save address" : "Publish page"}
           </button>
         </form>
+        <h3>Messenger and Instagram</h3>
+        {#if metaPage}
+          <p>
+            Connected to Facebook Page {metaPage.pageId}{metaPage.instagram
+              ? " and its Instagram account"
+              : ""}. Messages arrive in the Inbox below.
+          </p>
+          <button type="button" disabled={busy} onclick={disconnectPage}>
+            Disconnect page
+          </button>
+        {:else if metaPages.length}
+          <p>Which page should this band use?</p>
+          {#each metaPages as page (page.id)}
+            <button
+              type="button"
+              disabled={busy}
+              onclick={() =>
+                connectPage(page.id, (page as { token?: string }).token)}
+            >
+              {page.name}
+            </button>
+          {/each}
+        {:else if metaConfig?.appId}
+          <p>
+            Connect the band's Facebook Page to answer Messenger and Instagram
+            enquiries from the Inbox.
+          </p>
+          <button type="button" disabled={busy} onclick={() => connectPage()}>
+            Connect Facebook Page
+          </button>
+        {:else}
+          <p>Facebook is not configured on this server.</p>
+        {/if}
         <h3>Members</h3>
         <ul>
           {#each current.members as member (member.id)}
@@ -571,11 +752,28 @@ onMount(() => {
         </form>
       </section>
     {/if}
-    {#key selected}
+    <Inbox
+      {summaries}
+      bandId={selected}
+      onopengig={(bandId, gigId) => {
+        inboxEnquiry = undefined;
+        openedGig = gigId;
+        selected = bandId;
+        inboxNonce++;
+      }}
+      oncreategig={(bandId, enquiry) => {
+        openedGig = "";
+        inboxEnquiry = enquiry;
+        selected = bandId;
+        inboxNonce++;
+      }}
+    />
+    {#key `${selected}:${inboxNonce}`}
       <Bookings
         {summaries}
         bandId={selected}
         initialGigId={openedGig}
+        initialEnquiry={inboxEnquiry}
         onopen={(bandId, gigId) => {
           openedGig = gigId;
           selected = bandId;
@@ -599,6 +797,7 @@ onMount(() => {
               onclick={() => {
                 selected = summary.band.id;
                 openedGig = "";
+                inboxEnquiry = undefined;
                 resetMember();
               }}
             >

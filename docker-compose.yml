@@ -76,6 +76,11 @@ services:
       ARMADIETTO_AUTH_URL: http://armadietto:8001
       ARMADIETTO_URL: http://armadietto:8000
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:${PORT:-8080}}
+      SOCKETHUB_URL: http://sockethub:10550
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
+      META_CONFIG_ID: ${META_CONFIG_ID:-}
     volumes:
       - api_data:/data
     healthcheck:

@@ -10,5 +10,9 @@ export function openDatabase(
   db.exec(
     "CREATE TABLE IF NOT EXISTS public_pages (slug TEXT PRIMARY KEY, username TEXT NOT NULL, band_id TEXT NOT NULL, UNIQUE (username, band_id))",
   );
+  // Connected Facebook Pages: the Page token sends replies, the storage token lets webhooks write into the account.
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS meta_pages (page_id TEXT PRIMARY KEY, ig_id TEXT, username TEXT NOT NULL, band_id TEXT NOT NULL, token TEXT NOT NULL, storage_token TEXT NOT NULL, UNIQUE (username, band_id))",
+  );
   return db;
 }

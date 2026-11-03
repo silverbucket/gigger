@@ -183,7 +183,11 @@ test("signup, login, duplicate email and logout through the API without an accou
     store.put = originalPut;
     expect(
       db.query("SELECT name FROM sqlite_master WHERE type='table'").all(),
-    ).toEqual([{ name: "items" }, { name: "public_pages" }]);
+    ).toEqual([
+      { name: "items" },
+      { name: "public_pages" },
+      { name: "meta_pages" },
+    ]);
   } finally {
     backend.stop(true);
     db.close();
