@@ -17,7 +17,7 @@ export function validSignature(
   rawBody: string,
   header: string | null,
 ) {
-  if (!header?.startsWith("sha256=")) return false;
+  if (!header || !/^sha256=[0-9a-f]{64}$/.test(header)) return false;
   const expected = new Bun.CryptoHasher("sha256", secret)
     .update(rawBody)
     .digest("hex");
@@ -105,10 +105,13 @@ export function metaHandler(
   const fail = (error: string, status: number) =>
     Response.json({ error }, { status, headers: noStore });
   const fb = async (path: string, init?: RequestInit) => {
-    const response = await fetch(`${graphUrl}${path}`, {
-      ...init,
-      signal: AbortSignal.timeout(15000),
-    });
+    const response = await fetch(
+      /^https?:/.test(path) ? path : `${graphUrl}${path}`,
+      {
+        ...init,
+        signal: AbortSignal.timeout(15000),
+      },
+    );
     const body = await response.json();
     if (!response.ok)
       throw Object.assign(
@@ -288,16 +291,21 @@ export function metaHandler(
           const longLived = await fb(
             `/oauth/access_token?grant_type=fb_exchange_token&client_id=${env.META_APP_ID}&client_secret=${env.META_APP_SECRET}&fb_exchange_token=${encodeURIComponent(accessToken)}`,
           );
-          const { data: pages } = (await fb(
-            `/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${encodeURIComponent(longLived.access_token)}`,
-          )) as {
-            data: {
-              id: string;
-              name: string;
-              access_token: string;
-              instagram_business_account?: { id: string };
-            }[];
+          type Page = {
+            id: string;
+            name: string;
+            access_token: string;
+            instagram_business_account?: { id: string };
           };
+          const pages: Page[] = [];
+          let next: string | undefined =
+            `/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${encodeURIComponent(longLived.access_token)}`;
+          while (next && pages.length < 500) {
+            const batch: { data: Page[]; paging?: { next?: string } } =
+              await fb(next);
+            pages.push(...batch.data);
+            next = batch.paging?.next;
+          }
           const page = pageId
             ? pages.find((p) => p.id === pageId)
             : pages.length === 1

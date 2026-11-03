@@ -214,6 +214,9 @@ test("webhook verifies the challenge and rejects bad signatures", async () => {
     expect(validSignature(secret, body, `sha256=${"0".repeat(64)}`)).toBe(
       false,
     );
+    expect(validSignature(secret, body, `sha256=${"é".repeat(64)}`)).toBe(
+      false,
+    );
     expect(validSignature(secret, body, null)).toBe(false);
     expect(t.docs.size).toBe(0);
   } finally {
@@ -635,6 +638,11 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       calls.push(`${req.method} ${url.pathname}`);
       if (url.pathname === "/oauth/access_token")
         return Response.json({ access_token: "long-user" });
+      if (url.pathname === "/me/accounts" && !url.searchParams.has("after"))
+        return Response.json({
+          data: [{ id: "page-1", name: "Other Page", access_token: "p1" }],
+          paging: { next: `${url.origin}/me/accounts?after=1` },
+        });
       if (url.pathname === "/me/accounts")
         return Response.json({
           data: [
@@ -690,7 +698,12 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       (
         await post(
           "/meta/connect",
-          { username: "sam", bandId: "band1", accessToken: "short" },
+          {
+            username: "sam",
+            bandId: "band1",
+            accessToken: "short",
+            pageId: "page-2",
+          },
           "bad",
         )
       ).status,
@@ -699,15 +712,30 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       (
         await post(
           "/meta/connect",
-          { username: "sam", bandId: "band1", accessToken: "short" },
+          {
+            username: "sam",
+            bandId: "band1",
+            accessToken: "short",
+            pageId: "page-2",
+          },
           "read-only",
         )
       ).status,
     ).toBe(401);
+    const choose = await post("/meta/connect", {
+      username: "sam",
+      bandId: "band1",
+      accessToken: "short",
+    });
+    expect(choose.status).toBe(409);
+    expect(
+      (await choose.json()).pages.map((p: { id: string }) => p.id),
+    ).toEqual(["page-1", "page-2"]);
     const connected = await post("/meta/connect", {
       username: "sam",
       bandId: "band1",
       accessToken: "short",
+      pageId: "page-2",
     });
     expect(await connected.json()).toEqual({
       pageId: "page-2",
@@ -738,11 +766,13 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
         username: "sam",
         bandId: "band1",
         accessToken: "short",
+        pageId: "page-2",
       }),
       post("/meta/connect", {
         username: "sam",
         bandId: "band2",
         accessToken: "short",
+        pageId: "page-2",
       }),
     ]);
     expect(race.map((r) => r.status).sort()).toEqual([200, 409]);
@@ -755,6 +785,7 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       username: "sam",
       bandId: "band1",
       accessToken: "short",
+      pageId: "page-2",
     });
     expect(armadietto.minted).toHaveLength(1);
     expect(

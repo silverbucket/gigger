@@ -183,13 +183,24 @@ async function fileUrl(attachment: Attachment) {
 onMount(() => {
   void run(load);
   const scope = storage.scope("/gigger/conversations/");
-  const changed = () => void load().catch(() => {});
+  // One refresh per sync, as Bookings does, instead of one per synced document.
+  let dirty = false;
+  const changed = () => {
+    dirty = true;
+  };
+  const synced = () => {
+    if (!dirty) return;
+    dirty = false;
+    void load().catch(() => {});
+  };
   scope.on("change", changed);
+  storage.on("sync-done", synced);
   const tick = setInterval(() => {
     now = Date.now();
   }, 60000);
   return () => {
     scope.removeEventListener("change", changed);
+    storage.removeEventListener("sync-done", synced);
     clearInterval(tick);
     for (const url of Object.values(files)) URL.revokeObjectURL(url);
   };
@@ -259,7 +270,8 @@ $effect(() => {
               )}
                 <img src={url} alt={attachment.name ?? "Attachment"}>
               {:else}
-                <a href={url} download={attachment.name}>
+                <!-- Always a download: a blob URL shares the app origin, so stored HTML must never render. -->
+                <a href={url} download={attachment.name ?? ""}>
                   {attachment.name ?? attachment.type}
                 </a>
               {/if}

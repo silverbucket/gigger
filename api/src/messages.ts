@@ -44,10 +44,12 @@ export function messageHandler(
       "@context": context("message"),
       ...message,
     });
-    await store.update<ConversationIndex>(conversationsPath, (index) =>
-      withMessage(index ?? {}, message),
+    const indexed = await store.update<ConversationIndex>(
+      conversationsPath,
+      (index) => withMessage(index ?? {}, message),
     );
-    if (status === 412) return false;
+    // A redelivery that only repairs the index is still news for open tabs.
+    if (status === 412 && !indexed) return false;
     notify(username, message);
     return true;
   }

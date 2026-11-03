@@ -42,16 +42,16 @@ export function remoteStore(baseUrl: string, username: string, token: string) {
   return {
     get,
     put,
-    /** Read-modify-write; a 412 means another writer got there first, so read again. */
+    /** Read-modify-write; a 412 means another writer got there first, so read again. Returns whether anything was written. */
     async update<T>(path: string, change: (current: T | undefined) => T) {
       for (let attempt = 0; attempt < 5; attempt++) {
         const { value, etag } = await get<T>(path);
         const next = change(value);
-        if (next === value) return next;
+        if (next === value) return false;
         const status = etag
           ? await put(path, next, "application/json", etag)
           : await put(path, next);
-        if (status !== 412) return next;
+        if (status !== 412) return true;
       }
       throw new Error("Storage kept changing; please retry.");
     },

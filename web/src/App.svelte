@@ -93,7 +93,9 @@ async function loadMetaPage(bandId: string) {
     `/api/meta/page?${new URLSearchParams({ username, bandId })}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  if (response.ok && metaLoadedFor === bandId) metaPage = await response.json();
+  if (!response.ok) return;
+  const page = await response.json();
+  if (metaLoadedFor === bandId) metaPage = page;
 }
 $effect(() => {
   const bandId = current?.band.id;
