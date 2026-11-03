@@ -48,6 +48,14 @@ let error = $state("");
 let ready = $state(false);
 let busy = $state(false);
 let current = $derived(summaries.find((item) => item.band.id === selected));
+// An unsaved currency edit survives reloads from saves and syncs; once saved
+// or when another band is shown, the field follows the stored currency again.
+let currencyDraft = $state<{ bandId: string; text: string } | null>(null);
+let currencyText = $derived(
+  currencyDraft && currencyDraft.bandId === current?.band.id
+    ? currencyDraft.text
+    : (current?.band.currency ?? "EUR"),
+);
 
 async function load() {
   const token = storage.remote.token;
@@ -148,7 +156,9 @@ async function authenticate(event: SubmitEvent) {
         username,
         email,
         password,
-        ...(mode === "signup" ? { bandName } : {}),
+        ...(mode === "signup"
+          ? { bandName, currency: bandCurrency.toUpperCase() }
+          : {}),
       }),
     });
     const session = await response.json();
@@ -361,21 +371,26 @@ onMount(() => {
         <form
           onsubmit={(event) => {
             event.preventDefault();
-            const currency = new FormData(event.currentTarget).get(
-              "currency",
-            ) as string;
-            void save(() =>
-              bands.save("band", current.band.id, {
-                ...current.band,
-                currency: currency.toUpperCase(),
-              }),
-            );
+            const band = current.band;
+            void save(async () => {
+              await bands.save("band", band.id, {
+                ...band,
+                currency: currencyText.toUpperCase(),
+              });
+              currencyDraft = null;
+            });
           }}
         >
           <label
             >Band currency<input
               name="currency"
-              value={current.band.currency ?? "EUR"}
+              value={currencyText}
+              oninput={(event) => {
+                currencyDraft = {
+                  bandId: current.band.id,
+                  text: event.currentTarget.value,
+                };
+              }}
               pattern={"[A-Za-z]{3}"}
               maxlength="3"
               required

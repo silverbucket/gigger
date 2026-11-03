@@ -82,6 +82,7 @@ test("signup, login, duplicate email and logout through the API without an accou
       email: "Sam+band@Example.com",
       password: "password123",
       bandName: "The Testers",
+      currency: "czk",
     };
     const signup = await post("signup", credentials);
     expect(signup.status).toBe(201);
@@ -90,6 +91,7 @@ test("signup, login, duplicate email and logout through the API without an accou
     expect(session.username).toBe("sam");
     expect(session.token).toBeString();
     expect([...records.values()][0].name).toBe("The Testers");
+    expect([...records.values()][0].currency).toBe("CZK");
     expect([...records.keys()][0]).toMatch(/^sam\/gigger\/bands\/[^/]+\/band$/);
     expect(
       (
@@ -127,6 +129,9 @@ test("signup, login, duplicate email and logout through the API without an accou
     ).toBe(400);
     expect(
       (await post("signup", { ...credentials, bandName: " " })).status,
+    ).toBe(400);
+    expect(
+      (await post("signup", { ...credentials, currency: "EURO" })).status,
     ).toBe(400);
     expect(
       (

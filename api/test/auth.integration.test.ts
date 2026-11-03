@@ -13,6 +13,7 @@ test.skipIf(!base)(
       email,
       password,
       bandName: "Integration Band",
+      currency: "CZK",
     };
     const post = (action: string, body: unknown, token?: string) =>
       fetch(`${base}/auth/${action}`, {
@@ -62,6 +63,7 @@ test.skipIf(!base)(
       await fetch(`${storageUrl}/gigger/bands/${folders[0]}band`, { headers })
     ).json();
     expect(band.name).toBe("Integration Band");
+    expect(band.currency).toBe("CZK");
     expect((await fetch(`${storageUrl}/other/`, { headers })).status).toBe(403);
     expect((await fetch(`${storageUrl}/gigger/`)).status).toBe(403);
     expect((await post("logout", { username }, token)).status).toBe(200);

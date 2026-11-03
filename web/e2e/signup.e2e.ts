@@ -43,6 +43,10 @@ test("signup rejects invalid inputs and succeeds after correcting them", async (
   await expect(
     page.getByRole("heading", { name: "Signup Band", exact: true, level: 2 }),
   ).toBeVisible();
+  // The browser locale (en-US here) picks the new band's currency.
+  await expect(page.getByLabel("Band currency", { exact: true })).toHaveValue(
+    "USD",
+  );
   await page.getByRole("link", { name: "Log out", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Log in", exact: true }),

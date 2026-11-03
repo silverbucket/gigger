@@ -315,9 +315,16 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
       }),
     ).toBeVisible();
     await page.getByLabel("Take-home amount (optional override)").fill("120");
+    // Pressing the button keeps focus in the field, so the first tap saves
+    // even while a phone keyboard is still open.
     await page
       .getByRole("button", { name: "Save and mark played", exact: true })
-      .click();
+      .hover();
+    await page.mouse.down();
+    await expect(
+      page.getByLabel("Take-home amount (optional override)"),
+    ).toBeFocused();
+    await page.mouse.up();
     await expect(
       page.getByText(`Your band took home: ${money(120, c)}`, {
         exact: true,

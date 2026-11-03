@@ -28,7 +28,7 @@ export function authHandler(
         { error: "Invalid request." },
         { status: 400, headers },
       );
-    const { username, email, password, bandName } = input as Record<
+    const { username, email, password, bandName, currency } = input as Record<
       string,
       unknown
     >;
@@ -41,6 +41,7 @@ export function authHandler(
           email,
           password,
           bandName,
+          currency,
           token: req.headers.get("authorization")?.replace(/^Bearer /, ""),
         }),
         signal: AbortSignal.timeout(15000),

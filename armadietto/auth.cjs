@@ -44,6 +44,17 @@ function createAuthHandler(store, clientId) {
             status: 400,
             body: { error: "Enter a band name (up to 200 characters)." },
           };
+        if (
+          input.currency !== undefined &&
+          !(
+            typeof input.currency === "string" &&
+            /^[A-Za-z]{3}$/.test(input.currency)
+          )
+        )
+          return {
+            status: 400,
+            body: { error: "Enter a three-letter currency code." },
+          };
       }
     }
     // Serialize account writes, including email uniqueness checks across usernames.
@@ -71,6 +82,9 @@ function createAuthHandler(store, clientId) {
           const band = {
             id: randomUUID(),
             name: input.bandName.trim(),
+            ...(input.currency
+              ? { currency: input.currency.toUpperCase() }
+              : {}),
             "@context": "http://remotestorage.io/spec/modules/gigger/band",
           };
           const saved = await store.put(
