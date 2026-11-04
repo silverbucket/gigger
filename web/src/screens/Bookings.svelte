@@ -51,9 +51,8 @@ let view = $state<"list" | "board">(
     ? "board"
     : "list",
 );
-let filter = $state<"all" | "upcoming" | "played">(
-  ui.phone ? "upcoming" : "all",
-);
+// Upcoming first; played, cancelled and past-dated gigs are under Past.
+let filter = $state<"upcoming" | "past">("upcoming");
 let query = $state("");
 let showSorted = $state(false);
 let allToSort = $state(false);
@@ -99,16 +98,10 @@ const sorted = $derived(
 );
 const visibleGigs = $derived(
   rows
-    .filter(({ gig }) =>
-      filter === "upcoming"
-        ? isUpcoming(gig, now)
-        : filter === "played"
-          ? gig.status === "played"
-          : true,
-    )
+    .filter(({ gig }) => isUpcoming(gig, now) === (filter === "upcoming"))
     .filter(({ gig, band }) => gigMatches(gig, band))
     .sort((a, b) =>
-      filter === "played"
+      filter === "past"
         ? b.gig.date.localeCompare(a.gig.date)
         : a.gig.date.localeCompare(b.gig.date) ||
           a.gig.title.localeCompare(b.gig.title),
@@ -127,9 +120,6 @@ const months = $derived.by(() => {
   }
   return groups;
 });
-const currentMonth = $derived(
-  months.find((m) => m.key >= now.slice(0, 7))?.key,
-);
 const next = $derived(nextGig(data.inView, now));
 const statuses: GigStatus[] = [
   "enquiry",
@@ -216,32 +206,6 @@ function matchFor(item: InboxItem) {
     tone: match.kind === "matched" ? ("ink" as const) : ("accent" as const),
   };
 }
-
-// Desktop "All" starts scrolled to this month rather than the oldest gig.
-let listEl = $state<HTMLElement>();
-let scrolled = false;
-$effect(() => {
-  // Messages to sort stay at the top; only an empty inbox lets the list jump ahead.
-  if (
-    scrolled ||
-    !listEl ||
-    ui.phone ||
-    filter !== "all" ||
-    view !== "list" ||
-    toSort.length
-  )
-    return;
-  const target = listEl.querySelector<HTMLElement>("[data-current-month]");
-  if (!target) return;
-  scrolled = true;
-  const pane = listEl.parentElement;
-  if (pane)
-    pane.scrollTop = Math.max(
-      0,
-      target.offsetTop - (toSortEl?.offsetHeight ?? 0) - 120,
-    );
-});
-let toSortEl = $state<HTMLElement>();
 </script>
 
 {#snippet controls()}
@@ -274,9 +238,8 @@ let toSortEl = $state<HTMLElement>();
         label="Show"
         dark
         options={[
-          { value: "all", label: "All" },
           { value: "upcoming", label: "Upcoming" },
-          { value: "played", label: "Played" },
+          { value: "past", label: "Past" },
         ]}
         bind:value={filter}
       />
@@ -286,7 +249,7 @@ let toSortEl = $state<HTMLElement>();
 
 {#snippet toSortGroup()}
   {#if toSort.length || sorted.length}
-    <section aria-labelledby="to-sort" bind:this={toSortEl}>
+    <section aria-labelledby="to-sort">
       <SectionLabel tone="accent" id="to-sort">
         To sort · {toSort.length}
         {#snippet aside()}
@@ -389,10 +352,7 @@ let toSortEl = $state<HTMLElement>();
     <p class="empty">Create your first band to get started.</p>
   {/if}
   {#each months as month (month.key)}
-    <section
-      aria-label={month.label}
-      data-current-month={month.key === currentMonth ? "" : undefined}
-    >
+    <section aria-label={month.label}>
       {#if !ui.phone}
         <SectionLabel>{month.label}</SectionLabel>
       {/if}
@@ -422,9 +382,7 @@ let toSortEl = $state<HTMLElement>();
         ? "No gigs match that search."
         : filter === "upcoming"
           ? "No upcoming gigs. Enquiries you add show up here."
-          : filter === "played"
-            ? "No played gigs yet. Mark a gig played after the show."
-            : "No gigs yet. Add an enquiry to start."}
+          : "No past gigs yet. Played and cancelled gigs move here."}
     </p>
   {/each}
 {/snippet}
@@ -485,7 +443,7 @@ let toSortEl = $state<HTMLElement>();
 
 <ListDetailLayout {open} key={router.parts.join("/")}>
   {#snippet list()}
-    <div class="list" bind:this={listEl}>
+    <div class="list">
       {#if !ui.phone}
         {@render controls()}
       {/if}
@@ -496,11 +454,7 @@ let toSortEl = $state<HTMLElement>();
         {/if}
         {@render controls()}
         <SectionLabel
-          >{filter === "upcoming"
-            ? "Coming up"
-            : filter === "played"
-              ? "Played"
-              : "All gigs"}</SectionLabel
+          >{filter === "upcoming" ? "Coming up" : "Past"}</SectionLabel
         >
         {@render ledger()}
       {:else if view === "board"}

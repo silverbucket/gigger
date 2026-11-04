@@ -134,12 +134,15 @@ export async function go(page: Page, route: string) {
 /** Opens a gig from the bookings list; on a phone it opens on its own screen. */
 export async function openGig(page: Page, title: string) {
   await go(page, "bookings");
-  // Phones start on upcoming gigs; played ones are under All.
-  await choose(page, "Show", "All");
-  await page
-    .getByRole("link", { name: new RegExp(title) })
-    .first()
-    .click();
+  // The list starts on upcoming gigs; played and cancelled ones are under Past.
+  const link = page.getByRole("link", { name: new RegExp(title) }).first();
+  await choose(page, "Show", "Upcoming");
+  const upcoming = await link
+    .waitFor({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!upcoming) await choose(page, "Show", "Past");
+  await link.click();
   await expect(
     page.getByRole("heading", { name: title, exact: true, level: 2 }),
   ).toBeVisible();
