@@ -156,15 +156,30 @@ function findSets(text: string) {
   return value > 0 ? value : undefined;
 }
 
-function findTime(text: string, words: string) {
-  const match = new RegExp(
-    `\\b(?:${words})\\b[^\\d\\n]{0,12}(\\d{1,2})(?:[:.](\\d{2}))?\\s*(am|pm|h)?`,
-  ).exec(normalize(text));
+/**
+ * A time after one of `words`. Bare hours ("doors 8") count on their own, but
+ * after `looseWords` (generic enough to precede a date or a set count, e.g.
+ * "could you play 17 Jan") a minute suffix or am/pm/h marker is required, so
+ * the day number or set count is never read as the hour.
+ */
+function findTime(text: string, words: string, looseWords?: string) {
+  const gap = String.raw`[^\d\n]{0,12}`;
+  const hour = String.raw`(\d{1,2})`;
+  const marker = "(am|pm|h)";
+  const anyTime = `${hour}(?:[:.](\\d{2}))?\\s*${marker}?`;
+  const strictTime = `${hour}(?:[:.](\\d{2})|\\s*${marker})`;
+  const pattern = looseWords
+    ? `\\b(?:${words})\\b${gap}${anyTime}|\\b(?:${looseWords})\\b${gap}${strictTime}`
+    : `\\b(?:${words})\\b${gap}${anyTime}`;
+  const match = new RegExp(pattern).exec(normalize(text));
   if (!match) return undefined;
-  let hour = Number(match[1]);
-  if (match[3] === "pm" && hour < 12) hour += 12;
-  if (hour > 23) return undefined;
-  return `${pad(hour)}:${match[2] ?? "00"}`;
+  const hourText = match[1] ?? match[4];
+  const minute = match[2] ?? match[5];
+  const ampm = match[3] ?? match[6];
+  let value = Number(hourText);
+  if (ampm === "pm" && value < 12) value += 12;
+  if (value > 23) return undefined;
+  return `${pad(value)}:${minute ?? "00"}`;
 }
 
 /** A known venue named in the text; with several, the one nearest the date (the others are usually past shows). */
@@ -209,7 +224,7 @@ export function extractEnquiry(
     ...findVenue(text, venues, date?.index),
     fee: findFee(text, currency),
     sets: findSets(text),
-    start: findTime(text, "start|starting|play|playing|set at|on stage"),
+    start: findTime(text, "start|starting|set at|on stage", "play|playing"),
     doors: findTime(text, "doors|door opens|doors open"),
   };
   for (const key of Object.keys(result) as (keyof Extracted)[])

@@ -45,6 +45,7 @@ export const nextMove = {
 } as const;
 export const moveLabel = (status: string) => `Mark ${status}`;
 
+/** Every scheduled time as a stat cell; StatCells wraps onto another row past four. */
 export function timeCells(gig: Gig) {
   return [
     ...(gig.loadIn ? [{ label: "Load-in", value: gig.loadIn }] : []),
@@ -57,7 +58,7 @@ export function timeCells(gig: Gig) {
     ...(gig.setLength && !gig.setTimes?.length
       ? [{ label: "Set length", value: `${gig.setLength} min` }]
       : []),
-  ].slice(0, 4);
+  ];
 }
 
 /** The gig sheet as plain text, for email and the phone's share sheet. */
@@ -82,10 +83,13 @@ export function sheetText(gig: Gig, data: BandData) {
     gig.soundcheck ? `Soundcheck: ${gig.soundcheck}` : "",
     gig.setTimes?.length ? `Sets: ${gig.setTimes.join(", ")}` : "",
     gig.setLength ? `Set length: ${gig.setLength} minutes` : "",
+    // Matches GigSheet.svelte: linked contacts with every channel, plus any
+    // legacy free-text contacts on gigs saved before contacts were linked.
     ...contactsOf(gig, data.contacts).map(
       (c) =>
-        `Contact: ${[c.name, c.phone, c.email].filter(Boolean).join(" · ")}`,
+        `Contact: ${[c.name, c.phone, c.email, c.messenger, c.instagram].filter(Boolean).join(" · ")}`,
     ),
+    ...(gig.contacts ?? []).filter((c) => c.trim()).map((c) => `Contact: ${c}`),
     fee ? `Fee: ${fee}` : "",
     typeof gig.fee === "object" && gig.fee.extras.length
       ? `Extras: ${gig.fee.extras.join(", ")}`

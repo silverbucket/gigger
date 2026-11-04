@@ -71,3 +71,22 @@ test("with several known venues, picks the one asked about", () => {
   );
   expect(found).toMatchObject({ venueId: "muz", date: "2027-01-16" });
 });
+
+test("a date or set count after a bare 'play' is never read as the start time", () => {
+  const found = extractEnquiry(
+    "Can you play 17 Jan at Kabinet Múz? Two sets, start at 9pm.",
+    venues,
+    "EUR",
+    now,
+  );
+  expect(found).toMatchObject({ date: "2027-01-17", sets: 2, start: "21:00" });
+});
+
+test("'play' with an explicit time still counts as the start time", () => {
+  expect(extractEnquiry("Playing at 9pm sharp.", [], "EUR", now).start).toBe(
+    "21:00",
+  );
+  expect(extractEnquiry("Can you play 21:30?", [], "EUR", now).start).toBe(
+    "21:30",
+  );
+});

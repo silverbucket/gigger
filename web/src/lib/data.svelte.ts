@@ -75,12 +75,17 @@ class Data {
     if (this.bandId && !this.all.some((b) => b.band.id === this.bandId))
       this.bandId = "";
     if (!this.loaded) {
-      const remembered = localStorage.getItem("gigger:band") ?? "";
-      this.bandId = this.all.some((b) => b.band.id === remembered)
-        ? remembered
-        : this.all.length === 1
-          ? this.all[0].band.id
-          : (this.all[0]?.band.id ?? "");
+      // No stored value (first-ever load) is distinct from an explicitly
+      // remembered "All bands" (stored as ""), which must stay that way.
+      const stored = localStorage.getItem("gigger:band");
+      this.bandId =
+        stored === null
+          ? this.all.length === 1
+            ? this.all[0].band.id
+            : (this.all[0]?.band.id ?? "")
+          : stored === "" || this.all.some((b) => b.band.id === stored)
+            ? stored
+            : (this.all[0]?.band.id ?? "");
     }
     this.loaded = true;
   }

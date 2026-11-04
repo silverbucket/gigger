@@ -519,7 +519,10 @@ function matchFor(item: InboxItem) {
     {:else if openMessage}
       {@const band = bandOf(openMessage.conversation.bandId)}
       {#if band}
-        <MessageDetail item={openMessage} data={band} {humanAgent} />
+        <!-- Keyed so an unsent reply draft never follows you to another conversation. -->
+        {#key openMessage.id}
+          <MessageDetail item={openMessage} data={band} {humanAgent} />
+        {/key}
       {/if}
     {:else if kind === "new"}
       {#if !newBand}

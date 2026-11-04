@@ -23,7 +23,13 @@ class Router {
   constructor() {
     if (typeof window === "undefined") return;
     this.read();
-    window.addEventListener("hashchange", () => this.read());
+    window.addEventListener("hashchange", () => {
+      // Most navigation is a plain <a href="#/..."> link, not router.go();
+      // a hashchange event (unlike pushState) only ever fires for an entry
+      // in this document's own history, so it's always safe to go back to.
+      this.came = true;
+      this.read();
+    });
   }
   read() {
     const [path, search = ""] = location.hash.replace(/^#\/?/, "").split("?");

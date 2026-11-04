@@ -48,6 +48,10 @@ const options = $derived(
   ).map((c) => ({ id: c.id, label: c.name, sub: c.email ?? c.phone })),
 );
 $effect(() => {
+  // Track the route's record id so switching straight from editing one band
+  // to "New band" (or to another band) starts a fresh draft instead of
+  // keeping the previous one, which would overwrite it on save.
+  void id;
   if (editing)
     draft = untrack(() =>
       structuredClone(

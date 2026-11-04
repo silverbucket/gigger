@@ -84,6 +84,10 @@ const editing = $derived(id === "new" || mode === "edit");
 let draft = $state<Venue>({ id: "", name: "", address: "" });
 // Start the draft when the form opens; later syncs don't overwrite what's being typed.
 $effect(() => {
+  // Track the route's record id so switching straight from editing one venue
+  // to "New venue" (or to another venue) starts a fresh draft instead of
+  // keeping the previous one, which would overwrite it on save.
+  void id;
   if (editing)
     draft = untrack(() =>
       structuredClone(

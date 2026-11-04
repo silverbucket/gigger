@@ -1,5 +1,6 @@
 <script lang="ts">
 import {
+  type Attachment,
   type Gig,
   messagePeer,
   needsHumanAgentTag,
@@ -147,6 +148,25 @@ async function send(event: SubmitEvent) {
   </p>
 </div>
 
+{#snippet attachments(list: Attachment[] | undefined)}
+  {#each list ?? [] as attachment (attachment.url)}
+    {#await threads.fileUrl(attachment)}
+      <p class="muted">Loading attachment…</p>
+    {:then url}
+      {#if (attachment.mediaType ?? attachment.type).startsWith("image")}
+        <img src={url} alt={attachment.name ?? "Attachment"}>
+      {:else}
+        <!-- Always a download: a blob URL shares the app origin, so stored HTML must never render. -->
+        <a href={url} download={attachment.name ?? ""}
+          >{attachment.name ?? attachment.type}</a
+        >
+      {/if}
+    {:catch}
+      <p class="muted">Attachment unavailable.</p>
+    {/await}
+  {/each}
+{/snippet}
+
 <div class="scroll">
   <div class="body pre">
     {#if latest}
@@ -159,22 +179,7 @@ async function send(event: SubmitEvent) {
     {#if failed}
       <p class="alert-text" role="alert">{failed}</p>
     {/if}
-    {#each latest?.object.attachment ?? [] as attachment (attachment.url)}
-      {#await threads.fileUrl(attachment)}
-        <p class="muted">Loading attachment…</p>
-      {:then url}
-        {#if (attachment.mediaType ?? attachment.type).startsWith("image")}
-          <img src={url} alt={attachment.name ?? "Attachment"}>
-        {:else}
-          <!-- Always a download: a blob URL shares the app origin, so stored HTML must never render. -->
-          <a href={url} download={attachment.name ?? ""}
-            >{attachment.name ?? attachment.type}</a
-          >
-        {/if}
-      {:catch}
-        <p class="muted">Attachment unavailable.</p>
-      {/await}
-    {/each}
+    {@render attachments(latest?.object.attachment)}
   </div>
 
   {#if item.gig}
@@ -274,6 +279,7 @@ async function send(event: SubmitEvent) {
             · {messageTimeLong(message.published)}
           </p>
           <p class="pre">{message.object.content}</p>
+          {@render attachments(message.object.attachment)}
           {#if message.error}
             <p class="alert-text">Not delivered: {message.error}</p>
           {/if}
@@ -374,7 +380,8 @@ h2.sender {
   line-height: 1.5;
   border-bottom: var(--rule-2);
 }
-.body img {
+.body img,
+.thread img {
   margin-top: 12px;
   max-width: 100%;
 }
