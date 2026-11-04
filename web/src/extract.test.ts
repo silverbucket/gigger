@@ -82,6 +82,16 @@ test("a dotted start time is not mistaken for an earlier date", () => {
   expect(found).toMatchObject({ date: "2027-01-17", start: "20:10" });
 });
 
+test("an unambiguous date after a time word is still used, unlike a dotted time", () => {
+  const found = extractEnquiry(
+    "Can you play on 7.3.2027 at Kabinet Múz? Start at 21:00.",
+    venues,
+    "EUR",
+    now,
+  );
+  expect(found).toMatchObject({ date: "2027-03-07", start: "21:00" });
+});
+
 test("with several known venues, picks the one asked about", () => {
   const found = extractEnquiry(
     "Ahoj! We loved your set at Café V lese. Any chance you could play Kabinet Múz on Sat 16 Jan?",
