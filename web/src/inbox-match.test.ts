@@ -39,6 +39,16 @@ test("picks a contact only on an exact handle or email match", () => {
   expect(mail.kind === "matched" && mail.contact.id).toBe("p");
 });
 
+test("never matches a handle against a different channel's field", () => {
+  // Tomáš's Instagram handle is "kabinetmuz"; a Messenger peer with the same
+  // id is a different person and must not be auto-matched to him.
+  const messenger = matchSender(
+    conversation("messenger", "kabinetmuz"),
+    contacts,
+  );
+  expect(messenger.kind).not.toBe("matched");
+});
+
 test("ranks similar names and offers a new contact from the sender otherwise", () => {
   const unclear = matchSender(
     conversation("email", "marek.s@gmail.com", "Marek S."),

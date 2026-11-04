@@ -38,9 +38,13 @@ export interface Prefill {
 class Threads {
   byId = $state<Record<string, Message[]>>({});
   files: Record<string, string> = {};
+  generation = 0;
   async load(conversationId: string) {
+    const generation = this.generation;
     const messages = await bands.messages(conversationId);
-    this.byId[conversationId] = messages;
+    // A logout between the request and this resolving must not let a stale
+    // read repopulate the cache for whichever account signs in next.
+    if (generation === this.generation) this.byId[conversationId] = messages;
     return messages;
   }
   async refresh() {
@@ -49,6 +53,7 @@ class Threads {
     );
   }
   reset() {
+    this.generation++;
     this.byId = {};
     for (const url of Object.values(this.files)) URL.revokeObjectURL(url);
     this.files = {};

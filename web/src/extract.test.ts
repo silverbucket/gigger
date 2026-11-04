@@ -90,3 +90,9 @@ test("'play' with an explicit time still counts as the start time", () => {
     "21:30",
   );
 });
+
+test("'play' with both minutes and am/pm reads the full time, not just the hour", () => {
+  expect(extractEnquiry("Playing at 9:30pm.", [], "EUR", now).start).toBe(
+    "21:30",
+  );
+});

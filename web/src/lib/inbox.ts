@@ -35,12 +35,7 @@ export function exactContact(conversation: Conversation, contacts: Contact[]) {
   const peer = handle(conversation.peer.id);
   if (!peer) return undefined;
   const field = channelField[conversation.channel];
-  return (
-    contacts.find((c) => handle(c[field]) === peer) ??
-    contacts.find((c) =>
-      [c.email, c.messenger, c.instagram].some((v) => handle(v) === peer),
-    )
-  );
+  return contacts.find((c) => handle(c[field]) === peer);
 }
 export function matchReason(conversation: Conversation) {
   return {

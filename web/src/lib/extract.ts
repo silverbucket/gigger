@@ -165,9 +165,11 @@ function findSets(text: string) {
 function findTime(text: string, words: string, looseWords?: string) {
   const gap = String.raw`[^\d\n]{0,12}`;
   const hour = String.raw`(\d{1,2})`;
-  const marker = "(am|pm|h)";
-  const anyTime = `${hour}(?:[:.](\\d{2}))?\\s*${marker}?`;
-  const strictTime = `${hour}(?:[:.](\\d{2})|\\s*${marker})`;
+  const marker = "am|pm|h";
+  const anyTime = `${hour}(?:[:.](\\d{2}))?\\s*(${marker})?`;
+  // Require a minute or a meridiem marker (a bare hour after a loose word is
+  // too ambiguous), but still capture both when "9:30pm" has both.
+  const strictTime = `${hour}(?=[:.]\\d{2}|\\s*(?:${marker}))(?:[:.](\\d{2}))?\\s*(${marker})?`;
   const pattern = looseWords
     ? `\\b(?:${words})\\b${gap}${anyTime}|\\b(?:${looseWords})\\b${gap}${strictTime}`
     : `\\b(?:${words})\\b${gap}${anyTime}`;
