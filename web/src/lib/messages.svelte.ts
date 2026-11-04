@@ -63,18 +63,26 @@ class Threads {
     this.files = {};
   }
   /** Copied attachments live in private storage, so they are read through remoteStorage, not a URL. */
-  async fileUrl(attachment: Attachment) {
+  async fileUrl(attachment: Attachment): Promise<string> {
     if (!attachment.url.startsWith("gigger/")) return attachment.url;
     if (!this.files[attachment.url]) {
+      const generation = this.generation;
       const file = (await storage
         .scope("/gigger/")
         .getFile(attachment.url.slice(7))) as {
         data: BlobPart;
         mimeType: string;
       };
-      this.files[attachment.url] = URL.createObjectURL(
+      const url = URL.createObjectURL(
         new Blob([file.data], { type: file.mimeType }),
       );
+      // A logout between the request and this resolving must not let a
+      // stale read cache a previous account's private file under this path.
+      if (generation !== this.generation) {
+        URL.revokeObjectURL(url);
+        return this.fileUrl(attachment);
+      }
+      this.files[attachment.url] = url;
     }
     return this.files[attachment.url];
   }

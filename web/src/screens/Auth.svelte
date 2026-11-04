@@ -182,8 +182,8 @@ async function authenticate(event: SubmitEvent) {
   flex-direction: column;
   justify-content: space-between;
   padding: 32px 48px 48px;
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
 }
 .brand {
   display: flex;

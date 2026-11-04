@@ -79,15 +79,15 @@ dd {
   font-size: 12px;
 }
 .hot {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
 }
 .hot dt {
   color: inherit;
 }
 .accent {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
   border-bottom: 0;
 }
 .accent .cell {

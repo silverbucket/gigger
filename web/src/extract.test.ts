@@ -62,6 +62,16 @@ test("finds nothing in a message without booking details", () => {
   expect(extractEnquiry("No 31 Feb here", [], "EUR", now).date).toBeUndefined();
 });
 
+test("a requested date earlier in the text wins over a later, unrelated ISO date", () => {
+  const found = extractEnquiry(
+    "Can you play Kabinet Múz on 17 Jan 2027? We last saw you on 2026-10-31.",
+    venues,
+    "EUR",
+    now,
+  );
+  expect(found.date).toBe("2027-01-17");
+});
+
 test("with several known venues, picks the one asked about", () => {
   const found = extractEnquiry(
     "Ahoj! We loved your set at Café V lese. Any chance you could play Kabinet Múz on Sat 16 Jan?",

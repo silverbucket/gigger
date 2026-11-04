@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
-import type { Message } from "@gigger/schemas";
+import type { Attachment, Message } from "@gigger/schemas";
 
 // Threads is loaded outside Svelte's compiler, where $state has no meaning;
 // stubbing it as identity lets the module run as plain JS for this test.
@@ -7,7 +7,7 @@ import type { Message } from "@gigger/schemas";
 const globals = globalThis as Record<string, unknown>;
 globals.$state = (value: unknown) => value;
 const { threads } = await import("./lib/messages.svelte");
-const { bands } = await import("./storage");
+const { bands, storage } = await import("./storage");
 afterAll(() => {
   delete globals.$state;
 });
@@ -25,9 +25,11 @@ const message: Message = {
   published: "2026-11-04T10:00:00Z",
 };
 
-const original = bands.messages;
+const originalMessages = bands.messages;
+const originalScope = storage.scope;
 afterEach(() => {
-  bands.messages = original;
+  bands.messages = originalMessages;
+  storage.scope = originalScope;
   threads.reset();
 });
 
@@ -48,4 +50,23 @@ test("a read that resolves before any reset is cached as usual", async () => {
   bands.messages = async () => [message];
   await threads.load("c1");
   expect(threads.byId.c1).toEqual([message]);
+});
+
+test("an attachment read that resolves after reset refetches instead of caching the previous account's file", async () => {
+  const attachment: Attachment = {
+    url: "gigger/a.txt",
+    type: "application/octet-stream",
+  };
+  let calls = 0;
+  storage.scope = (() => ({
+    getFile: async () => {
+      calls++;
+      // A logout lands while the first read for this path is in flight.
+      if (calls === 1) threads.reset();
+      return { data: new Uint8Array([calls]), mimeType: "text/plain" };
+    },
+  })) as unknown as typeof storage.scope;
+  const url = await threads.fileUrl(attachment);
+  expect(calls).toBe(2);
+  expect(threads.files[attachment.url]).toBe(url);
 });

@@ -537,8 +537,8 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
   font-weight: 800;
 }
 .capacity .hot {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
 }
 .capacity .zero {
   color: var(--color-neutral-500);

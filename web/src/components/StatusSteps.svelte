@@ -51,8 +51,8 @@ li:last-child {
   border-right-color: transparent;
 }
 .current {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
 }
 .cancelled li {
   text-decoration: line-through;

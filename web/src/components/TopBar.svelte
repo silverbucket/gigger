@@ -106,8 +106,8 @@ nav a.active {
   box-shadow: inset 0 -4px 0 var(--color-accent);
 }
 .count {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
   font-size: 11px;
   font-weight: 800;
   padding: 1px 6px;

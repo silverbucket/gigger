@@ -63,48 +63,56 @@ function resolve(
   return check.getDate() === day ? value : undefined;
 }
 
-/** The first date in the text and where it was found. */
+/** The date found earliest in the text, regardless of which format matched it. */
 function findDate(text: string, now: Date) {
   const plain = normalize(text);
   const at = (index: number, value: string | undefined) =>
     value ? { value, index } : undefined;
   const year = (value?: string) => (value ? Number(value) : undefined);
+  const candidates: { value: string; index: number }[] = [];
+
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(plain);
-  if (iso)
-    return at(
-      iso.index,
-      resolve(Number(iso[3]), Number(iso[2]), Number(iso[1]), now),
-    );
+  const isoFound =
+    iso &&
+    at(iso.index, resolve(Number(iso[3]), Number(iso[2]), Number(iso[1]), now));
+  if (isoFound) candidates.push(isoFound);
   // 17 Jan 2027, 17th of January, 17. ledna
   const dayFirst =
     /\b(\d{1,2})(?:st|nd|rd|th)?\.?\s+(?:of\s+)?([a-z]{3,9}\.?)(?:,?\s+(\d{4}))?/g;
   for (const match of plain.matchAll(dayFirst)) {
     const month = monthNumber(match[2]);
-    if (month)
-      return at(
-        match.index,
-        resolve(Number(match[1]), month, year(match[3]), now),
-      );
+    const found =
+      month &&
+      at(match.index, resolve(Number(match[1]), month, year(match[3]), now));
+    if (found) {
+      candidates.push(found);
+      break;
+    }
   }
   // January 17, Jan 17th 2027
   const monthFirst =
     /\b([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?/g;
   for (const match of plain.matchAll(monthFirst)) {
     const month = monthNumber(match[1]);
-    if (month)
-      return at(
-        match.index,
-        resolve(Number(match[2]), month, year(match[3]), now),
-      );
+    const found =
+      month &&
+      at(match.index, resolve(Number(match[2]), month, year(match[3]), now));
+    if (found) {
+      candidates.push(found);
+      break;
+    }
   }
   // 17.1.2027, 17/1, 17.1.
   const numeric = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/.exec(plain);
-  if (numeric)
-    return at(
+  const numericFound =
+    numeric &&
+    at(
       numeric.index,
       resolve(Number(numeric[1]), Number(numeric[2]), year(numeric[3]), now),
     );
-  return undefined;
+  if (numericFound) candidates.push(numericFound);
+
+  return candidates.sort((a, b) => a.index - b.index)[0];
 }
 
 const currencies: [RegExp, string][] = [

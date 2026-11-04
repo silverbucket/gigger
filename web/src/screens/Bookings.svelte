@@ -640,8 +640,8 @@ function matchFor(item: InboxItem) {
   gap: 2px;
   padding: 18px 16px 14px;
   margin-top: 16px;
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
   text-decoration: none;
 }
 .next-head {
@@ -712,8 +712,8 @@ function matchFor(item: InboxItem) {
   box-shadow: var(--select-mark);
 }
 .card.hot {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-600);
+  color: #fff;
 }
 .card-top {
   display: flex;
