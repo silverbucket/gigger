@@ -4,6 +4,44 @@ import SockethubClient from "@sockethub/client";
 export interface Sender {
   send(message: Message, credentials?: Record<string, unknown>): Promise<void>;
 }
+/** The platform-specific activity for one outgoing message: Meta platforms address a person, email a mailbox. */
+export function outgoingActivity(
+  context: unknown,
+  platform: Channel,
+  message: Message,
+) {
+  if (platform === "email")
+    return {
+      "@context": context,
+      type: "send",
+      actor: {
+        id: message.actor.id,
+        type: "person",
+        ...(message.actor.name ? { name: message.actor.name } : {}),
+      },
+      object: {
+        type: "message",
+        to: [message.target.id],
+        subject: message.subject ?? "",
+        content: message.object.content,
+        ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
+        ...(message.references?.length
+          ? { references: message.references }
+          : {}),
+      },
+    };
+  return {
+    "@context": context,
+    type: "send",
+    actor: { id: message.actor.id, type: "person" },
+    target: { id: message.target.id, type: "person" },
+    object: {
+      type: "message",
+      content: message.object.content,
+      ...(message.tag === "HUMAN_AGENT" ? { humanAgent: true } : {}),
+    },
+  };
+}
 
 /** One headless Sockethub connection per channel; the platform name is the channel name. */
 export function sockethubSender(
@@ -40,20 +78,14 @@ export function sockethubSender(
         await emit(sc, "credentials", {
           "@context": sc.contextFor(platform),
           type: "credentials",
-          actor: { id: message.actor.id },
+          actor: { id: message.actor.id, type: "person" },
           object: { type: "credentials", ...credentials },
         });
-      await emit(sc, "message", {
-        "@context": sc.contextFor(platform),
-        type: "send",
-        actor: { id: message.actor.id, type: "person" },
-        target: { id: message.target.id, type: "person" },
-        object: {
-          type: "message",
-          content: message.object.content,
-          ...(message.tag === "HUMAN_AGENT" ? { humanAgent: true } : {}),
-        },
-      });
+      await emit(
+        sc,
+        "message",
+        outgoingActivity(sc.contextFor(platform), platform, message),
+      );
     },
   };
 }

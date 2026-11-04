@@ -271,6 +271,9 @@ $effect(() => {
       {contactFor(thread)?.name ?? thread.peer.name ?? thread.peer.id}
       <small>via {thread.channel}</small>
     </h3>
+    {#if thread.subject}
+      <p class="subject">{thread.subject}</p>
+    {/if}
     <p>
       {#if linkedGig}
         <button
@@ -368,7 +371,7 @@ $effect(() => {
       <p>
         {busy
           ? "Loading…"
-          : "No conversations yet. Connect a Facebook Page in band settings to receive Messenger and Instagram messages here."}
+          : "No conversations yet. Connect a Facebook Page or add the band's email account in band settings to receive messages here."}
       </p>
     {/each}
   {/if}
@@ -425,7 +428,8 @@ img {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-small {
+small,
+.subject {
   font-weight: 400;
   color: #4e5f58;
 }

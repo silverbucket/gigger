@@ -89,6 +89,14 @@ To receive Messenger and Instagram messages, set `META_APP_ID`, `META_APP_SECRET
 
 The Inbox groups conversations by the contact whose Messenger, Instagram or email field matches the sender, or by sender otherwise. Open a conversation to read the thread and reply with one box for every channel. Meta replies are allowed within 24 hours of the contact's last message; with `META_HUMAN_AGENT=1` (the app must hold Meta's Human Agent permission) the window is 7 days, the reply is sent with the `HUMAN_AGENT` tag after the first 24 hours and the Inbox says so above the Send button. A channel whose Sockethub platform is not loaded fails with "<Channel> isn't set up on this server yet." in the reply box; `api/test/sender.test.ts` runs the real sender against a Sockethub stub to keep that path working. Live updates come over `GET /api/messages/events?ticket=…`, where the single-use ticket is issued by `POST /api/messages/ticket` with the storage token and expires after a minute, so no token travels in a URL; `POST /api/messages/reply` saves the outgoing message, then hands it to a channel sender built on a headless `@sockethub/client` (one Sockethub platform per channel, named after the channel). Meta channels only accept replies within 24 hours of the contact's last message; the box is disabled with the reason and the API enforces the same rule. A reply that cannot be delivered stays in the thread marked as not delivered. `GET /api/messages/events` is a server-sent events stream that tells open tabs to sync when a message arrives. From a conversation, create a gig prefilled with the enquiry text, source and contact, or open the gig already linked to it (`conversationId` on the gig).
 
+### Email
+
+Each band can add a mail account in band settings: address, display name, incoming (IMAP) and outgoing (SMTP) servers with ports, login and password. The API stores everything as one AES-256-GCM blob with `TOKEN_KEY` (`PUT /api/email/account`; `GET` returns it without the password; `DELETE` removes it and revokes the storage token that was minted for it). Replies go out through Sockethub's email platform with the SMTP settings as credentials, addressed to the contact, with `Re:` the enquiry's subject and `In-Reply-To`/`References` headers so they thread in the contact's mail client; the index keeps the subject, Message-ID and references of the contact's latest email for that. Implicit TLS is used on ports 465 and 993, STARTTLS elsewhere; Sockethub refuses plain text and untrusted certificates. Leave the IMAP server empty for a send-only account.
+
+With an IMAP server the API runs one mailbox watcher per band (`api/src/mailbox.ts`): a dedicated Sockethub session that sends `credentials`, `connect` and `watch` on `INBOX`, stores each posted mail as an incoming message (plain text, or text derived from HTML; attachments stay in the mailbox and are counted in the message), and saves the folder cursor after every batch so a restart resumes where it stopped. Mail from the band's own address is ignored. A dropped connection, a Sockethub restart or a storage failure ends the session and it reconnects with exponential backoff (2 s doubling to 5 min, reset after a session that lasted a minute); a cursor the server rejects is dropped and watching resumes from new mail. Sign-in and server problems are shown in band settings. Watchers start with the API process and restart when the settings change.
+
+Sockethub failure reasons are translated for the reply box: `meta:messaging-window-closed` explains the 24-hour and 7-day human-agent rules, and `email:` reasons say what to check.
+
 ## Browser tests
 
 Run the real forms against the Compose app (use a disposable stack: browser tests create accounts and records):
@@ -103,11 +111,28 @@ Set `E2E_BASE_URL` when the stack uses another port, for example `E2E_BASE_URL=h
 
 CI runs the browser suite after starting its fresh Compose stack. Failures retain screenshots and Playwright traces in the `browser-test-results` artifact for seven days. See [Playwright's trace options](https://playwright.dev/docs/test-use-options#recording-options) for inspecting failures. This checks browser print styles, not a physical printer.
 
-### Sockethub Meta adapter
+### Sockethub adapter and integration test
 
 Meta replies require Sockethub's Messenger and Instagram platforms. The adapter
 passes `token` and the shared Graph API version as credentials, and maps a
 manual `HUMAN_AGENT` reply to `object.humanAgent`. Instagram uses Facebook Login:
 its credentials include `login: "facebook"` and the linked Page ID, while the
-message actor remains the Instagram account ID. This requires the platform
-support in [Sockethub #1353](https://github.com/sockethub/sockethub/pull/1353).
+message actor remains the Instagram account ID. `docker-compose.yml` builds
+Sockethub from the commit that merged [Sockethub #1353](https://github.com/sockethub/sockethub/pull/1353)
+together with the email platform; its default platform list includes all three.
+
+`make up-test` starts the stack with `docker-compose.test.yml`: a Mailpit sink
+(`http://localhost:8025`) with a self-signed STARTTLS certificate from
+`scripts/mail-certs.sh`, trusted by the Sockethub container, and a Sockethub
+configuration (`test/sockethub.config.json`) that allows private mail server
+addresses. Then
+
+```sh
+MAIL_TEST_URL=http://localhost:8080 MAILPIT_URL=http://localhost:8025 bun test api/test/messages.integration.test.ts
+```
+
+creates an account, stores mail settings pointing at the sink, replies to a
+seeded email enquiry through the real API and Sockethub container, and checks
+the delivered subject, sender name and threading headers in Mailpit. Mailpit has
+no IMAP, so the watcher is covered by `api/test/mailbox.test.ts` against a
+Sockethub stub instead. CI runs both.

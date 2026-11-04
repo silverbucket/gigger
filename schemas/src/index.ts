@@ -278,17 +278,26 @@ export interface Message {
   error?: string;
   /** Meta message tag; HUMAN_AGENT lets a person reply up to 7 days after the contact's last message. */
   tag?: "HUMAN_AGENT";
+  /** Email headers kept so replies thread in the contact's mail client. */
+  subject?: string;
+  messageId?: string;
+  inReplyTo?: string;
+  references?: string[];
 }
 export interface Conversation {
   bandId: string;
   channel: Channel;
   /** The other party; contacts match on their messenger, instagram or email field. */
   peer: Party;
-  /** Our side: the Page or Instagram account ID the conversation runs through. */
+  /** Our side: the Page, Instagram account ID or email address the conversation runs through. */
   account?: string;
   lastIn?: string;
   lastOut?: string;
   preview: string;
+  /** Email threading state from the contact's latest message: the next reply answers it. */
+  subject?: string;
+  messageId?: string;
+  references?: string[];
 }
 export type ConversationIndex = Record<string, Conversation>;
 export const conversationsPath = "conversations/index";
@@ -365,7 +374,58 @@ export function withMessage(
       preview: newest
         ? message.object.content.slice(0, 120)
         : (previous?.preview ?? ""),
+      ...emailThread(previous, message),
     },
+  };
+}
+/** An incoming email with a Message-ID becomes what the next reply answers; anything else keeps the previous thread state. */
+function emailThread(
+  previous: Conversation | undefined,
+  message: Message,
+): Pick<Conversation, "subject" | "messageId" | "references"> {
+  if (
+    message.channel === "email" &&
+    message.direction === "in" &&
+    message.messageId &&
+    (!previous?.lastIn || message.published >= previous.lastIn)
+  )
+    return {
+      ...(message.subject !== undefined ? { subject: message.subject } : {}),
+      messageId: message.messageId,
+      references: [
+        ...(message.references ?? []),
+        ...(message.inReplyTo &&
+        !message.references?.includes(message.inReplyTo)
+          ? [message.inReplyTo]
+          : []),
+      ].slice(-49),
+    };
+  return {
+    ...(previous?.subject !== undefined ? { subject: previous.subject } : {}),
+    ...(previous?.messageId ? { messageId: previous.messageId } : {}),
+    ...(previous?.references ? { references: previous.references } : {}),
+  };
+}
+/** The subject and headers for a reply that threads under the contact's latest email. */
+export function emailReplyHeaders(
+  conversation: Conversation,
+  fallback: string,
+) {
+  const subject = conversation.subject?.trim()
+    ? /^re:/i.test(conversation.subject.trim())
+      ? conversation.subject.trim()
+      : `Re: ${conversation.subject.trim()}`
+    : fallback;
+  if (!conversation.messageId) return { subject };
+  return {
+    subject,
+    inReplyTo: conversation.messageId,
+    references: [
+      ...(conversation.references ?? []).filter(
+        (id) => id !== conversation.messageId,
+      ),
+      conversation.messageId,
+    ].slice(-50),
   };
 }
 export const statusMoves: Record<GigStatus, readonly GigStatus[]> = {
@@ -487,6 +547,13 @@ const party = {
   additionalProperties: false,
 };
 const dateTime = { type: "string", format: "date-time" };
+/** An RFC 5322 Message-ID: one header line, which is all Sockethub's email platform accepts. */
+const mailId = {
+  type: "string",
+  minLength: 1,
+  maxLength: 998,
+  pattern: "^[^\\r\\n]+$",
+};
 export const messageSchema = object(
   {
     channel: { enum: [...channels] },
@@ -522,6 +589,10 @@ export const messageSchema = object(
     received: dateTime,
     error: { type: "string" },
     tag: { enum: ["HUMAN_AGENT"] },
+    subject: { type: "string" },
+    messageId: mailId,
+    inReplyTo: mailId,
+    references: { type: "array", items: mailId, maxItems: 50 },
   },
   [
     "channel",
@@ -547,6 +618,9 @@ export const conversationsSchema = {
       lastIn: dateTime,
       lastOut: dateTime,
       preview: { type: "string" },
+      subject: { type: "string" },
+      messageId: mailId,
+      references: { type: "array", items: mailId, maxItems: 50 },
     },
     required: ["bandId", "channel", "peer", "preview"],
     additionalProperties: false,

@@ -112,3 +112,58 @@ test("a channel whose platform Sockethub has not loaded fails with a clear messa
     stub.stop();
   }
 });
+
+test("an email reply is addressed to the mailbox with its threading headers and the band's sender name", async () => {
+  const stub = stubSockethub(["email"]);
+  try {
+    await sockethubSender("email", await stub.start()).send(
+      {
+        ...message,
+        channel: "email",
+        actor: { id: "band@example.com", name: "The Band" },
+        target: { id: "jo@example.com" },
+        tag: undefined,
+        subject: "Re: Booking for May?",
+        inReplyTo: "<jo-2@example.com>",
+        references: ["<jo-1@example.com>", "<jo-2@example.com>"],
+      },
+      {
+        from: "band@example.com",
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "band@example.com",
+          password: "mail-secret",
+        },
+      },
+    );
+    expect(stub.received[0].payload.object).toEqual({
+      type: "credentials",
+      from: "band@example.com",
+      smtp: {
+        host: "smtp.example.com",
+        port: 587,
+        secure: false,
+        username: "band@example.com",
+        password: "mail-secret",
+      },
+    });
+    expect(stub.received[1].payload).toEqual({
+      "@context": expect.any(Array),
+      type: "send",
+      actor: { id: "band@example.com", type: "person", name: "The Band" },
+      object: {
+        type: "message",
+        to: ["jo@example.com"],
+        subject: "Re: Booking for May?",
+        content: "See you Friday",
+        inReplyTo: "<jo-2@example.com>",
+        references: ["<jo-1@example.com>", "<jo-2@example.com>"],
+      },
+    });
+    expect(stub.received[1].payload).not.toHaveProperty("target");
+  } finally {
+    stub.stop();
+  }
+});

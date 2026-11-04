@@ -1,14 +1,18 @@
 import type { Database } from "bun:sqlite";
 import {
+  type Band,
   type Channel,
   type ConversationIndex,
   conversationsPath,
+  emailReplyHeaders,
   type Message,
   messagePath,
   needsHumanAgentTag,
   replyBlocked,
   withMessage,
 } from "@gigger/schemas";
+import { emailAccounts, sendCredentials } from "./email";
+import { friendlyMailError } from "./mailbox";
 import { graphVersion } from "./meta";
 import { unseal } from "./secrets";
 import type { Sender } from "./sender";
@@ -19,6 +23,16 @@ const context = (kind: string) =>
 const usernameRe = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 const idRe = /^[A-Za-z0-9_-]+$/;
 
+/** Sockethub's machine-readable failure reasons, as something a band member can act on. */
+export function deliveryError(error: string, channel: Channel) {
+  if (error.startsWith("meta:messaging-window-closed")) {
+    const name = channel === "instagram" ? "Instagram" : "Messenger";
+    return `${name} closed the reply window: a reply is only allowed within 24 hours of the contact's last message, or within 7 days when sent by a person with the human agent tag. Wait for them to write again.`;
+  }
+  if (error.startsWith("email:")) return friendlyMailError(error);
+  return error;
+}
+
 export function messageHandler(
   db: Database,
   senders: Record<Channel, Sender>,
@@ -26,6 +40,7 @@ export function messageHandler(
   appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
   env = process.env,
 ) {
+  const mail = emailAccounts(db, env);
   const pageToken = db.query<
     { page_id: string; ig_id: string | null; token: string },
     [string, string]
@@ -142,28 +157,59 @@ export function messageHandler(
         return fail("Connect your Facebook Page before replying.", 409);
       if (thread.channel === "instagram" && !page?.ig_id)
         return fail("The connected Page has no Instagram account.", 409);
+      const account =
+        thread.channel === "email"
+          ? mail.get(username as string, bandId as string)
+          : undefined;
+      if (thread.channel === "email" && !account)
+        return fail(
+          "Set up the band's email account in band settings before replying.",
+          409,
+        );
       const actorId =
         thread.channel === "instagram"
           ? (page?.ig_id as string)
-          : (page?.page_id ?? thread.account ?? (username as string));
-      if (thread.account && thread.account !== actorId)
+          : thread.channel === "email"
+            ? (account?.settings.address as string)
+            : (page?.page_id as string);
+      // Email threads follow the band's address: a changed address still answers old enquiries.
+      if (
+        thread.channel !== "email" &&
+        thread.account &&
+        thread.account !== actorId
+      )
         return fail(
           "This conversation belongs to a Page that is no longer connected.",
           409,
         );
+      let headers: ReturnType<typeof emailReplyHeaders> | undefined;
+      if (thread.channel === "email") {
+        const band = await store
+          .get<Band>(`bands/${bandId}/band`)
+          .then((b) => b.value)
+          .catch(() => undefined);
+        headers = emailReplyHeaders(
+          thread,
+          `Message from ${band?.name ?? account?.settings.name ?? actorId}`,
+        );
+      }
       const message: Message = {
         id: crypto.randomUUID(),
         channel: thread.channel,
         direction: "out",
         conversation,
         bandId: bandId as string,
-        actor: { id: actorId },
+        actor: {
+          id: actorId,
+          ...(account?.settings.name ? { name: account.settings.name } : {}),
+        },
         target: thread.peer,
         object: { type: "Note", content: text.trim() },
         published: new Date().toISOString(),
         ...(humanAgent && needsHumanAgentTag(thread)
           ? { tag: "HUMAN_AGENT" as const }
           : {}),
+        ...headers,
       };
       const markFailed = async (error: string) => {
         const { etag } = await store.get(messagePath(message));
@@ -185,19 +231,24 @@ export function messageHandler(
       try {
         await senders[thread.channel].send(
           message,
-          page
-            ? {
-                token: unseal(page.token, env),
-                apiVersion: graphVersion,
-                ...(thread.channel === "instagram"
-                  ? { login: "facebook", pageId: page.page_id }
-                  : {}),
-              }
-            : undefined,
+          account
+            ? sendCredentials(account.settings)
+            : page
+              ? {
+                  token: unseal(page.token, env),
+                  apiVersion: graphVersion,
+                  ...(thread.channel === "instagram"
+                    ? { login: "facebook", pageId: page.page_id }
+                    : {}),
+                }
+              : undefined,
         );
       } catch (cause) {
-        const error = cause instanceof Error ? cause.message : "Send failed";
-        await markFailed(error);
+        const error = deliveryError(
+          cause instanceof Error ? cause.message : "Send failed",
+          thread.channel,
+        );
+        await markFailed(error).catch(() => {});
         return fail(`Saved, but not delivered: ${error}`, 502);
       }
       return Response.json(message, {
