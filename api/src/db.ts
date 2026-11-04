@@ -18,5 +18,7 @@ export function openDatabase(
   try {
     db.exec("ALTER TABLE meta_pages ADD COLUMN user_id TEXT");
   } catch {}
+  // Connections made before user_id and token encryption cannot be matched by Meta's callbacks; they must be reconnected.
+  db.exec("DELETE FROM meta_pages WHERE user_id IS NULL");
   return db;
 }

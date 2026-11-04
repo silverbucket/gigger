@@ -130,7 +130,7 @@ export function messageHandler(
       const thread = index?.[conversation];
       if (!thread || thread.bandId !== bandId)
         return fail("This conversation is not in your inbox.", 404);
-      const humanAgent = !!env.META_HUMAN_AGENT;
+      const humanAgent = env.META_HUMAN_AGENT === "1";
       const blocked = replyBlocked(thread, Date.now(), humanAgent);
       if (blocked) return fail(blocked, 403);
       const page =

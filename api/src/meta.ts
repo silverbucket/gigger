@@ -7,7 +7,7 @@ import {
   type Message,
 } from "@gigger/schemas";
 import type { Messages } from "./messages";
-import { seal, unseal } from "./secrets";
+import { seal, unseal, validKey } from "./secrets";
 import { remoteStore } from "./storage";
 
 /** The one Graph API version the server and the browser SDK use. */
@@ -304,7 +304,7 @@ export function metaHandler(
         appId: env.META_APP_ID ?? "",
         configId: env.META_CONFIG_ID ?? "",
         graphVersion,
-        humanAgent: !!env.META_HUMAN_AGENT,
+        humanAgent: env.META_HUMAN_AGENT === "1",
       });
     },
     /** GET /meta/page?username&bandId with Bearer token: the connected page, if any. */
@@ -333,7 +333,7 @@ export function metaHandler(
         return fail("Invalid request.", 400);
       if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again to connect a page.", 401);
-      if (!env.META_APP_ID || !env.META_APP_SECRET || !env.TOKEN_KEY)
+      if (!env.META_APP_ID || !env.META_APP_SECRET || !validKey(env))
         return fail("Facebook is not configured on this server.", 503);
       return serial(async () => {
         try {

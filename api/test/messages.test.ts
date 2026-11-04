@@ -134,7 +134,7 @@ function setup(options?: { conflictOnce?: boolean; humanAgent?: boolean }) {
     "http://app.test",
     {
       ...process.env,
-      META_HUMAN_AGENT: options?.humanAgent ? "1" : "",
+      META_HUMAN_AGENT: options?.humanAgent ? "1" : "0",
     } as NodeJS.ProcessEnv,
   );
   const graph = Bun.serve({
@@ -826,6 +826,36 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
         )
       ).status,
     ).toBe(401);
+    // A malformed key is refused before any Page is subscribed or storage token minted.
+    const badKey = metaHandler(
+      db,
+      messages,
+      {
+        META_APP_ID: "app",
+        META_APP_SECRET: secret,
+        TOKEN_KEY: "short",
+      } as NodeJS.ProcessEnv,
+      armadietto.server.url.origin,
+      armadietto.server.url.origin,
+      graph.url.origin,
+    );
+    expect(
+      (
+        await badKey.connect(
+          new Request("http://api.test/meta/connect", {
+            method: "POST",
+            headers: { Authorization: "Bearer user-token" },
+            body: JSON.stringify({
+              username: "sam",
+              bandId: "band1",
+              accessToken: "short",
+              pageId: "page-2",
+            }),
+          }),
+        )
+      ).status,
+    ).toBe(503);
+    expect(armadietto.minted).toHaveLength(0);
     const choose = await post("/meta/connect", {
       username: "sam",
       bandId: "band1",
