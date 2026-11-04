@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { compile } from "svelte/compiler";
 
 for (const [file, count] of [
-  ["App.svelte", 2],
-  ["PlayedForm.svelte", 1],
+  ["screens/Band.svelte", 2],
+  ["screens/PlayedForm.svelte", 1],
 ] as const) {
   test(`${file} compiles currency patterns that accept CZK and EUR`, async () => {
     const source = await Bun.file(new URL(file, import.meta.url)).text();

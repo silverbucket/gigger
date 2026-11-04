@@ -59,11 +59,13 @@ export function connectSession(username: string, token: string) {
 export function logout(broadcast = true) {
   const { userAddress, token } = storage.remote;
   sessionReady = false;
+  history.replaceState(null, "", "/login");
+  // Dispatched after the URL is cleared so onSessionLogout listeners (the
+  // router resync included) see it already gone.
   sessionEvents.dispatchEvent(new Event("logout"));
   if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
-  history.replaceState(null, "", "/login");
   if (userAddress.endsWith(`@${location.host}`)) {
     const username = decodeURIComponent(
       userAddress.slice(0, userAddress.lastIndexOf("@")),

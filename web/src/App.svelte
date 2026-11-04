@@ -1,561 +1,98 @@
 <script lang="ts">
-import {
-  type Band,
-  type Contact,
-  currencyForLocale,
-  formatFee,
-  type Gig,
-  groupGigs,
-  type Member,
-  slugify,
-  slugPattern,
-  type Venue,
-} from "@gigger/schemas";
 import { onMount } from "svelte";
-import Bookings from "./Bookings.svelte";
-import Inbox, { type InboxEnquiry } from "./Inbox.svelte";
-import {
-  bands,
-  connectSession,
-  ensureSessionReady,
-  logout,
-  onSessionLogout,
-  storage,
-} from "./storage";
+import BandPicker from "./components/BandPicker.svelte";
+import Icon from "./components/Icon.svelte";
+import TabBar from "./components/TabBar.svelte";
+import TopBar from "./components/TopBar.svelte";
+import { meta } from "./lib/account.svelte";
+import { data } from "./lib/data.svelte";
+import { inboxItems } from "./lib/inbox";
+import { threads } from "./lib/messages.svelte";
+import { router } from "./lib/router.svelte";
+import { run, staleMessage, ui } from "./lib/ui.svelte";
+import Auth from "./screens/Auth.svelte";
+import Band from "./screens/Band.svelte";
+import Bookings from "./screens/Bookings.svelte";
+import Contacts from "./screens/Contacts.svelte";
+import OtherBands from "./screens/OtherBands.svelte";
+import Venues from "./screens/Venues.svelte";
+import { bands, logout, onSessionLogout, storage } from "./storage";
 
-type Summary = {
-  band: Band;
-  members: Member[];
-  gigs: Gig[];
-  venues: Venue[];
-  contacts: Contact[];
-};
-let summaries = $state<Summary[]>([]);
-let selected = $state("");
-let openedGig = $state("");
-let bandName = $state("");
-let bandCurrency = $state(currencyForLocale(navigator.language));
-let memberName = $state("");
-let editingMember = $state("");
-let creatingBand = $state(false);
-let phone = $state("");
-let memberEmail = $state("");
-let messenger = $state("");
-let mode = $state(location.pathname === "/signup" ? "signup" : "login");
-let email = $state("");
-let username = $state("");
-let password = $state("");
 let signedIn = $state(false);
 let status = $state("Loading…");
-let pendingPublicDeletes = $state(false);
-let error = $state("");
-let ready = $state(false);
-let busy = $state(false);
-let current = $derived(summaries.find((item) => item.band.id === selected));
-// An unsaved currency edit survives reloads from saves and syncs; once saved
-// or when another band is shown, the field follows the stored currency again.
-let currencyDraft = $state<{ bandId: string; text: string } | null>(null);
-let currencyText = $derived(
-  currencyDraft && currencyDraft.bandId === current?.band.id
-    ? currencyDraft.text
-    : (current?.band.currency ?? "EUR"),
-);
-let slugDraft = $state<{ bandId: string; text: string } | null>(null);
-let slugText = $derived(
-  slugDraft && slugDraft.bandId === current?.band.id
-    ? slugDraft.text
-    : (current?.band.slug ?? slugify(current?.band.name ?? "")),
-);
-let pageUrl = $derived(
-  current?.band.slug ? `${location.origin}/b/${current.band.slug}` : "",
-);
-let inboxEnquiry = $state<InboxEnquiry | undefined>();
-let inboxNonce = $state(0);
-let metaConfig = $state<{
-  appId: string;
-  configId: string;
-  graphVersion: string;
-  humanAgent: boolean;
-} | null>(null);
-let metaPage = $state<{ pageId: string; instagram: boolean } | null>(null);
-let metaPages = $state<{ id: string; name: string }[]>([]);
-let metaLoadedFor = $state("");
-function account() {
-  const { userAddress, token } = storage.remote;
-  if (!userAddress.endsWith(`@${location.host}`))
-    throw new Error("This feature is available for accounts on this site.");
-  return {
-    username: decodeURIComponent(
-      userAddress.slice(0, userAddress.lastIndexOf("@")),
-    ),
-    token,
-  };
-}
-async function loadMetaPage(bandId: string) {
-  metaLoadedFor = bandId;
-  const { username, token } = account();
-  const response = await fetch(
-    `/api/meta/page?${new URLSearchParams({ username, bandId })}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!response.ok) return;
-  const page = await response.json();
-  if (metaLoadedFor === bandId) metaPage = page;
-}
-$effect(() => {
-  const bandId = current?.band.id;
-  if (!bandId || bandId === metaLoadedFor) return;
-  metaPage = null;
-  metaPages = [];
-  void loadMetaPage(bandId).catch(() => {});
-  void loadMailAccount(bandId).catch(() => {});
-});
-/** The band's mail account as the server reports it: everything but the password. */
-type MailAccount = {
-  address: string;
-  name?: string;
-  imapHost?: string;
-  imapPort: number;
-  smtpHost: string;
-  smtpPort: number;
-  login: string;
-  watching: boolean;
-  error?: string;
-};
-let mailAccount = $state<MailAccount | null>(null);
-let mailLoadedFor = $state("");
-let mailEditing = $state(false);
-let mailForm = $state({
-  address: "",
-  name: "",
-  imapHost: "",
-  imapPort: "993",
-  smtpHost: "",
-  smtpPort: "587",
-  login: "",
-  password: "",
-});
-async function loadMailAccount(bandId: string) {
-  mailLoadedFor = bandId;
-  mailEditing = false;
-  const { username, token } = account();
-  const response = await fetch(
-    `/api/email/account?${new URLSearchParams({ username, bandId })}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!response.ok) return;
-  const loaded = await response.json();
-  if (mailLoadedFor === bandId) mailAccount = loaded;
-}
-function editMailAccount() {
-  const a = mailAccount;
-  mailForm = {
-    address: a?.address ?? "",
-    name: a?.name ?? "",
-    imapHost: a?.imapHost ?? "",
-    imapPort: String(a?.imapPort ?? 993),
-    smtpHost: a?.smtpHost ?? "",
-    smtpPort: String(a?.smtpPort ?? 587),
-    login: a?.login ?? "",
-    password: "",
-  };
-  mailEditing = true;
-}
-async function saveMailAccount(event: SubmitEvent) {
-  event.preventDefault();
-  const band = current?.band;
-  if (!band) return;
-  busy = true;
-  error = "";
-  try {
-    const { username, token } = account();
-    const response = await fetch("/api/email/account", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username, bandId: band.id, ...mailForm }),
-    });
-    const result = await response.json();
-    if (!response.ok)
-      throw new Error(result.error ?? "Could not save the email settings.");
-    if (current?.band.id === band.id) {
-      mailAccount = result;
-      mailEditing = false;
-    }
-  } catch (cause) {
-    error =
-      cause instanceof Error ? cause.message : "Could not save the settings.";
-  } finally {
-    busy = false;
-  }
-}
-async function removeMailAccount() {
-  const band = current?.band;
-  if (
-    !band ||
-    !confirm(
-      "Remove this email account? New enquiries by email will stop arriving.",
-    )
-  )
-    return;
-  busy = true;
-  error = "";
-  try {
-    const { username, token } = account();
-    const response = await fetch("/api/email/account", {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username, bandId: band.id }),
-    });
-    if (!response.ok)
-      throw new Error(
-        (await response.json()).error ?? "Could not remove the account.",
-      );
-    if (current?.band.id === band.id) {
-      mailAccount = null;
-      mailEditing = false;
-    }
-  } catch (cause) {
-    error =
-      cause instanceof Error ? cause.message : "Could not remove the account.";
-  } finally {
-    busy = false;
-  }
-}
-type FacebookSdk = {
-  init(options: object): void;
-  login(
-    callback: (response: { authResponse?: { accessToken?: string } }) => void,
-    options: object,
-  ): void;
-};
-const fb = () => (window as Window & { FB?: FacebookSdk }).FB;
-function facebookSdk() {
-  return new Promise<FacebookSdk>((resolve, reject) => {
-    const loaded = fb();
-    if (loaded) return resolve(loaded);
-    const script = document.createElement("script");
-    script.src = "https://connect.facebook.net/en_US/sdk.js";
-    script.onload = () => {
-      const sdk = fb();
-      sdk?.init({
-        appId: metaConfig?.appId,
-        version: metaConfig?.graphVersion,
-      });
-      sdk ? resolve(sdk) : reject(new Error("Facebook SDK failed"));
-    };
-    script.onerror = () =>
-      reject(new Error("Could not load the Facebook SDK."));
-    document.head.append(script);
-  });
-}
-async function connectPage(pageId?: string, accessToken?: string) {
-  const band = current?.band;
-  if (!band) return;
-  busy = true;
-  error = "";
-  try {
-    const { username, token } = account();
-    if (!accessToken) {
-      const FB = await facebookSdk();
-      accessToken = await new Promise<string>((resolve, reject) =>
-        FB.login(
-          (response) =>
-            response.authResponse?.accessToken
-              ? resolve(response.authResponse.accessToken)
-              : reject(new Error("Facebook login was cancelled.")),
-          { config_id: metaConfig?.configId },
-        ),
-      );
-    }
-    const response = await fetch("/api/meta/connect", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username, bandId: band.id, accessToken, pageId }),
-    });
-    const result = await response.json();
-    if (current?.band.id !== band.id) return; // the user moved to another band meanwhile
-    if (response.status === 409 && result.pages?.length) {
-      // Several pages: remember the token and let the user pick one.
-      metaPages = result.pages.map((p: { id: string; name: string }) => ({
-        ...p,
-        token: accessToken,
-      }));
-      return;
-    }
-    if (!response.ok)
-      throw new Error(result.error ?? "Could not connect the page.");
-    metaPages = [];
-    metaPage = result;
-  } catch (cause) {
-    error =
-      cause instanceof Error ? cause.message : "Could not connect the page.";
-  } finally {
-    busy = false;
-  }
-}
-async function disconnectPage() {
-  const band = current?.band;
-  if (
-    !band ||
-    !confirm("Disconnect this Facebook Page? New messages will stop arriving.")
-  )
-    return;
-  busy = true;
-  error = "";
-  try {
-    const { username, token } = account();
-    const response = await fetch("/api/meta/disconnect", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username, bandId: band.id }),
-    });
-    if (!response.ok)
-      throw new Error(
-        (await response.json()).error ?? "Could not disconnect. Please retry.",
-      );
-    if (current?.band.id === band.id) metaPage = null;
-  } catch (cause) {
-    error = cause instanceof Error ? cause.message : "Could not disconnect.";
-  } finally {
-    busy = false;
-  }
-}
+let userAddress = $state("");
 
-async function publishPage(event: SubmitEvent) {
-  event.preventDefault();
-  const band = current?.band;
-  if (!band) return;
-  const slug = slugText.trim();
-  busy = true;
-  error = "";
-  try {
-    const { userAddress, token } = storage.remote;
-    if (!userAddress.endsWith(`@${location.host}`))
-      throw new Error("Public pages are available for accounts on this site.");
-    const username = decodeURIComponent(
-      userAddress.slice(0, userAddress.lastIndexOf("@")),
-    );
-    const response = await fetch("/api/public/pages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username, bandId: band.id, slug }),
-    });
-    if (!response.ok)
-      throw new Error(
-        (await response.json()).error ??
-          "Could not publish the page. Please retry.",
-      );
-    if (band.slug && band.slug !== slug)
-      await bands.queueOldSlugCleanup(band.id, band.slug);
-    await bands.save("band", band.id, {
-      ...band,
-      slug,
-      locale: navigator.language,
-    });
-    await bands.publishBand(band.id, band.slug);
-    slugDraft = null;
-    await load();
-  } catch (cause) {
-    error =
-      cause instanceof Error
-        ? cause.message
-        : "Could not publish the page. Please retry.";
-  } finally {
-    busy = false;
-  }
-}
+const toSort = $derived(
+  inboxItems(
+    data.conversations,
+    data.inView.map((b) => b.band.id),
+    data.inView.flatMap((b) => b.gigs),
+    data.inView.flatMap((b) => b.triage),
+  ).filter((i) => i.state === "toSort").length,
+);
+const nav = $derived([
+  { id: "bookings", label: "Bookings", href: "#/bookings", count: toSort },
+  { id: "venues", label: "Venues", href: "#/venues" },
+  { id: "contacts", label: "Contacts", href: "#/contacts" },
+  { id: "bands", label: "Other bands", href: "#/bands" },
+  { id: "band", label: "Band & public page", href: "#/band" },
+]);
+const tabs = $derived([
+  { id: "bookings", label: "Bookings", href: "#/bookings", count: toSort },
+  { id: "contacts", label: "Contacts", href: "#/contacts" },
+  { id: "venues", label: "Venues", href: "#/venues" },
+  { id: "band", label: "Band", href: "#/band" },
+]);
+// Other bands sits under Contacts on a phone.
+const activeTab = $derived(
+  router.screen === "bands" ? "contacts" : router.screen,
+);
+/** A phone shows a record on its own screen, with its own header and no tab bar. */
+const phoneDetail = $derived(
+  router.screen === "band"
+    ? router.parts[0] === "member"
+    : router.parts.length > 0,
+);
+const needsBand = $derived(
+  ["venues", "contacts", "bands"].includes(router.screen),
+);
 
 async function load() {
-  const token = storage.remote.token;
-  const loaded = await Promise.all(
-    (await bands.bands()).map(async (band) => ({
-      band,
-      members: await bands.list("member", band.id),
-      gigs: await bands.list("gig", band.id),
-      venues: await bands.list("venue", band.id),
-      contacts: await bands.list("contact", band.id),
-    })),
-  );
-  const pending = (await bands.pendingDeletes()).length > 0;
-  if (signedIn && token === storage.remote.token) {
-    summaries = loaded;
-    pendingPublicDeletes = pending;
-  }
-}
-async function save(action: () => Promise<void>) {
-  busy = true;
-  error = "";
   try {
-    await action();
-    await load();
+    await data.load();
+    await threads.refresh();
   } catch {
-    error = "Could not save changes. Please retry.";
-  } finally {
-    busy = false;
-  }
-}
-function createBand(event: SubmitEvent) {
-  event.preventDefault();
-  if (!bandName.trim()) {
-    error = "Enter a band name.";
-    return;
-  }
-  void save(async () => {
-    const band = {
-      id: crypto.randomUUID(),
-      name: bandName.trim(),
-      currency: bandCurrency.toUpperCase(),
-    };
-    await bands.save("band", band.id, band);
-    selected = band.id;
-    bandName = "";
-    creatingBand = false;
-  });
-}
-function saveMember(event: SubmitEvent) {
-  event.preventDefault();
-  if (!selected || !memberName.trim()) {
-    error = "Enter a member name.";
-    return;
-  }
-  void save(async () => {
-    await bands.save("member", selected, {
-      id: editingMember || crypto.randomUUID(),
-      name: memberName.trim(),
-      ...(phone.trim() ? { phone: phone.trim() } : {}),
-      ...(memberEmail.trim() ? { email: memberEmail.trim() } : {}),
-      ...(messenger.trim() ? { messenger: messenger.trim() } : {}),
-    });
-    resetMember();
-  });
-}
-function resetMember() {
-  editingMember = "";
-  memberName = "";
-  phone = "";
-  memberEmail = "";
-  messenger = "";
-}
-function editMember(member: Member) {
-  editingMember = member.id;
-  memberName = member.name;
-  phone = member.phone ?? "";
-  memberEmail = member.email ?? "";
-  messenger = member.messenger ?? "";
-}
-function removeMember(member: Member) {
-  if (!confirm(`Remove ${member.name} from this band?`)) return;
-  void save(async () => {
-    await bands.removeMember(selected, member.id);
-    if (editingMember === member.id) resetMember();
-  });
-}
-async function authenticate(event: SubmitEvent) {
-  event.preventDefault();
-  busy = true;
-  error = "";
-  try {
-    ensureSessionReady();
-    if (mode === "login" && username.trim().includes("@")) {
-      password = "";
-      storage.connect(username.trim());
-      return;
-    }
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        email,
-        password,
-        ...(mode === "signup"
-          ? { bandName, currency: bandCurrency.toUpperCase() }
-          : {}),
-      }),
-    });
-    const session = await response.json();
-    if (!response.ok)
-      throw new Error(session.error ?? "Could not log in. Please retry.");
-    password = "";
-    await connectSession(session.username, session.token);
-    bandName = "";
-    history.replaceState(null, "", "/");
-    await load();
-  } catch (cause) {
-    error =
-      cause instanceof Error
-        ? cause.message
-        : "Could not log in. Please retry.";
-  } finally {
-    busy = false;
+    ui.error = "Could not load your bands. Please retry.";
   }
 }
 function resetSession() {
   signedIn = false;
-  ready = false;
-  busy = false;
-  error = "";
+  ui.busy = false;
+  ui.error = "";
   status = "";
-  summaries = [];
-  selected = "";
-  mode = "login";
-  creatingBand = false;
-  bandName = "";
-  password = "";
-  openedGig = "";
-  inboxEnquiry = undefined;
-  metaLoadedFor = "";
-  metaPage = null;
-  mailLoadedFor = "";
-  mailAccount = null;
-  mailEditing = false;
-  resetMember();
-}
-function logOut(event: MouseEvent) {
-  event.preventDefault();
-  logout();
+  userAddress = "";
+  data.reset();
+  threads.reset();
+  // logout()'s replaceState fires no hashchange, so without this the router
+  // would keep showing whatever record was open when the session ended.
+  router.read();
 }
 onMount(() => {
   const unsubscribeLogout = onSessionLogout(resetSession);
-  const refresh = () => {
-    if (signedIn)
-      void load().catch(() => {
-        error = "Could not load your bands. Please retry.";
-      });
-  };
   storage.on("ready", () => {
-    ready = true;
     status = "";
   });
   storage.on("connected", () => {
     signedIn = true;
     status = "";
-    history.replaceState(null, "", "/");
-    refresh();
-    void fetch("/api/meta/config")
-      .then((r) => r.json())
-      .then((config) => {
-        metaConfig = config;
-      })
-      .catch(() => {});
+    userAddress = storage.remote.userAddress;
+    if (location.pathname !== "/")
+      history.replaceState(null, "", `/${location.hash}`);
+    void load();
+    void meta.load();
   });
   storage.on("error", () => {
-    error =
+    ui.error =
       "Could not save or load changes. Please check your connection and try again.";
   });
   storage.on("disconnected", resetSession);
@@ -564,15 +101,15 @@ onMount(() => {
     changed = true;
   });
   storage.on("sync-done", (event) => {
-    if ((event as { completed?: boolean }).completed && signedIn) {
+    if ((event as { completed?: boolean }).completed && signedIn)
       void bands
         .retryPublicDeletes()
-        .then(refresh)
+        .then(() => data.load())
         .catch(() => {});
-    }
-    if (changed) {
+    // One refresh per sync, not one per synced document; drafts live in the forms.
+    if (changed && signedIn && !ui.busy) {
       changed = false;
-      refresh();
+      void load();
     }
   });
   return () => {
@@ -581,649 +118,298 @@ onMount(() => {
     storage.stopSync();
   };
 });
+
+// One stream per account; it only says "sync now". Reopened whenever the band it is checked against changes.
+$effect(() => {
+  const streamBand = data.bandId || data.all[0]?.band.id;
+  if (!signedIn || !streamBand) return;
+  const { userAddress, token } = storage.remote;
+  if (!userAddress.endsWith(`@${location.host}`)) return;
+  const username = decodeURIComponent(
+    userAddress.slice(0, userAddress.lastIndexOf("@")),
+  );
+  let events: EventSource | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  // The stream is opened with a single-use ticket, so a dropped connection needs a new ticket, not a browser retry.
+  const reopen = () => {
+    if (!closed) retry = setTimeout(() => open().catch(reopen), 5000);
+  };
+  async function open() {
+    const response = await fetch("/api/messages/ticket", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: streamBand }),
+    });
+    if (!response.ok) throw new Error("No ticket");
+    const { ticket } = await response.json();
+    if (closed) return;
+    events = new EventSource(
+      `/api/messages/events?${new URLSearchParams({ ticket })}`,
+    );
+    events.onmessage = () => void storage.startSync();
+    // The ticket is spent, so the browser's own retry would only earn a 401; reopen with a new one instead.
+    events.onerror = () => {
+      events?.close();
+      reopen();
+    };
+  }
+  open().catch(reopen);
+  return () => {
+    closed = true;
+    clearTimeout(retry);
+    events?.close();
+  };
+});
+function choose(bandId: string) {
+  data.choose(bandId);
+  // A record from the previous band no longer belongs in the pane.
+  if (needsBand && router.parts.length)
+    router.go(router.screen, { replace: true });
+}
 </script>
 
-<svelte:head
-  ><meta
-    name="description"
-    content="Your bands, members and gigs in one place."
-  ></svelte:head
->
-<main>
-  <header>
-    <p class="eyebrow">Keep the band together</p>
-    <h1>Gigger</h1>
-    <p>Book it, plan it, play it, post it.</p>
-    {#if signedIn}
-      <a class="logout" href="/login" onclick={logOut}>Log out</a>
-    {/if}
-  </header>
-  {#if error}
-    <p class="error" role="alert">{error}</p>
-  {/if}
-  {#if status}
-    <p role="status">{status}</p>
-  {/if}
-  {#if signedIn && pendingPublicDeletes}
-    <p role="status">
-      A public gig removal is waiting to sync. It may remain visible until you
-      reconnect.
-    </p>
-  {/if}
-  {#if !signedIn}
-    <section aria-labelledby="auth-title">
-      <h2 id="auth-title">
-        {mode === "signup" ? "Create your account" : "Log in"}
-      </h2>
-      <form onsubmit={authenticate}>
-        <label
-          >Username<input
-            autocomplete="username"
-            bind:value={username}
-            required
-            maxlength="254"
-            pattern={mode === "signup"
-              ? "[a-zA-Z0-9][a-zA-Z0-9._\\-]{1,63}"
-              : undefined}
-          ></label
+<svelte:head>
+  <meta name="description" content="Your bands, members and gigs in one place.">
+</svelte:head>
+
+{#if !signedIn}
+  <Auth {status} onsignedin={load} />
+{:else}
+  <div class="shell" class:phone-detail={phoneDetail}>
+    {#if ui.phone}
+      <header class="phone-top no-print">
+        <a class="brand" href="#/bookings"
+          ><span class="mark" aria-hidden="true"></span>Gigger</a
         >
-        {#if mode === "signup"}
-          <label
-            >Email<input
-              type="email"
-              autocomplete="email"
-              bind:value={email}
-              required
-              maxlength="254"
-            ></label
+        <div class="phone-picker">
+          <BandPicker bands={data.all} value={data.bandId} onchange={choose} />
+        </div>
+        {#if router.screen === "bookings"}
+          <a class="btn btn-icon" href="#/bookings/new" aria-label="New enquiry"
+            ><Icon name="plus" size={20} stroke={2.5} /></a
           >
         {/if}
-        {#if mode === "signup" || !username.includes("@")}
-          <label
-            >Password<input
-              type="password"
-              autocomplete={mode === "signup"
-                ? "new-password"
-                : "current-password"}
-              bind:value={password}
-              required
-              minlength={mode === "signup" ? 8 : 1}
-              maxlength="1024"
-            ></label
+      </header>
+    {:else}
+      <TopBar items={nav} active={router.screen}>
+        {#snippet picker()}
+          <BandPicker bands={data.all} value={data.bandId} onchange={choose} />
+        {/snippet}
+        {#snippet account()}
+          <span class="user muted">{userAddress}</span>
+          <a
+            class="logout"
+            href="/login"
+            onclick={(event) => {
+              event.preventDefault();
+              logout();
+            }}
+            >Log out</a
           >
-        {/if}
-        {#if mode === "signup"}
-          <label
-            >Band name<input
-              bind:value={bandName}
-              required
-              maxlength="200"
-            ></label
-          >
-        {/if}
-        <button type="submit" disabled={busy}>
-          {busy ? "Please wait…" : mode === "signup" ? "Sign up" : "Log in"}
-        </button>
-      </form>
-      <p>
-        {#if mode === "signup"}
-          Already have an account? <a href="/login">Log in</a>
-        {:else}
-          New to Gigger? <a href="/signup">Create an account</a>
-        {/if}
-      </p>
-    </section>
-  {:else}
-    <nav aria-label="Bands">
-      <label
-        >View band<select
-          bind:value={selected}
-          onchange={() => {
-            resetMember();
-            openedGig = "";
-            inboxEnquiry = undefined;
-          }}
-        >
-          <option value="">All bands</option>
-          {#each summaries as { band } (band.id)}
-            <option value={band.id}>{band.name}</option>
-          {/each}
-        </select></label
-      >
-      <button
-        type="button"
-        aria-expanded={creatingBand}
-        aria-controls="new-band"
-        onclick={() => {
-          creatingBand = !creatingBand;
-        }}
-      >
-        + New band
-      </button>
-    </nav>
-    {#if creatingBand}
-      <section id="new-band" aria-labelledby="create-title">
-        <h2 id="create-title">Create a band</h2>
-        <form onsubmit={createBand}>
-          <label>Band name<input bind:value={bandName} required></label>
-          <label
-            >Currency<input
-              bind:value={bandCurrency}
-              required
-              pattern={"[A-Za-z]{3}"}
-              maxlength="3"
-            ></label
-          ><button type="submit" disabled={!ready || busy}>Create band</button>
-        </form>
-      </section>
-    {/if}
-    {#if current}
-      <section>
-        <h2>{current.band.name}</h2>
-        <form
-          onsubmit={(event) => {
-            event.preventDefault();
-            const band = current.band;
-            const currency = currencyText.toUpperCase();
-            void save(async () => {
-              await bands.save("band", band.id, {
-                ...band,
-                currency,
-              });
-              currencyDraft = null;
-            });
-          }}
-        >
-          <label
-            >Band currency<input
-              name="currency"
-              disabled={busy}
-              value={currencyText}
-              oninput={(event) => {
-                currencyDraft = {
-                  bandId: current.band.id,
-                  text: event.currentTarget.value,
-                };
-              }}
-              pattern={"[A-Za-z]{3}"}
-              maxlength="3"
-              required
-            ></label
-          >
-          <button type="submit" disabled={busy}>Save currency</button>
-        </form>
-        <h3>Public page</h3>
-        {#if pageUrl}
-          <p>
-            Fans can see your confirmed and played gigs at
-            <a href={pageUrl}>{pageUrl}</a>
-          </p>
-          <p>
-            <a
-              class="button"
-              href={`/b/${current.band.slug}/export.zip`}
-              download
-              >Export static page</a
+        {/snippet}
+        {#snippet action()}
+          {#if router.screen === "bookings"}
+            <a class="btn btn-primary" href="#/bookings/new"
+              ><Icon name="plus" stroke={2.5} />
+              New enquiry</a
             >
-            Downloads a zip with the page, its JSON and a calendar file to host
-            anywhere.
-          </p>
-        {:else}
-          <p>
-            Publish a page of your confirmed gigs: date, start time, venue,
-            city, ticket link and public description. Fees, contacts, notes and
-            earnings stay private.
-          </p>
-        {/if}
-        <form onsubmit={publishPage}>
-          <label
-            >Page address
-            <span class="prefix"
-              ><span aria-hidden="true">{location.origin}/b/</span>
-              <input
-                name="slug"
-                value={slugText}
-                oninput={(event) => {
-                  slugDraft = {
-                    bandId: current.band.id,
-                    text: event.currentTarget.value,
-                  };
-                }}
-                pattern={slugPattern.slice(1, -1)}
-                maxlength="60"
-                required
-              ></span
-            ></label
-          >
-          <button type="submit" disabled={!ready || busy}>
-            {current.band.slug ? "Save address" : "Publish page"}
-          </button>
-        </form>
-        <h3>Messenger and Instagram</h3>
-        {#if metaPage}
-          <p>
-            Connected to Facebook Page {metaPage.pageId}{metaPage.instagram
-              ? " and its Instagram account"
-              : ""}. Messages arrive in the Inbox below.
-          </p>
-          <button type="button" disabled={busy} onclick={disconnectPage}>
-            Disconnect page
-          </button>
-        {:else if metaPages.length}
-          <p>Which page should this band use?</p>
-          {#each metaPages as page (page.id)}
-            <button
-              type="button"
-              disabled={busy}
-              onclick={() =>
-                connectPage(page.id, (page as { token?: string }).token)}
+          {:else if router.screen === "venues" && data.current}
+            <a class="btn btn-secondary" href="#/venues/new"
+              ><Icon name="plus" />
+              New venue</a
             >
-              {page.name}
-            </button>
-          {/each}
-        {:else if metaConfig?.appId}
-          <p>
-            Connect the band's Facebook Page to answer Messenger and Instagram
-            enquiries from the Inbox.
-          </p>
-          <button type="button" disabled={busy} onclick={() => connectPage()}>
-            Connect Facebook Page
-          </button>
-        {:else}
-          <p>Facebook is not configured on this server.</p>
-        {/if}
-        <h3>Email</h3>
-        {#if mailEditing}
-          <p>
-            Enquiries sent to this address appear in the Inbox and replies go
-            out from it. Use an app password if your provider offers one.
-          </p>
-          <form onsubmit={saveMailAccount}>
-            <label
-              >Email address<input
-                type="email"
-                bind:value={mailForm.address}
-                required
-              ></label
-            ><label>Display name<input bind:value={mailForm.name}></label
-            ><label
-              >Incoming (IMAP) server<input
-                bind:value={mailForm.imapHost}
-                placeholder="imap.example.com — leave empty to only send"
-              ></label
-            ><label
-              >IMAP port<input
-                type="number"
-                min="1"
-                max="65535"
-                bind:value={mailForm.imapPort}
-              ></label
-            ><label
-              >Outgoing (SMTP) server<input
-                bind:value={mailForm.smtpHost}
-                required
-              ></label
-            ><label
-              >SMTP port<input
-                type="number"
-                min="1"
-                max="65535"
-                bind:value={mailForm.smtpPort}
-              ></label
-            ><label>Login<input bind:value={mailForm.login} required></label
-            ><label
-              >Password<input
-                type="password"
-                bind:value={mailForm.password}
-                placeholder={mailAccount ? "Unchanged" : ""}
-                required={!mailAccount}
-              ></label
-            ><button type="submit" disabled={busy}>Save email settings</button>
-            <button type="button" onclick={() => (mailEditing = false)}>
-              Cancel
-            </button>
-          </form>
-        {:else if mailAccount}
-          <p>
-            {mailAccount.watching ? "Watching" : "Sending as"}
-            {mailAccount.address}{mailAccount.watching
-              ? ". New enquiries arrive in the Inbox below."
-              : ". Replies go out by email; no mailbox is watched."}
-          </p>
-          {#if mailAccount.error}
-            <p class="error" role="alert">
-              Mailbox problem: {mailAccount.error}
-            </p>
+          {:else if router.screen === "contacts" && data.current}
+            <a class="btn btn-secondary" href="#/contacts/new"
+              ><Icon name="plus" />
+              New contact</a
+            >
+          {:else if router.screen === "bands" && data.current}
+            <a class="btn btn-secondary" href="#/bands/new"
+              ><Icon name="plus" />
+              New band</a
+            >
           {/if}
-          <button type="button" disabled={busy} onclick={editMailAccount}>
-            Change email settings
-          </button>
-          <button type="button" disabled={busy} onclick={removeMailAccount}>
-            Remove email account
-          </button>
-        {:else}
-          <p>
-            Add the band's mailbox to answer email enquiries from the Inbox.
-          </p>
-          <button type="button" disabled={busy} onclick={editMailAccount}>
-            Set up email
+        {/snippet}
+      </TopBar>
+    {/if}
+
+    {#if ui.error}
+      <p class="notice error no-print" role="alert">
+        {ui.error}
+        {#if ui.error === staleMessage}
+          <button
+            type="button"
+            class="btn btn-secondary"
+            disabled={ui.busy}
+            onclick={() => run(async () => {})}
+          >
+            Reload latest
           </button>
         {/if}
-        <h3>Members</h3>
-        <ul>
-          {#each current.members as member (member.id)}
+        <button
+          type="button"
+          class="btn btn-ghost dismiss"
+          onclick={() => (ui.error = "")}
+        >
+          Dismiss
+        </button>
+      </p>
+    {/if}
+    {#if data.pendingPublicDeletes}
+      <p class="notice no-print" role="status">
+        A public gig removal is waiting to sync. It may remain visible until you
+        reconnect.
+      </p>
+    {/if}
+
+    <main>
+      {#if !data.loaded}
+        <p class="empty">Loading your bands…</p>
+      {:else if router.screen === "band"}
+        <Band />
+      {:else if needsBand && !data.current}
+        <div class="page-head">
+          <div>
+            <h1>
+              {router.screen === "venues"
+                ? "Venues"
+                : router.screen === "contacts"
+                  ? "Contacts"
+                  : "Other bands"}
+            </h1>
+            <p>Each band keeps its own. Choose one to see them.</p>
+          </div>
+        </div>
+        <ul class="choose">
+          {#each data.all as item (item.band.id)}
             <li>
-              <strong>{member.name}</strong>
-              {#if member.phone || member.email || member.messenger}
-                —
-                {[member.phone, member.email, member.messenger]
-                  .filter(Boolean)
-                  .join(" · ")}
-              {/if}
               <button
                 type="button"
-                class="text-button"
-                disabled={busy}
-                onclick={() => editMember(member)}
+                class="btn btn-secondary btn-wide"
+                onclick={() => data.choose(item.band.id)}
               >
-                Edit<span class="sr-only"> {member.name}</span>
-              </button>
-              <button
-                type="button"
-                class="text-button"
-                disabled={busy}
-                onclick={() => removeMember(member)}
-              >
-                Remove<span class="sr-only"> {member.name}</span>
+                {item.band.name} <Icon name="arrow-right" />
               </button>
             </li>
           {:else}
-            <li>No members yet.</li>
+            <li class="empty">
+              Create a band on the <a href="#/band">Band page</a> first.
+            </li>
           {/each}
         </ul>
-        <h3>{editingMember ? "Edit member" : "Add a member"}</h3>
-        <p>Only a name is required. Contact details are optional.</p>
-        <form onsubmit={saveMember}>
-          <label>Name<input bind:value={memberName} required></label
-          ><label
-            >Email address<input type="email" bind:value={memberEmail}></label
-          ><label>Phone number<input type="tel" bind:value={phone}></label
-          ><label>Messenger handle<input bind:value={messenger}></label
-          ><button type="submit" disabled={!ready || busy}>
-            {editingMember ? "Save member" : "Add member"}
-          </button>
-          {#if editingMember}
-            <button type="button" onclick={resetMember}>Cancel</button>
-          {/if}
-        </form>
-      </section>
-    {/if}
-    <Inbox
-      {summaries}
-      bandId={selected}
-      humanAgent={metaConfig?.humanAgent ?? false}
-      onopengig={(bandId, gigId) => {
-        inboxEnquiry = undefined;
-        openedGig = gigId;
-        selected = bandId;
-        inboxNonce++;
-      }}
-      oncreategig={(bandId, enquiry) => {
-        openedGig = "";
-        inboxEnquiry = enquiry;
-        selected = bandId;
-        inboxNonce++;
-      }}
-    />
-    {#key `${selected}:${inboxNonce}`}
-      <Bookings
-        {summaries}
-        bandId={selected}
-        initialGigId={openedGig}
-        initialEnquiry={inboxEnquiry}
-        onopen={(bandId, gigId) => {
-          openedGig = gigId;
-          selected = bandId;
-        }}
-        onchanged={load}
-      />
-    {/key}
-    <section aria-labelledby="overview-title">
-      <h2 id="overview-title">
-        {current ? current.band.name : "All bands"}
-        overview
-      </h2>
-      {#each summaries.filter(
-        (item) => !selected || item.band.id === selected,
-      ) as summary (summary.band.id)}
-        <article>
-          <h3>
-            <button
-              type="button"
-              class="band"
-              onclick={() => {
-                selected = summary.band.id;
-                openedGig = "";
-                inboxEnquiry = undefined;
-                resetMember();
-              }}
-            >
-              {summary.band.name}
-            </button>
-          </h3>
-          {#each groupGigs(summary.gigs) as group (group.status)}
-            <h4 class="status">{group.status}</h4>
-            <ul>
-              {#each group.gigs as gig (gig.id)}
-                <li>
-                  <strong>{gig.title}</strong>
-                  · <time datetime={gig.date}>{gig.date}</time> ·
-                  {summary.venues.find((venue) => venue.id === gig.venueId)
-                    ?.name ?? gig.venue}
-                  <details>
-                    <summary>Gig details</summary>
-                    <p>
-                      {summary.venues.find((venue) => venue.id === gig.venueId)
-                        ?.address ?? gig.address}
-                    </p>
-                    {#if gig.contactIds?.length || gig.contacts?.length}
-                      <p>
-                        Contacts:
-                        {gig.contactIds
-                          ?.map(
-                            (id) =>
-                              summary.contacts.find(
-                                (contact) => contact.id === id,
-                              )?.name ?? id,
-                          )
-                          .join(" · ") ?? gig.contacts?.join(" · ")}
-                      </p>
-                    {/if}
-                    {#if gig.loadIn}
-                      <p>Load-in: {gig.loadIn}</p>
-                    {/if}
-                    {#if gig.soundcheck}
-                      <p>Soundcheck: {gig.soundcheck}</p>
-                    {/if}
-                    {#if gig.setTimes?.length}
-                      <p>Set times: {gig.setTimes.join(", ")}</p>
-                    {/if}
-                    {#if formatFee(gig.fee, summary.band.currency ?? "EUR")}
-                      <p>
-                        Fee:
-                        {formatFee(
-                          gig.fee,
-                          summary.band.currency ?? "EUR",
-                          navigator.language,
-                        )}
-                      </p>
-                    {/if}
-                    {#if gig.notes}
-                      <p>{gig.notes}</p>
-                    {/if}
-                  </details>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p>No gigs yet.</p>
-          {/each}
-        </article>
+      {:else if router.screen === "venues" && data.current}
+        <Venues data={data.current} />
+      {:else if router.screen === "contacts" && data.current}
+        <Contacts data={data.current} />
+      {:else if router.screen === "bands" && data.current}
+        <OtherBands data={data.current} />
       {:else}
-        <p>Create your first band to get started.</p>
-      {/each}
-    </section>
-  {/if}
-</main>
-<style>
-.logout {
-  position: absolute;
-  top: 2rem;
-  right: 0;
-  font-size: 0.875rem;
-}
-.text-button {
-  background: transparent;
-  color: #205b43;
-  border: 0;
-  padding: 0.3rem 0.5rem;
-  text-decoration: underline;
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-nav {
-  display: flex;
-  gap: 1rem;
-  align-items: end;
-  flex-wrap: wrap;
-}
+        <Bookings humanAgent={meta.config?.humanAgent ?? false} />
+      {/if}
+    </main>
 
-.status {
-  text-transform: capitalize;
-}
-:global(body) {
-  margin: 0;
-  background: #f5f4ef;
-  color: #202d29;
-  font:
-    16px / 1.5 system-ui,
-    sans-serif;
+    {#if ui.phone && !phoneDetail}
+      <TabBar items={tabs} active={activeTab} />
+    {/if}
+  </div>
+{/if}
+
+<style>
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
 }
 main {
-  max-width: 960px;
-  margin: auto;
-  padding: 2rem 1rem 4rem;
-}
-header {
-  position: relative;
-  padding: 2rem 0;
-}
-h1 {
-  font-size: clamp(3rem, 10vw, 5rem);
-  line-height: 1;
-  margin: 0.3rem 0;
-}
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  font-size: 0.8rem;
-}
-section,
-nav {
-  background: white;
-  padding: 1.5rem;
-  margin: 1rem 0;
-  border: 1px solid #d4ddd7;
-  border-radius: 12px;
-}
-h2 {
-  margin-top: 0;
-}
-form {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  align-items: end;
-}
-label {
-  display: grid;
-  gap: 0.4rem;
   flex: 1;
-  min-width: 160px;
+  min-height: 0;
+  overflow: auto;
 }
-input,
-select,
-button,
-.button {
-  font: inherit;
-  border: 1px solid #82958a;
-  border-radius: 6px;
-  padding: 0.65rem;
+@media (max-width: 899px) {
+  .shell {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+  }
+  main {
+    overflow: visible;
+  }
 }
-button,
-.button {
-  background: #205b43;
-  color: white;
-  cursor: pointer;
+.phone-top {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 8px 0 16px;
+  background: var(--color-bg);
+  border-bottom: var(--rule-2);
 }
-.button {
-  display: inline-block;
+.phone-detail .phone-top {
+  display: none;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 19px;
+  color: inherit;
   text-decoration: none;
-  margin-right: 0.5rem;
 }
-.prefix {
+.mark {
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent);
+}
+.phone-picker {
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+  min-width: 0;
+  height: 44px;
+}
+.user {
+  font-size: 13px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.logout {
+  font-size: 13px;
+  color: var(--color-text);
+}
+.notice {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
-  color: #4e5f58;
-  overflow-wrap: anywhere;
+  gap: 12px;
 }
-.prefix input {
-  flex: 1;
-  min-width: 8rem;
-  max-width: 100%;
+.dismiss {
+  margin-left: auto;
 }
-button:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-a {
-  color: #205b43;
-}
-article {
-  border-top: 1px solid #d4ddd7;
-}
-.band {
-  background: transparent;
-  color: #205b43;
-  padding: 0.2rem;
-  text-decoration: underline;
-}
-.error {
-  color: #902a20;
-  padding: 1rem;
-  border: 1px solid;
-}
-:global(:focus-visible) {
-  outline: 3px solid #c18716;
-  outline-offset: 3px;
+.choose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 480px;
+  padding: 24px;
 }
 @media print {
-  :global(body:has(.gig-sheet)) {
-    background: white;
-  }
-  main:has(:global(.gig-sheet)) > :not(:has(:global(.gig-sheet))) {
+  /* Only the gig sheet prints. */
+  .shell > :global(:not(main)),
+  main > :global(:not(.gig-sheet)) {
     display: none;
   }
   main {
-    padding: 0;
+    overflow: visible;
   }
 }
 </style>
