@@ -73,6 +73,9 @@ function resetSession() {
   userAddress = "";
   data.reset();
   threads.reset();
+  // logout()'s replaceState fires no hashchange, so without this the router
+  // would keep showing whatever record was open when the session ended.
+  router.read();
 }
 onMount(() => {
   const unsubscribeLogout = onSessionLogout(resetSession);
