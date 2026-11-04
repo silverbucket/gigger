@@ -518,7 +518,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     expect(t.sent).toHaveLength(1);
     expect(t.sent[0]).toMatchObject({
       message: { id: message.id },
-      credentials: { access_token: "page-token" },
+      credentials: { token: "page-token", apiVersion: "v26.0" },
     });
     expect(
       t.json(
@@ -575,6 +575,12 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     expect(igReply.status).toBe(200);
     expect((await igReply.json()).actor).toEqual({ id: "ig-1" });
     expect(t.sent).toHaveLength(2);
+    expect(t.sent[1].credentials).toEqual({
+      token: "page-token",
+      apiVersion: "v26.0",
+      login: "facebook",
+      pageId: "page-1",
+    });
     expect(t.json("conversations/index")[ig].account).toBe("ig-1");
     // A conversation that ran through a Page no longer connected cannot be answered with the new one.
     const foreign = t.json("conversations/index");

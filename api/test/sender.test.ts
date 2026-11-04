@@ -74,7 +74,8 @@ test("the Sockethub sender delivers credentials and the message through the real
   const stub = stubSockethub(["messenger"]);
   try {
     await sockethubSender("messenger", await stub.start()).send(message, {
-      access_token: "page-token",
+      token: "page-token",
+      apiVersion: "v26.0",
     });
     expect(stub.received.map((r) => r.event)).toEqual([
       "credentials",
@@ -82,7 +83,8 @@ test("the Sockethub sender delivers credentials and the message through the real
     ]);
     expect(stub.received[0].payload.object).toEqual({
       type: "credentials",
-      access_token: "page-token",
+      token: "page-token",
+      apiVersion: "v26.0",
     });
     expect(stub.received[1].payload).toMatchObject({
       type: "send",
@@ -91,7 +93,7 @@ test("the Sockethub sender delivers credentials and the message through the real
       object: {
         type: "message",
         content: "See you Friday",
-        tag: "HUMAN_AGENT",
+        humanAgent: true,
       },
     });
   } finally {

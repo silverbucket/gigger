@@ -51,7 +51,7 @@ export function sockethubSender(
         object: {
           type: "message",
           content: message.object.content,
-          ...(message.tag ? { tag: message.tag } : {}),
+          ...(message.tag === "HUMAN_AGENT" ? { humanAgent: true } : {}),
         },
       });
     },

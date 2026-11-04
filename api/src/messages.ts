@@ -9,6 +9,7 @@ import {
   replyBlocked,
   withMessage,
 } from "@gigger/schemas";
+import { graphVersion } from "./meta";
 import { unseal } from "./secrets";
 import type { Sender } from "./sender";
 import { type RemoteStore, remoteStore } from "./storage";
@@ -184,7 +185,15 @@ export function messageHandler(
       try {
         await senders[thread.channel].send(
           message,
-          page ? { access_token: unseal(page.token, env) } : undefined,
+          page
+            ? {
+                token: unseal(page.token, env),
+                apiVersion: graphVersion,
+                ...(thread.channel === "instagram"
+                  ? { login: "facebook", pageId: page.page_id }
+                  : {}),
+              }
+            : undefined,
         );
       } catch (cause) {
         const error = cause instanceof Error ? cause.message : "Send failed";

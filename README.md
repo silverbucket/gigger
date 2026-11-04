@@ -102,3 +102,12 @@ bun run test:e2e
 Set `E2E_BASE_URL` when the stack uses another port, for example `E2E_BASE_URL=http://localhost:18086 bun run test:e2e`. Tests run in desktop Chromium and mobile WebKit, create independent accounts, and use the real account API and remoteStorage service without mocked form submissions. Coverage includes signup validation, band and gig currencies, booking drafts and required fields, survey cancellation, earnings calculations and persistence, venue/earnings separation, gig-sheet print styles, and publishing the public page. `bun test` continues to run unit and storage tests separately.
 
 CI runs the browser suite after starting its fresh Compose stack. Failures retain screenshots and Playwright traces in the `browser-test-results` artifact for seven days. See [Playwright's trace options](https://playwright.dev/docs/test-use-options#recording-options) for inspecting failures. This checks browser print styles, not a physical printer.
+
+### Sockethub Meta adapter
+
+Meta replies require Sockethub's Messenger and Instagram platforms. The adapter
+passes `token` and the shared Graph API version as credentials, and maps a
+manual `HUMAN_AGENT` reply to `object.humanAgent`. Instagram uses Facebook Login:
+its credentials include `login: "facebook"` and the linked Page ID, while the
+message actor remains the Instagram account ID. This requires the platform
+support in [Sockethub #1353](https://github.com/sockethub/sockethub/pull/1353).
