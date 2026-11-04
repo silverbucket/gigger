@@ -7,9 +7,12 @@ import {
   type Message,
 } from "@gigger/schemas";
 import type { Messages } from "./messages";
+import { seal, unseal } from "./secrets";
 import { remoteStore } from "./storage";
 
-const graph = "https://graph.facebook.com/v21.0";
+/** The one Graph API version the server and the browser SDK use. */
+export const graphVersion = "v26.0";
+const graph = `https://graph.facebook.com/${graphVersion}`;
 const noStore = { "Cache-Control": "no-store" };
 
 export function validSignature(
@@ -26,6 +29,28 @@ export function validSignature(
     given.length === expected.length &&
     crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected))
   );
+}
+/** Meta's deauthorize and data-deletion callbacks post a `signed_request`: base64url(HMAC-SHA256).base64url(JSON with user_id). */
+export function parseSignedRequest(secret: string, signedRequest: string) {
+  const [signature, payload] = signedRequest.split(".");
+  if (!signature || !payload) return null;
+  const given = Buffer.from(signature, "base64url");
+  const expected = new Bun.CryptoHasher("sha256", secret)
+    .update(payload)
+    .digest();
+  if (
+    given.length !== expected.length ||
+    !crypto.timingSafeEqual(given, expected)
+  )
+    return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString());
+    return typeof data?.user_id === "string"
+      ? (data as { user_id: string })
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 interface Event {
@@ -84,6 +109,7 @@ type PageRow = {
   band_id: string;
   token: string;
   storage_token: string;
+  user_id: string | null;
 };
 export function metaHandler(
   db: Database,
@@ -93,15 +119,37 @@ export function metaHandler(
   internalUrl = env.ARMADIETTO_AUTH_URL ?? "http://armadietto:8001",
   graphUrl = graph,
 ) {
-  const byPage = db.query<PageRow, [string]>(
-    "SELECT * FROM meta_pages WHERE page_id = ?",
-  );
-  const byIg = db.query<PageRow, [string]>(
-    "SELECT * FROM meta_pages WHERE ig_id = ?",
-  );
-  const byBand = db.query<PageRow, [string, string]>(
-    "SELECT * FROM meta_pages WHERE username = ? AND band_id = ?",
-  );
+  const opened = (row: PageRow | null) =>
+    row && {
+      ...row,
+      token: unseal(row.token, env),
+      storage_token: unseal(row.storage_token, env),
+    };
+  const byPage = (pageId: string) =>
+    opened(
+      db
+        .query<PageRow, [string]>("SELECT * FROM meta_pages WHERE page_id = ?")
+        .get(pageId),
+    );
+  const byIg = (igId: string) =>
+    opened(
+      db
+        .query<PageRow, [string]>("SELECT * FROM meta_pages WHERE ig_id = ?")
+        .get(igId),
+    );
+  const byBand = (username: string, bandId: string) =>
+    opened(
+      db
+        .query<PageRow, [string, string]>(
+          "SELECT * FROM meta_pages WHERE username = ? AND band_id = ?",
+        )
+        .get(username, bandId),
+    );
+  const byUser = (userId: string) =>
+    db
+      .query<PageRow, [string]>("SELECT * FROM meta_pages WHERE user_id = ?")
+      .all(userId)
+      .map((row) => opened(row) as PageRow);
   const fail = (error: string, status: number) =>
     Response.json({ error }, { status, headers: noStore });
   const fb = async (path: string, init?: RequestInit) => {
@@ -127,15 +175,15 @@ export function metaHandler(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     });
-  /** Unsubscribes the Page and revokes its storage token; the row stays until both succeed. Error code 190 means the Page token is already dead. */
-  async function release(row: PageRow) {
+  /** Unsubscribes the Page and revokes its storage token; the row stays until both succeed. Error code 190 means the Page token is already dead; after a deauthorization (`force`) every Graph error is expected. */
+  async function release(row: PageRow, force = false) {
     try {
       await fb(
         `/${row.page_id}/subscribed_apps?access_token=${encodeURIComponent(row.token)}`,
         { method: "DELETE" },
       );
     } catch (error) {
-      if ((error as { code?: number }).code !== 190)
+      if (!force && (error as { code?: number }).code !== 190)
         throw new Error("Could not unsubscribe from Facebook. Please retry.");
     }
     const revoked = await hook("logout", {
@@ -227,8 +275,7 @@ export function metaHandler(
       if (!channel) return new Response("EVENT_RECEIVED");
       let failed = false;
       for (const entry of body.entry ?? []) {
-        const row =
-          channel === "messenger" ? byPage.get(entry.id) : byIg.get(entry.id);
+        const row = channel === "messenger" ? byPage(entry.id) : byIg(entry.id);
         if (!row) continue;
         for (const event of entry.messaging ?? []) {
           const message = fromWebhook(
@@ -256,6 +303,8 @@ export function metaHandler(
       return Response.json({
         appId: env.META_APP_ID ?? "",
         configId: env.META_CONFIG_ID ?? "",
+        graphVersion,
+        humanAgent: !!env.META_HUMAN_AGENT,
       });
     },
     /** GET /meta/page?username&bandId with Bearer token: the connected page, if any. */
@@ -265,7 +314,7 @@ export function metaHandler(
       const bandId = q.get("bandId");
       if (!(await messages.verified(req, username, bandId)))
         return fail("Log in again.", 401);
-      const row = byBand.get(username as string, bandId as string);
+      const row = byBand(username as string, bandId as string);
       return Response.json(
         row ? { pageId: row.page_id, instagram: !!row.ig_id } : null,
         { headers: noStore },
@@ -284,7 +333,7 @@ export function metaHandler(
         return fail("Invalid request.", 400);
       if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again to connect a page.", 401);
-      if (!env.META_APP_ID || !env.META_APP_SECRET)
+      if (!env.META_APP_ID || !env.META_APP_SECRET || !env.TOKEN_KEY)
         return fail("Facebook is not configured on this server.", 503);
       return serial(async () => {
         try {
@@ -321,13 +370,16 @@ export function metaHandler(
               },
               { status: 409, headers: noStore },
             );
-          const owner = byPage.get(page.id);
+          const me = await fb(
+            `/me?fields=id&access_token=${encodeURIComponent(longLived.access_token)}`,
+          );
+          const owner = byPage(page.id);
           if (
             owner &&
             (owner.username !== username || owner.band_id !== bandId)
           )
             return fail("This Page is already connected to another band.", 409);
-          const existing = byBand.get(username as string, bandId as string);
+          const existing = byBand(username as string, bandId as string);
           // Switching Pages releases the old one first; reconnecting the same Page keeps its storage token.
           if (existing && existing.page_id !== page.id) await release(existing);
           await fb(
@@ -342,14 +394,15 @@ export function metaHandler(
             token = (await minted.json()).token;
           }
           db.query(
-            "INSERT OR REPLACE INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
           ).run(
             page.id,
             page.instagram_business_account?.id ?? null,
             username as string,
             bandId as string,
-            page.access_token,
-            token,
+            seal(page.access_token, env),
+            seal(token, env),
+            String(me.id),
           );
           return Response.json(
             {
@@ -381,7 +434,7 @@ export function metaHandler(
       if (!(await messages.verified(req, username, bandId, true)))
         return fail("Log in again.", 401);
       return serial(async () => {
-        const row = byBand.get(username as string, bandId as string);
+        const row = byBand(username as string, bandId as string);
         if (row)
           try {
             await release(row);
@@ -393,6 +446,41 @@ export function metaHandler(
           }
         return Response.json({ ok: true }, { headers: noStore });
       });
+    },
+    /** POST /meta/deauthorize and POST /meta/data-deletion from Meta: drop every Page connection of that Facebook user. Data deletion also answers with a status URL and confirmation code, as App Review requires. */
+    async deauthorize(req: Request, deletion = false) {
+      const form = await req.formData().catch(() => null);
+      const signed = form?.get("signed_request");
+      const user =
+        env.META_APP_SECRET && typeof signed === "string"
+          ? parseSignedRequest(env.META_APP_SECRET, signed)
+          : null;
+      if (!user) return fail("Invalid signed request.", 400);
+      return serial(async () => {
+        for (const row of byUser(user.user_id))
+          try {
+            await release(row, true);
+          } catch (error) {
+            console.error("Could not release page", row.page_id, error);
+            return fail("Could not release the page.", 500);
+          }
+        const code = crypto.randomUUID();
+        return Response.json(
+          deletion
+            ? {
+                url: `${env.APP_ORIGIN ?? "http://localhost:8080"}/api/meta/deletion-status?code=${code}`,
+                confirmation_code: code,
+              }
+            : { ok: true },
+          { headers: noStore },
+        );
+      });
+    },
+    /** GET /meta/deletion-status?code: deletion happens inside the callback, so every code is complete. */
+    deletionStatus() {
+      return new Response(
+        "Gigger removed the Facebook Page connection and the tokens it held for this account.",
+      );
     },
   };
 }

@@ -276,6 +276,8 @@ export interface Message {
   received?: string;
   /** Set when a reply could not be delivered. */
   error?: string;
+  /** Meta message tag; HUMAN_AGENT lets a person reply up to 7 days after the contact's last message. */
+  tag?: "HUMAN_AGENT";
 }
 export interface Conversation {
   bandId: string;
@@ -317,13 +319,28 @@ export function attachmentPath(
 export function messagePeer(message: Message) {
   return message.direction === "in" ? message.actor : message.target;
 }
-/** Meta only allows replies within 24 hours of the contact's last message; returns the reason when blocked. */
-export function replyBlocked(conversation: Conversation, now = Date.now()) {
+const day = 24 * 60 * 60 * 1000;
+/** Meta only allows replies within 24 hours of the contact's last message, or 7 days with the HUMAN_AGENT tag; returns the reason when blocked. */
+export function replyBlocked(
+  conversation: Conversation,
+  now = Date.now(),
+  humanAgent = false,
+) {
   if (conversation.channel === "email") return "";
   const since = now - Date.parse(conversation.lastIn ?? "");
-  if (since >= 0 && since < 24 * 60 * 60 * 1000) return "";
+  if (since >= 0 && since < (humanAgent ? 7 : 1) * day) return "";
   const name = conversation.channel === "messenger" ? "Messenger" : "Instagram";
-  return `${name} only allows replies within 24 hours of the contact's last message. Wait for them to write again.`;
+  return `${name} only allows replies within ${humanAgent ? "7 days" : "24 hours"} of the contact's last message. Wait for them to write again.`;
+}
+/** More than 24 hours after the contact's last message a Meta reply must carry the HUMAN_AGENT tag. */
+export function needsHumanAgentTag(
+  conversation: Conversation,
+  now = Date.now(),
+) {
+  return (
+    conversation.channel !== "email" &&
+    now - Date.parse(conversation.lastIn ?? "") >= day
+  );
 }
 export function withMessage(
   index: ConversationIndex,
@@ -504,6 +521,7 @@ export const messageSchema = object(
     published: dateTime,
     received: dateTime,
     error: { type: "string" },
+    tag: { enum: ["HUMAN_AGENT"] },
   },
   [
     "channel",

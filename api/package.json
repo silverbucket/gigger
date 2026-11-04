@@ -10,5 +10,8 @@
     "@gigger/schemas": "workspace:*",
     "@sockethub/client": "^5.0.0-beta.1",
     "socket.io-client": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io": "4.8.3"
   }
 }

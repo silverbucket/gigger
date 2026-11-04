@@ -7,6 +7,7 @@ import {
   type Gig,
   type Message,
   messagePeer,
+  needsHumanAgentTag,
   replyBlocked,
 } from "@gigger/schemas";
 import { onMount } from "svelte";
@@ -21,6 +22,7 @@ export interface InboxEnquiry {
 let {
   summaries,
   bandId,
+  humanAgent = false,
   onopengig,
   oncreategig,
 }: {
@@ -30,6 +32,8 @@ let {
     contacts: Contact[];
   }[];
   bandId: string;
+  /** The server sends Meta replies older than 24 hours with the HUMAN_AGENT tag. */
+  humanAgent?: boolean;
   onopengig: (bandId: string, gigId: string) => void;
   oncreategig: (bandId: string, enquiry: InboxEnquiry) => void;
 } = $props();
@@ -42,7 +46,10 @@ let error = $state("");
 let now = $state(Date.now());
 let files = $state<Record<string, string>>({});
 let thread = $derived(index[opened]);
-let blocked = $derived(thread ? replyBlocked(thread, now) : "");
+let blocked = $derived(thread ? replyBlocked(thread, now, humanAgent) : "");
+let tagged = $derived(
+  !!thread && humanAgent && !blocked && needsHumanAgentTag(thread, now),
+);
 function contactFor(conversation: Conversation) {
   return summaries
     .find((s) => s.band.id === conversation.bandId)
@@ -213,11 +220,39 @@ $effect(() => {
   const username = decodeURIComponent(
     userAddress.slice(0, userAddress.lastIndexOf("@")),
   );
-  const events = new EventSource(
-    `/api/messages/events?${new URLSearchParams({ username, bandId: streamBand, token: token || "" })}`,
-  );
-  events.onmessage = () => void storage.startSync();
-  return () => events.close();
+  let events: EventSource | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let closed = false;
+  // The stream is opened with a single-use ticket, so a dropped connection needs a new ticket, not a browser retry.
+  const reopen = () => {
+    if (!closed) retry = setTimeout(() => open().catch(reopen), 5000);
+  };
+  async function open() {
+    const response = await fetch("/api/messages/ticket", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: streamBand }),
+    });
+    if (!response.ok) throw new Error("No ticket");
+    const { ticket } = await response.json();
+    if (closed) return;
+    events = new EventSource(
+      `/api/messages/events?${new URLSearchParams({ ticket })}`,
+    );
+    events.onmessage = () => void storage.startSync();
+    events.onerror = () => {
+      if (events?.readyState === EventSource.CLOSED) reopen();
+    };
+  }
+  open().catch(reopen);
+  return () => {
+    closed = true;
+    clearTimeout(retry);
+    events?.close();
+  };
 });
 </script>
 
@@ -301,6 +336,12 @@ $effect(() => {
       </button>
       {#if blocked}
         <p role="status">{blocked}</p>
+      {:else if tagged}
+        <p role="status">
+          More than 24 hours since their last message: this reply goes out with
+          Meta's human agent tag, which allows a person to answer within 7 days.
+          Automated messages are not permitted.
+        </p>
       {/if}
     </form>
   {:else}

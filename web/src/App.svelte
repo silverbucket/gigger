@@ -71,7 +71,12 @@ let pageUrl = $derived(
 );
 let inboxEnquiry = $state<InboxEnquiry | undefined>();
 let inboxNonce = $state(0);
-let metaConfig = $state<{ appId: string; configId: string } | null>(null);
+let metaConfig = $state<{
+  appId: string;
+  configId: string;
+  graphVersion: string;
+  humanAgent: boolean;
+} | null>(null);
 let metaPage = $state<{ pageId: string; instagram: boolean } | null>(null);
 let metaPages = $state<{ id: string; name: string }[]>([]);
 let metaLoadedFor = $state("");
@@ -120,7 +125,10 @@ function facebookSdk() {
     script.src = "https://connect.facebook.net/en_US/sdk.js";
     script.onload = () => {
       const sdk = fb();
-      sdk?.init({ appId: metaConfig?.appId, version: "v21.0" });
+      sdk?.init({
+        appId: metaConfig?.appId,
+        version: metaConfig?.graphVersion,
+      });
       sdk ? resolve(sdk) : reject(new Error("Facebook SDK failed"));
     };
     script.onerror = () =>
@@ -755,6 +763,7 @@ onMount(() => {
     <Inbox
       {summaries}
       bandId={selected}
+      humanAgent={metaConfig?.humanAgent ?? false}
       onopengig={(bandId, gigId) => {
         inboxEnquiry = undefined;
         openedGig = gigId;

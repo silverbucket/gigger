@@ -32,6 +32,10 @@ export function sockethubSender(
         client = undefined;
         throw error;
       });
+      if (!sc.getRegisteredPlatforms().some((p) => p.id === platform))
+        throw new Error(
+          `${platform[0].toUpperCase()}${platform.slice(1)} isn't set up on this server yet.`,
+        );
       if (credentials)
         await emit(sc, "credentials", {
           "@context": sc.contextFor(platform),
@@ -44,7 +48,11 @@ export function sockethubSender(
         type: "send",
         actor: { id: message.actor.id, type: "person" },
         target: { id: message.target.id, type: "person" },
-        object: { type: "message", content: message.object.content },
+        object: {
+          type: "message",
+          content: message.object.content,
+          ...(message.tag ? { tag: message.tag } : {}),
+        },
       });
     },
   };

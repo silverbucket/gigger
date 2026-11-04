@@ -3,16 +3,31 @@ import {
   type Conversation,
   conversationId,
   type Message,
+  needsHumanAgentTag,
   replyBlocked,
   withMessage,
 } from "@gigger/schemas";
 import { openDatabase } from "../src/db";
 import { messageHandler } from "../src/messages";
-import { fromWebhook, metaHandler, validSignature } from "../src/meta";
+import {
+  fromWebhook,
+  metaHandler,
+  parseSignedRequest,
+  validSignature,
+} from "../src/meta";
+import { seal, unseal } from "../src/secrets";
 import type { Sender } from "../src/sender";
 import { handler } from "../src/server";
 
 const secret = "app-secret";
+process.env.TOKEN_KEY = "0f".repeat(32);
+const signedRequest = (payload: unknown) => {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = Buffer.from(
+    new Bun.CryptoHasher("sha256", secret).update(body).digest(),
+  ).toString("base64url");
+  return `${signature}.${body}`;
+};
 const sign = (body: string) =>
   `sha256=${new Bun.CryptoHasher("sha256", secret).update(body).digest("hex")}`;
 
@@ -108,7 +123,7 @@ function stubSenders() {
     senders: { email: sender, messenger: sender, instagram: sender },
   };
 }
-function setup(options?: { conflictOnce?: boolean }) {
+function setup(options?: { conflictOnce?: boolean; humanAgent?: boolean }) {
   const armadietto = fakeArmadietto(options);
   const db = openDatabase(":memory:");
   const stub = stubSenders();
@@ -117,6 +132,10 @@ function setup(options?: { conflictOnce?: boolean }) {
     stub.senders,
     armadietto.server.url.origin,
     "http://app.test",
+    {
+      ...process.env,
+      META_HUMAN_AGENT: options?.humanAgent ? "1" : "",
+    } as NodeJS.ProcessEnv,
   );
   const graph = Bun.serve({
     port: 0,
@@ -133,6 +152,7 @@ function setup(options?: { conflictOnce?: boolean }) {
     {
       META_APP_SECRET: secret,
       META_VERIFY_TOKEN: "verify-me",
+      TOKEN_KEY: process.env.TOKEN_KEY,
     } as NodeJS.ProcessEnv,
     armadietto.server.url.origin,
     armadietto.server.url.origin,
@@ -143,8 +163,8 @@ function setup(options?: { conflictOnce?: boolean }) {
     fetch: handler(db, undefined, undefined, messages, meta),
   });
   db.query(
-    "INSERT INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES ('page-1', 'ig-1', 'sam', 'band1', 'page-token', 'server-token')",
-  ).run();
+    "INSERT INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES ('page-1', 'ig-1', 'sam', 'band1', ?, ?)",
+  ).run(seal("page-token"), seal("server-token"));
   const url = (path: string) => new URL(path, api.url);
   return {
     ...armadietto,
@@ -384,6 +404,16 @@ test("the 24-hour rule blocks Meta replies but never email", () => {
     replyBlocked({ ...base, lastIn: "2026-01-01T00:00:00Z" }, now),
   ).toMatch(/24 hours/); // clock skew is not a licence
   expect(replyBlocked({ ...base, channel: "email" }, now)).toBe("");
+  // With the Human Agent permission the window is 7 days, and anything past 24 hours needs the tag.
+  const twoDays = { ...base, lastIn: "2024-12-31T00:00:00Z" };
+  expect(replyBlocked(twoDays, now, true)).toBe("");
+  expect(needsHumanAgentTag(twoDays, now)).toBe(true);
+  expect(
+    needsHumanAgentTag({ ...base, lastIn: "2025-01-01T12:00:00Z" }, now),
+  ).toBe(false);
+  expect(
+    replyBlocked({ ...base, lastIn: "2024-12-25T00:00:00Z" }, now, true),
+  ).toMatch(/7 days/);
   const inbound: Message = {
     id: "1",
     channel: "messenger",
@@ -429,10 +459,26 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
       body: seed,
       headers: { "X-Hub-Signature-256": sign(seed) },
     });
-    const events = await fetch(
-      t.url("/messages/events?username=sam&bandId=band1&token=user-token"),
-    );
+    const ticketFor = (token: string) =>
+      fetch(t.url("/messages/ticket"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ username: "sam", bandId: "band1" }),
+      });
+    expect((await ticketFor("bad")).status).toBe(401);
+    const { ticket } = await (await ticketFor("user-token")).json();
+    const events = await fetch(t.url(`/messages/events?ticket=${ticket}`));
     expect(events.headers.get("content-type")).toBe("text/event-stream");
+    // A ticket opens one stream; the storage token itself never works here.
+    expect(
+      (await fetch(t.url(`/messages/events?ticket=${ticket}`))).status,
+    ).toBe(401);
+    expect(
+      (await fetch(t.url("/messages/events?ticket=user-token"))).status,
+    ).toBe(401);
     const reader = events.body?.getReader();
     const reply = (body: unknown, token = "user-token") =>
       fetch(t.url("/messages/reply"), {
@@ -628,6 +674,59 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
   }
 });
 
+test("with META_HUMAN_AGENT a reply after 24 hours carries the tag, after 7 days it is blocked", async () => {
+  const t = setup({ humanAgent: true });
+  try {
+    const conversation = conversationId("messenger", "band1", "psid-1");
+    const seed = webhookBody("Hello");
+    await fetch(t.url("/meta/webhook"), {
+      method: "POST",
+      body: seed,
+      headers: { "X-Hub-Signature-256": sign(seed) },
+    });
+    const indexPath = "/storage/storage/sam/gigger/conversations/index";
+    const setLastIn = (daysAgo: number) => {
+      const index = t.json("conversations/index");
+      index[conversation].lastIn = new Date(
+        Date.now() - daysAgo * 86400000,
+      ).toISOString();
+      t.docs.set(indexPath, {
+        body: new TextEncoder().encode(JSON.stringify(index)),
+        type: "application/json",
+        etag: `"${daysAgo}"`,
+      });
+    };
+    const reply = () =>
+      fetch(t.url("/messages/reply"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer user-token",
+        },
+        body: JSON.stringify({
+          username: "sam",
+          bandId: "band1",
+          conversation,
+          text: "Sorry for the wait",
+        }),
+      });
+    setLastIn(2);
+    const tagged = await reply();
+    expect(tagged.status).toBe(200);
+    expect((await tagged.json()).tag).toBe("HUMAN_AGENT");
+    expect(t.sent[0].message.tag).toBe("HUMAN_AGENT");
+    setLastIn(0.5);
+    expect((await (await reply()).json()).tag).toBeUndefined();
+    setLastIn(8);
+    const blocked = await reply();
+    expect(blocked.status).toBe(403);
+    expect((await blocked.json()).error).toMatch(/7 days/);
+    expect(t.sent).toHaveLength(2);
+  } finally {
+    t.stop();
+  }
+});
+
 test("connecting a page stores the long-lived token and subscribes the app; disconnecting removes it", async () => {
   const calls: string[] = [];
   let unsubscribeFails = false;
@@ -638,6 +737,7 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       calls.push(`${req.method} ${url.pathname}`);
       if (url.pathname === "/oauth/access_token")
         return Response.json({ access_token: "long-user" });
+      if (url.pathname === "/me") return Response.json({ id: "fb-user-1" });
       if (url.pathname === "/me/accounts" && !url.searchParams.has("after"))
         return Response.json({
           data: [{ id: "page-1", name: "Other Page", access_token: "p1" }],
@@ -675,7 +775,11 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
   const meta = metaHandler(
     db,
     messages,
-    { META_APP_ID: "app", META_APP_SECRET: secret } as NodeJS.ProcessEnv,
+    {
+      META_APP_ID: "app",
+      META_APP_SECRET: secret,
+      TOKEN_KEY: process.env.TOKEN_KEY,
+    } as NodeJS.ProcessEnv,
     armadietto.server.url.origin,
     armadietto.server.url.origin,
     graph.url.origin,
@@ -743,7 +847,19 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
       instagram: true,
     });
     expect(calls).toContain("POST /page-2/subscribed_apps");
-    expect(db.query("SELECT * FROM meta_pages").all()).toEqual([
+    const rows = db
+      .query<Record<string, string | null>, []>("SELECT * FROM meta_pages")
+      .all();
+    expect(rows[0].token).toStartWith("enc:");
+    expect(
+      rows.map(
+        (row): Record<string, string | null> => ({
+          ...row,
+          token: unseal(row.token as string),
+          storage_token: unseal(row.storage_token as string),
+        }),
+      ),
+    ).toEqual([
       {
         page_id: "page-2",
         ig_id: "ig-2",
@@ -751,6 +867,7 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
         band_id: "band1",
         token: "page-2-token",
         storage_token: "server-token",
+        user_id: "fb-user-1",
       },
     ]);
     const page = await fetch(
@@ -810,6 +927,43 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
     ).toBe(200);
     expect(calls).toContain("DELETE /page-2/subscribed_apps");
     expect(db.query("SELECT * FROM meta_pages").all()).toEqual([]);
+    // Meta's deauthorize and data-deletion callbacks remove the user's connections even when the Page token is already dead.
+    await post("/meta/connect", {
+      username: "sam",
+      bandId: "band1",
+      accessToken: "short",
+      pageId: "page-2",
+    });
+    const callback = (path: string, body: string) =>
+      fetch(new URL(path, api.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ signed_request: body }),
+      });
+    expect(
+      (
+        await callback(
+          "/meta/deauthorize",
+          `bad.${signedRequest({}).split(".")[1]}`,
+        )
+      ).status,
+    ).toBe(400);
+    expect(db.query("SELECT * FROM meta_pages").all()).toHaveLength(1);
+    unsubscribeFails = true;
+    const deleted = await callback(
+      "/meta/data-deletion",
+      signedRequest({ algorithm: "HMAC-SHA256", user_id: "fb-user-1" }),
+    );
+    expect(deleted.status).toBe(200);
+    const receipt = await deleted.json();
+    expect(receipt.url).toContain(
+      `/api/meta/deletion-status?code=${receipt.confirmation_code}`,
+    );
+    expect(db.query("SELECT * FROM meta_pages").all()).toEqual([]);
+    expect(
+      (await fetch(new URL("/meta/deletion-status?code=x", api.url))).status,
+    ).toBe(200);
+    expect(parseSignedRequest(secret, "nope")).toBeNull();
   } finally {
     graph.stop(true);
     armadietto.stop();

@@ -5,9 +5,11 @@ import {
   conversationsPath,
   type Message,
   messagePath,
+  needsHumanAgentTag,
   replyBlocked,
   withMessage,
 } from "@gigger/schemas";
+import { unseal } from "./secrets";
 import type { Sender } from "./sender";
 import { type RemoteStore, remoteStore } from "./storage";
 
@@ -21,6 +23,7 @@ export function messageHandler(
   senders: Record<Channel, Sender>,
   armadiettoUrl = process.env.ARMADIETTO_URL ?? "http://armadietto:8000",
   appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+  env = process.env,
 ) {
   const pageToken = db.query<
     { page_id: string; ig_id: string | null; token: string },
@@ -29,6 +32,8 @@ export function messageHandler(
     "SELECT page_id, ig_id, token FROM meta_pages WHERE username = ? AND band_id = ?",
   );
   const streams = new Map<string, Set<ReadableStreamDefaultController>>();
+  // Single-use tickets for the event stream: EventSource cannot send headers and a storage token must not sit in a URL.
+  const tickets = new Map<string, { username: string; expires: number }>();
   function notify(username: string, message: Message) {
     const data = `data: ${JSON.stringify({ conversation: message.conversation, id: message.id })}\n\n`;
     for (const controller of streams.get(username) ?? [])
@@ -125,7 +130,8 @@ export function messageHandler(
       const thread = index?.[conversation];
       if (!thread || thread.bandId !== bandId)
         return fail("This conversation is not in your inbox.", 404);
-      const blocked = replyBlocked(thread);
+      const humanAgent = !!env.META_HUMAN_AGENT;
+      const blocked = replyBlocked(thread, Date.now(), humanAgent);
       if (blocked) return fail(blocked, 403);
       const page =
         thread.channel === "email"
@@ -154,6 +160,9 @@ export function messageHandler(
         target: thread.peer,
         object: { type: "Note", content: text.trim() },
         published: new Date().toISOString(),
+        ...(humanAgent && needsHumanAgentTag(thread)
+          ? { tag: "HUMAN_AGENT" as const }
+          : {}),
       };
       const markFailed = async (error: string) => {
         const { etag } = await store.get(messagePath(message));
@@ -175,7 +184,7 @@ export function messageHandler(
       try {
         await senders[thread.channel].send(
           message,
-          page ? { access_token: page.token } : undefined,
+          page ? { access_token: unseal(page.token, env) } : undefined,
         );
       } catch (cause) {
         const error = cause instanceof Error ? cause.message : "Send failed";
@@ -186,23 +195,48 @@ export function messageHandler(
         headers: { "Cache-Control": "no-store" },
       });
     },
-    /** GET /messages/events?username&bandId&token — EventSource cannot send headers, so the token travels as a query parameter. */
-    async events(req: Request) {
-      const { searchParams } = new URL(req.url);
-      const username = searchParams.get("username");
-      const authed = new Request(req.url, {
-        headers: { Authorization: `Bearer ${searchParams.get("token")}` },
-      });
-      if (!(await verified(authed, username, searchParams.get("bandId"))))
+    /** POST /messages/ticket {username, bandId} with Bearer token: a ticket that opens the event stream once within a minute. */
+    async ticket(req: Request) {
+      if (req.headers.get("origin") && req.headers.get("origin") !== appOrigin)
+        return fail("Invalid request origin.", 403);
+      let input: Record<string, unknown>;
+      try {
+        input = await req.json();
+      } catch {
+        return fail("Invalid request.", 400);
+      }
+      const { username, bandId } = input ?? {};
+      if (!(await verified(req, username, bandId)))
         return fail("Log in again to receive messages.", 401);
+      const now = Date.now();
+      for (const [id, ticket] of tickets)
+        if (ticket.expires < now) tickets.delete(id);
+      const ticket = crypto.randomUUID();
+      tickets.set(ticket, {
+        username: username as string,
+        expires: now + 60000,
+      });
+      return Response.json(
+        { ticket },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    },
+    /** GET /messages/events?ticket — the ticket is consumed on first use. */
+    async events(req: Request) {
+      const id = new URL(req.url).searchParams.get("ticket") ?? "";
+      const ticket = tickets.get(id);
+      tickets.delete(id);
+      if (!ticket || ticket.expires < Date.now())
+        return fail("Log in again to receive messages.", 401);
+      const username = ticket.username;
       let keepAlive: ReturnType<typeof setInterval>;
       let self: ReadableStreamDefaultController;
       const stream = new ReadableStream({
         start(controller) {
           self = controller;
           controller.enqueue(": connected\n\n");
-          const set = streams.get(username as string) ?? new Set();
-          streams.set(username as string, set.add(controller));
+          const set = streams.get(username) ?? new Set();
+          streams.set(username, set.add(controller));
           keepAlive = setInterval(
             () => controller.enqueue(": ping\n\n"),
             25000,
@@ -210,7 +244,7 @@ export function messageHandler(
         },
         cancel() {
           clearInterval(keepAlive);
-          streams.get(username as string)?.delete(self);
+          streams.get(username)?.delete(self);
         },
       });
       return new Response(stream, {

@@ -28,6 +28,14 @@ export function handler(
       return meta.connect(req);
     if (req.method === "POST" && path === "/meta/disconnect")
       return meta.disconnect(req);
+    if (req.method === "POST" && path === "/meta/deauthorize")
+      return meta.deauthorize(req);
+    if (req.method === "POST" && path === "/meta/data-deletion")
+      return meta.deauthorize(req, true);
+    if (req.method === "GET" && path === "/meta/deletion-status")
+      return meta.deletionStatus();
+    if (req.method === "POST" && path === "/messages/ticket")
+      return messages.ticket(req);
     if (req.method === "POST" && path === "/messages/reply")
       return messages.reply(req);
     if (req.method === "GET" && path === "/messages/events")
