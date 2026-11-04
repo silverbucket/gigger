@@ -81,6 +81,8 @@ services:
       META_APP_SECRET: ${META_APP_SECRET:-}
       META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
       META_CONFIG_ID: ${META_CONFIG_ID:-}
+      META_HUMAN_AGENT: ${META_HUMAN_AGENT:-}
+      TOKEN_KEY: ${TOKEN_KEY:-}
     volumes:
       - api_data:/data
     healthcheck:
