@@ -1,5 +1,6 @@
 import { Gigger, type GiggerStore } from "@gigger/schemas";
 import RemoteStorage from "remotestoragejs";
+import { router } from "./lib/router.svelte";
 import { createLogoutSync } from "./logout-sync";
 export const storage = new RemoteStorage({
   discovery: { allowPrivateAddresses: true, timeout: 5000 },
@@ -64,6 +65,9 @@ export function logout(broadcast = true) {
   storage.stopSync();
   storage.disconnect();
   history.replaceState(null, "", "/login");
+  // replaceState fires no hashchange, so the router would otherwise keep
+  // showing whatever record was open when the session ended.
+  router.read();
   if (userAddress.endsWith(`@${location.host}`)) {
     const username = decodeURIComponent(
       userAddress.slice(0, userAddress.lastIndexOf("@")),

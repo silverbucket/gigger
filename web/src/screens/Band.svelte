@@ -82,8 +82,12 @@ function useContact() {
 async function saveMember(event: SubmitEvent) {
   event.preventDefault();
   if (!band || !form.name.trim()) return;
+  // Keep the generated id, not just the saved value, so a retry after a
+  // save that succeeded but failed to reload reuses it instead of
+  // creating a duplicate member.
+  editingId ||= crypto.randomUUID();
   const value: Member = {
-    id: editingId || crypto.randomUUID(),
+    id: editingId,
     name: form.name.trim(),
     ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
     ...(form.email.trim() ? { email: form.email.trim() } : {}),

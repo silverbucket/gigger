@@ -198,14 +198,16 @@ figcaption {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  /* -600, not the brand --color-accent, and white, not --color-bg: the
+     brand red can't reach WCAG AA's 4.5:1 text contrast on its own. */
+  background: var(--color-accent-600);
+  color: #fff;
 }
 .btn-primary:hover {
-  background: var(--color-accent-600);
+  background: var(--color-accent-700);
 }
 .btn-primary:active {
-  background: var(--color-accent-700);
+  background: var(--color-accent-800);
 }
 .btn-secondary {
   border-color: var(--color-divider);

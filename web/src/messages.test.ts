@@ -1,11 +1,16 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import type { Message } from "@gigger/schemas";
 
 // Threads is loaded outside Svelte's compiler, where $state has no meaning;
 // stubbing it as identity lets the module run as plain JS for this test.
-(globalThis as Record<string, unknown>).$state = (value: unknown) => value;
+// Removed again after import so it doesn't leak into other test files.
+const globals = globalThis as Record<string, unknown>;
+globals.$state = (value: unknown) => value;
 const { threads } = await import("./lib/messages.svelte");
 const { bands } = await import("./storage");
+afterAll(() => {
+  delete globals.$state;
+});
 
 const party = { id: "p", name: "Someone" };
 const message: Message = {

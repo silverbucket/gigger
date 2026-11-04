@@ -143,9 +143,12 @@ $effect(() => {
 });
 async function save(event: SubmitEvent) {
   event.preventDefault();
+  // Keep the generated id on the draft, not just the saved value, so a
+  // retry after a save that succeeded but failed to reload reuses it
+  // instead of creating a duplicate contact.
+  draft.id ||= crypto.randomUUID();
   const value: Contact = {
     ...$state.snapshot(draft),
-    id: draft.id || crypto.randomUUID(),
     name: draft.name.trim(),
   };
   for (const key of [

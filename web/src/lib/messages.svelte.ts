@@ -39,6 +39,8 @@ class Threads {
   byId = $state<Record<string, Message[]>>({});
   files: Record<string, string> = {};
   generation = 0;
+  /** The conversation currently open, if any; only this one is kept fresh on sync. */
+  active?: string;
   async load(conversationId: string) {
     const generation = this.generation;
     const messages = await bands.messages(conversationId);
@@ -47,14 +49,16 @@ class Threads {
     if (generation === this.generation) this.byId[conversationId] = messages;
     return messages;
   }
+  // shortcut: a cached but inactive conversation only refreshes when reopened
+  // (MessageDetail reloads on mount), not on every sync; upgrade if a list
+  // screen ever needs to show live previews from this cache.
   async refresh() {
-    await Promise.all(
-      Object.keys(this.byId).map((id) => this.load(id).catch(() => {})),
-    );
+    if (this.active) await this.load(this.active).catch(() => {});
   }
   reset() {
     this.generation++;
     this.byId = {};
+    this.active = undefined;
     for (const url of Object.values(this.files)) URL.revokeObjectURL(url);
     this.files = {};
   }

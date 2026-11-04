@@ -145,6 +145,8 @@ function keydown(event: KeyboardEvent) {
     {#if expanded}
       <div class="list" id={`${uid}-list`} role="listbox" aria-label={label}>
         {#each rows as row, i (row.option?.id ?? "create")}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- biome-ignore lint/a11y/useKeyWithClickEvents: not focusable (tabindex -1); keyboard activation goes through the input's own onkeydown -->
           <div
             id={`${uid}-row-${i}`}
             role="option"
@@ -153,10 +155,12 @@ function keydown(event: KeyboardEvent) {
             class:active={i === active}
             class:create={row.kind === "create"}
             onpointerdown={(event) => {
-              // Keep focus in the box so a tap is not lost to the blur.
+              // Keep focus in the box so a tap is not lost to the blur;
+              // selection itself happens on click so assistive technology
+              // that activates options without pointer events still works.
               event.preventDefault();
-              choose(i);
             }}
+            onclick={() => choose(i)}
             onpointerenter={() => {
               active = i;
             }}

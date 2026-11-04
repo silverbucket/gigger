@@ -24,7 +24,7 @@ test("logout clears the UI while cache cleanup and server revocation are pending
   let finishRequest: (response: Response) => void = () => {};
   Object.defineProperty(globalThis, "location", {
     configurable: true,
-    value: { host: "localhost:8080" },
+    value: { host: "localhost:8080", hash: "" },
   });
   Object.defineProperty(globalThis, "history", {
     configurable: true,

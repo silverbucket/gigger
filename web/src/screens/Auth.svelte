@@ -1,6 +1,7 @@
 <script lang="ts">
 import { currencyForLocale } from "@gigger/schemas";
 import Icon from "../components/Icon.svelte";
+import { router } from "../lib/router.svelte";
 import { connectSession, ensureSessionReady, storage } from "../storage";
 
 /** Log in or sign up. Signing up creates the account and its first band. */
@@ -52,6 +53,9 @@ async function authenticate(event: SubmitEvent) {
     await connectSession(session.username, session.token);
     bandName = "";
     history.replaceState(null, "", "/");
+    // replaceState fires no hashchange, so the router would otherwise keep
+    // showing whatever record was open under the previous session.
+    router.read();
     await onsignedin();
   } catch (cause) {
     error =

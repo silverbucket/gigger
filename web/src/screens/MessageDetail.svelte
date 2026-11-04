@@ -61,6 +61,7 @@ const address = $derived(
 
 $effect(() => {
   const id = item.id;
+  threads.active = id;
   loading = true;
   failed = "";
   threads
@@ -74,20 +75,30 @@ $effect(() => {
   const tick = setInterval(() => {
     now = Date.now();
   }, 60000);
-  return () => clearInterval(tick);
+  return () => {
+    clearInterval(tick);
+    if (threads.active === id) threads.active = undefined;
+  };
 });
 
+// Kept across a retry (this component is remounted per conversation, so
+// these never leak to another item): a save that writes the record but then
+// fails to reload must not create a second gig or contact on retry.
+let pendingGigId: string | undefined;
+let pendingContactId: string | undefined;
 async function createEnquiry() {
   if (!quick || !found.date || !venue) {
     router.go(`${path("bookings", "new")}?from=${encodeURIComponent(item.id)}`);
     return;
   }
   const bandId = data.band.id;
-  const gigId = crypto.randomUUID();
+  pendingGigId ??= crypto.randomUUID();
+  const gigId = pendingGigId;
   const ok = await run(async () => {
     let contactId = prefill.contactId;
     if (!contactId && prefill.newContact) {
-      contactId = crypto.randomUUID();
+      pendingContactId ??= crypto.randomUUID();
+      contactId = pendingContactId;
       await bands.save("contact", bandId, {
         ...prefill.newContact,
         id: contactId,
@@ -331,7 +342,7 @@ async function send(event: SubmitEvent) {
     <button
       type="button"
       class="btn btn-primary btn-wide"
-      disabled={ui.busy}
+      disabled={ui.busy || loading || !!failed}
       onclick={createEnquiry}
     >
       Create enquiry <Icon name="arrow-right" stroke={2.5} />

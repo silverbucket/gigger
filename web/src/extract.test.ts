@@ -96,3 +96,8 @@ test("'play' with both minutes and am/pm reads the full time, not just the hour"
     "21:30",
   );
 });
+
+test("12am is midnight, not noon", () => {
+  expect(extractEnquiry("Start at 12am.", [], "EUR", now).start).toBe("00:00");
+  expect(extractEnquiry("Start at 12pm.", [], "EUR", now).start).toBe("12:00");
+});

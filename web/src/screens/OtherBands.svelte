@@ -61,9 +61,12 @@ $effect(() => {
 });
 async function save(event: SubmitEvent) {
   event.preventDefault();
+  // Keep the generated id on the draft, not just the saved value, so a
+  // retry after a save that succeeded but failed to reload reuses it
+  // instead of creating a duplicate band.
+  draft.id ||= crypto.randomUUID();
   const value = {
     ...$state.snapshot(draft),
-    id: draft.id || crypto.randomUUID(),
     name: draft.name.trim(),
   };
   if (await run(() => bands.save("otherBand", data.band.id, value)))

@@ -180,6 +180,7 @@ function findTime(text: string, words: string, looseWords?: string) {
   const ampm = match[3] ?? match[6];
   let value = Number(hourText);
   if (ampm === "pm" && value < 12) value += 12;
+  else if (ampm === "am" && value === 12) value = 0;
   if (value > 23) return undefined;
   return `${pad(value)}:${minute ?? "00"}`;
 }
