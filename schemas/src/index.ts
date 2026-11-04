@@ -52,6 +52,20 @@ export interface Gig {
   notes?: string;
   earnings?: Earnings;
   status: GigStatus;
+  /** Who in the band can play, by member ID; a member without an entry was not asked. */
+  availability?: Record<string, Availability>;
+  /** When the gig sheet last went out, and to which members. */
+  sheetSentAt?: string;
+  sheetSentTo?: string[];
+}
+/** yes = available, no = can't make it, maybe = asked, no reply yet. */
+export const availabilityValues = ["yes", "no", "maybe"] as const;
+export type Availability = (typeof availabilityValues)[number];
+/** A conversation the band marked as not a booking; it returns to sort when a newer message arrives. */
+export interface Triage {
+  id: string;
+  status: "archived";
+  at: string;
 }
 export interface Venue {
   id: string;
@@ -127,10 +141,18 @@ export interface VenueSurvey {
   pa: (typeof paOptions)[number];
   stageNotes?: string;
   playAgain: boolean;
+  /** People in the room on the night. */
+  attendance?: number;
 }
 export type SurveyInput = Pick<
   VenueSurvey,
-  "rating" | "capacity" | "setting" | "pa" | "stageNotes" | "playAgain"
+  | "rating"
+  | "capacity"
+  | "setting"
+  | "pa"
+  | "stageNotes"
+  | "playAgain"
+  | "attendance"
 >;
 export interface Earnings {
   dealType: (typeof dealTypes)[number];
@@ -446,6 +468,7 @@ export interface Records {
   survey: VenueSurvey;
   contact: Contact;
   otherBand: OtherBand;
+  triage: Triage;
 }
 const text = { type: "string", minLength: 1, pattern: "\\S" };
 const email = {
@@ -513,6 +536,7 @@ const surveyFields = {
   pa: { enum: [...paOptions] },
   stageNotes: { type: "string" },
   playAgain: { type: "boolean" },
+  attendance: { type: "integer", minimum: 0 },
 };
 export const surveySchema = object(surveyFields, [
   "venueId",
@@ -679,6 +703,15 @@ export const schemas = {
       },
       notes: { type: "string" },
       status: { enum: [...gigStatuses] },
+      availability: {
+        type: "object",
+        patternProperties: {
+          "^[A-Za-z0-9_-]+$": { enum: [...availabilityValues] },
+        },
+        additionalProperties: false,
+      },
+      sheetSentAt: dateTime,
+      sheetSentTo: { type: "array", items: id, uniqueItems: true },
     },
     ["title", "date", "status"],
     {
@@ -709,6 +742,10 @@ export const schemas = {
     },
     ["name"],
   ),
+  triage: object({ status: { enum: ["archived"] }, at: dateTime }, [
+    "status",
+    "at",
+  ]),
 };
 export type Kind = keyof Records;
 export interface Client {
@@ -1076,6 +1113,9 @@ export function createGigger(client: Client, publicClient?: Client) {
           ? { stageNotes: survey.stageNotes.trim() }
           : {}),
         playAgain: survey.playAgain,
+        ...(survey.attendance !== undefined
+          ? { attendance: survey.attendance }
+          : {}),
       });
       const updated = read("gig", {
         ...current,
@@ -1122,6 +1162,71 @@ export function createGigger(client: Client, publicClient?: Client) {
     },
     async removeMember(bandId: string, memberId: string) {
       await client.remove(recordPath("member", bandId, memberId));
+    },
+    /** Sets or clears one member's availability on the latest stored gig. */
+    async setAvailability(
+      bandId: string,
+      gigId: string,
+      memberId: string,
+      value: Availability | null,
+    ) {
+      safeId(memberId);
+      const path = recordPath("gig", bandId, gigId);
+      const current = read("gig", await client.getObject(path));
+      const availability = { ...current.availability };
+      if (value) availability[memberId] = value;
+      else delete availability[memberId];
+      const updated: Gig = { ...current, availability };
+      if (!Object.keys(availability).length) delete updated.availability;
+      await client.storeObject("gig", path, updated);
+      return updated;
+    },
+    /** Records that the gig sheet went out to these members. */
+    async markSheetSent(
+      bandId: string,
+      gigId: string,
+      memberIds: string[],
+      at = new Date().toISOString(),
+    ) {
+      const path = recordPath("gig", bandId, gigId);
+      const current = read("gig", await client.getObject(path));
+      const updated: Gig = {
+        ...current,
+        sheetSentAt: at,
+        sheetSentTo: [...new Set(memberIds.map(safeId))],
+      };
+      await client.storeObject("gig", path, updated);
+      return updated;
+    },
+    /** Marks a conversation as not a booking. */
+    async archiveConversation(
+      bandId: string,
+      conversationId: string,
+      at = new Date().toISOString(),
+    ) {
+      await client.storeObject(
+        "triage",
+        recordPath("triage", bandId, conversationId),
+        { id: conversationId, status: "archived", at },
+      );
+    },
+    async unarchiveConversation(bandId: string, conversationId: string) {
+      await client.remove(recordPath("triage", bandId, conversationId));
+    },
+    /** Removes a contact no gig or other band links to. */
+    async removeContact(bandId: string, contactId: string) {
+      const [gigs, others] = await Promise.all([
+        list("gig", bandId),
+        list("otherBand", bandId),
+      ]);
+      if (
+        gigs.some((gig) => gig.contactIds?.includes(contactId)) ||
+        others.some((band) => band.contactIds.includes(contactId))
+      )
+        throw new Error(
+          "This contact is linked to gigs or bands. Remove those links first.",
+        );
+      await client.remove(recordPath("contact", bandId, contactId));
     },
     async bands(): Promise<Band[]> {
       const folders = await client.getListing("bands/");

@@ -1,0 +1,537 @@
+<script lang="ts">
+import type { Availability, Gig, GigStatus, Member } from "@gigger/schemas";
+import AvailabilityCells, {
+  availabilityLabel,
+  availabilitySummary,
+} from "../components/AvailabilityCells.svelte";
+import BottomActionBar from "../components/BottomActionBar.svelte";
+import DetailSection from "../components/DetailSection.svelte";
+import Icon from "../components/Icon.svelte";
+import PhoneHeader from "../components/PhoneHeader.svelte";
+import SectionLabel from "../components/SectionLabel.svelte";
+import StatCells from "../components/StatCells.svelte";
+import StatusSteps from "../components/StatusSteps.svelte";
+import Tag from "../components/Tag.svelte";
+import type { BandData } from "../lib/data.svelte";
+import {
+  daysUntil,
+  fee as feeText,
+  longDate,
+  mapUrl,
+  mediumDate,
+  money,
+  today,
+} from "../lib/format";
+import {
+  contactsOf,
+  nextMove,
+  sheetText,
+  timeCells,
+  venueAddress,
+  venueOf,
+} from "../lib/gigs";
+import { channelName } from "../lib/inbox";
+import { path, router } from "../lib/router.svelte";
+import { run, ui } from "../lib/ui.svelte";
+import { bands } from "../storage";
+
+let { data, gig }: { data: BandData; gig: Gig } = $props();
+const bandId = $derived(data.band.id);
+const currency = $derived(data.band.currency ?? "EUR");
+const venue = $derived(venueOf(gig, data.venues));
+const address = $derived(venueAddress(gig, data.venues));
+const contacts = $derived(contactsOf(gig, data.contacts));
+const others = $derived(
+  (gig.otherBandIds ?? []).map(
+    (id) => data.otherBands.find((b) => b.id === id) ?? { id, name: id },
+  ),
+);
+const times = $derived(timeCells(gig));
+const summary = $derived(availabilitySummary(gig, data.members));
+const fee = $derived(feeText(gig, currency));
+const extras = $derived(typeof gig.fee === "object" ? gig.fee.extras : []);
+const move = $derived(
+  gig.status in nextMove
+    ? nextMove[gig.status as keyof typeof nextMove]
+    : undefined,
+);
+const canCancel = $derived(
+  ["enquiry", "offered", "confirmed"].includes(gig.status),
+);
+const gigPath = $derived(path("bookings", "gig", bandId, gig.id));
+const sentTo = $derived(
+  (gig.sheetSentTo ?? []).filter((id) => data.members.some((m) => m.id === id)),
+);
+const sheetLine = $derived(
+  gig.sheetSentAt
+    ? `Sent to ${sentTo.length === 1 ? "1 member" : `${sentTo.length} members`} · ${mediumDate(today(new Date(gig.sheetSentAt)))}`
+    : "Not sent yet",
+);
+// On the night or after, marking it played is the next thing to do.
+const playedDue = $derived(
+  gig.status === "confirmed" && daysUntil(gig.date) <= 0,
+);
+
+async function moveTo(status: GigStatus) {
+  if (status === "played") {
+    router.go(`${gigPath}/played`);
+    return;
+  }
+  if (
+    status === "cancelled" &&
+    !confirm(`Cancel ${gig.title}? Cancelled gigs can't be reopened.`)
+  )
+    return;
+  await run(() => bands.moveGigStatus(bandId, gig.id, status));
+}
+function setAvailability(memberId: string, value: Availability | null) {
+  void run(() => bands.setAvailability(bandId, gig.id, memberId, value));
+}
+/** Opens the member's own channel with a short question, then marks them as asked. */
+function ask(member: Member) {
+  const text = `Can you play ${gig.title} on ${longDate(gig.date)}? Reply yes or no.`;
+  const href = member.email
+    ? `mailto:${member.email}?subject=${encodeURIComponent(`Can you play ${gig.title}?`)}&body=${encodeURIComponent(text)}`
+    : member.phone
+      ? `sms:${member.phone}?body=${encodeURIComponent(text)}`
+      : member.messenger
+        ? `https://m.me/${encodeURIComponent(member.messenger)}`
+        : "";
+  if (href) window.open(href, href.startsWith("http") ? "_blank" : "_self");
+  setAvailability(member.id, "maybe");
+}
+/** Email (or the phone's share sheet) does the sending; the gig remembers who it went to. */
+async function sendSheet() {
+  const text = sheetText(gig, data);
+  const withEmail = data.members.filter((m) => m.email);
+  const subject = `Gig sheet: ${gig.title}, ${longDate(gig.date)}`;
+  if (ui.phone && navigator.share) {
+    try {
+      await navigator.share({ title: subject, text });
+    } catch {
+      return; // dismissed
+    }
+    await run(() =>
+      bands.markSheetSent(
+        bandId,
+        gig.id,
+        data.members.map((m) => m.id),
+      ),
+    );
+    return;
+  }
+  const to = withEmail.map((m) => m.email).join(",");
+  location.href = `mailto:?bcc=${encodeURIComponent(to)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+  await run(() =>
+    bands.markSheetSent(
+      bandId,
+      gig.id,
+      withEmail.map((m) => m.id),
+    ),
+  );
+}
+</script>
+
+<PhoneHeader back={() => router.back("bookings")} backLabel="Bookings">
+  {#snippet action()}
+    <a class="btn btn-ghost" href={`#/${gigPath}/edit`}>Edit</a>
+  {/snippet}
+</PhoneHeader>
+
+<div class="detail-head">
+  <p class="kicker">{data.band.name} · {gig.status}</p>
+  <h2>{gig.title}</h2>
+  <p>
+    {longDate(gig.date)}
+    {#if venue?.name || gig.venue}
+      · {venue?.name ?? gig.venue}
+    {/if}
+  </p>
+</div>
+
+<div class="scroll">
+  <StatusSteps status={gig.status} />
+  <StatCells cells={times} />
+
+  <SectionLabel>
+    Band
+    {#snippet aside()}
+      {#if data.members.length}
+        <span class:alert-text={summary.alert} class="avail-line"
+          >{summary.line}</span
+        >
+      {/if}
+    {/snippet}
+  </SectionLabel>
+  {#if !data.members.length}
+    <p class="empty">
+      Add members on the <a href="#/band">Band page</a> to see who can play.
+    </p>
+  {:else if ui.phone}
+    <ul class="members">
+      {#each data.members as member (member.id)}
+        {@const value = gig.availability?.[member.id]}
+        <li>
+          <span class="who">
+            <strong>{member.name}</strong>
+            <span class="muted">{availabilityLabel[value ?? "none"]}</span>
+          </span>
+          <span class="choices">
+            <button
+              type="button"
+              class="btn choice"
+              class:yes={value === "yes"}
+              aria-pressed={value === "yes"}
+              disabled={ui.busy}
+              onclick={() =>
+                setAvailability(member.id, value === "yes" ? null : "yes")}
+            >
+              {#if value === "yes"}
+                <Icon name="check" size={14} stroke={3} />
+              {/if}
+              In
+            </button>
+            <button
+              type="button"
+              class="btn choice"
+              class:no={value === "no"}
+              aria-pressed={value === "no"}
+              disabled={ui.busy}
+              onclick={() =>
+                setAvailability(member.id, value === "no" ? null : "no")}
+            >
+              Out
+            </button>
+            {#if value !== "yes" &&
+              value !== "no" &&
+              (member.email || member.phone || member.messenger)}
+              <button
+                type="button"
+                class="btn btn-secondary"
+                disabled={ui.busy}
+                onclick={() => ask(member)}
+              >
+                {value === "maybe" ? "Ask again" : "Ask"}
+              </button>
+            {/if}
+          </span>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <AvailabilityCells
+      {gig}
+      members={data.members}
+      disabled={ui.busy}
+      onchange={setAvailability}
+    />
+  {/if}
+
+  <div class="sections">
+    {#if venue || gig.venue || address}
+      <DetailSection label="Where">
+        <span class="main">{venue?.name ?? gig.venue}</span>
+        {#if address}
+          <span class="line"
+            >{address}{venue?.city ? `, ${venue.city}` : ""}</span
+          >
+          <a
+            class="line"
+            href={mapUrl(address)}
+            target="_blank"
+            rel="noreferrer"
+            >Map and directions ↗</a
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if contacts.length || gig.contacts?.length || others.length}
+      <DetailSection label="Who">
+        {#each contacts as contact (contact.id)}
+          <a class="main plain" href={`#/${path("contacts", contact.id)}`}
+            >{[contact.name, contact.phone, contact.email]
+              .filter(Boolean)
+              .join(" · ")}</a
+          >
+        {/each}
+        {#each gig.contacts ?? [] as contact, i (i)}
+          <span class="main">{contact}</span>
+        {/each}
+        {#if others.length}
+          <span class="line"
+            >Playing with
+            {#each others as other, i (other.id)}
+              {i ? ", " : ""}<a href={`#/${path("bands", other.id)}`}
+                >{other.name}</a
+              >
+            {/each}</span
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if fee || extras.length || gig.earnings}
+      <DetailSection label="Money">
+        {#if gig.earnings}
+          <span class="main">
+            Took home {money(gig.earnings.takeHome, gig.earnings.currency)}
+            <Tag kind="private">Private</Tag>
+          </span>
+          <span class="line">
+            {money(gig.earnings.total, gig.earnings.currency)}
+            total · {gig.earnings.dealType}{gig.earnings.numberOfBands
+              ? ` · split ${gig.earnings.numberOfBands} ways`
+              : ""}{gig.earnings.handedOver !== undefined
+              ? ` · ${money(gig.earnings.handedOver, gig.earnings.currency)} handed over`
+              : ""}
+          </span>
+          {#if fee}
+            <span class="line">Agreed fee {fee}</span>
+          {/if}
+        {:else}
+          <span class="main"
+            >{fee ?? "No fee yet"} <Tag kind="private">Private</Tag></span
+          >
+        {/if}
+        {#if extras.length}
+          <span class="line">Plus {extras.join(", ")}</span>
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if gig.enquirySource || gig.enquiryText?.trim() || gig.contactDate}
+      <DetailSection label="Enquiry">
+        <span class="main">
+          {gig.enquirySource
+            ? `via ${channelName[gig.enquirySource]}`
+            : "Enquiry"}{gig.contactDate
+            ? ` · ${mediumDate(gig.contactDate)}`
+            : ""}
+        </span>
+        {#if gig.enquiryText?.trim()}
+          <p class="line pre quote">{gig.enquiryText}</p>
+        {/if}
+        {#if gig.conversationId}
+          <a
+            class="line"
+            href={`#/${path("bookings", "message", gig.conversationId)}`}
+            >Open the conversation</a
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if gig.public?.description?.trim() || gig.public?.ticketUrl}
+      <DetailSection label="Public">
+        {#if gig.public?.description?.trim()}
+          <span class="main pre">{gig.public.description}</span>
+        {/if}
+        {#if gig.public?.ticketUrl}
+          <span class="line"
+            >Tickets:
+            <a href={gig.public.ticketUrl} target="_blank" rel="noreferrer"
+              >{gig.public.ticketUrl.replace(/^https?:\/\//, "")}</a
+            ></span
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if gig.notes?.trim()}
+      <DetailSection label="Notes">
+        <span class="main pre">{gig.notes}</span>
+        <span><Tag kind="private">Private</Tag></span>
+      </DetailSection>
+    {/if}
+    {#if gig.status !== "cancelled"}
+      <DetailSection label="Gig sheet">
+        <span>{sheetLine}</span>
+        {#snippet action()}
+          {#if !ui.phone}
+            <button
+              type="button"
+              class="btn btn-secondary"
+              disabled={ui.busy}
+              onclick={sendSheet}
+            >
+              {gig.sheetSentAt ? "Send again" : "Send to members"}
+            </button>
+          {/if}
+        {/snippet}
+      </DetailSection>
+    {/if}
+    {#if ui.phone && (canCancel || move)}
+      <DetailSection label="Status">
+        <span class="phone-status">
+          {#if gig.status === "confirmed" && !playedDue}
+            <button
+              type="button"
+              class="btn btn-secondary"
+              disabled={ui.busy}
+              onclick={() => moveTo("played")}
+            >
+              Mark played
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="btn btn-secondary"
+            onclick={() => window.print()}
+          >
+            <Icon name="printer" />
+            Print
+          </button>
+          {#if canCancel}
+            <button
+              type="button"
+              class="btn btn-ghost"
+              disabled={ui.busy}
+              onclick={() => moveTo("cancelled")}
+            >
+              Cancel gig
+            </button>
+          {/if}
+        </span>
+      </DetailSection>
+    {/if}
+  </div>
+</div>
+
+{#if ui.phone}
+  <BottomActionBar>
+    {#if address}
+      <a
+        class="btn btn-secondary btn-wide"
+        href={mapUrl(address)}
+        target="_blank"
+        rel="noreferrer"
+        >Directions <Icon name="map-pin" /></a
+      >
+    {/if}
+    {#if gig.status === "enquiry" || gig.status === "offered"}
+      <button
+        type="button"
+        class="btn btn-primary btn-wide"
+        disabled={ui.busy}
+        onclick={() => move && moveTo(move)}
+      >
+        Mark {move} <Icon name="arrow-right" stroke={2.5} />
+      </button>
+    {:else if playedDue}
+      <button
+        type="button"
+        class="btn btn-primary btn-wide"
+        disabled={ui.busy}
+        onclick={() => moveTo("played")}
+      >
+        Mark played <Icon name="arrow-right" stroke={2.5} />
+      </button>
+    {:else if gig.status === "confirmed"}
+      <button
+        type="button"
+        class="btn btn-primary btn-wide"
+        disabled={ui.busy}
+        onclick={sendSheet}
+      >
+        Send gig sheet <Icon name="arrow-right" stroke={2.5} />
+      </button>
+    {/if}
+  </BottomActionBar>
+{:else}
+  <BottomActionBar>
+    {#if move}
+      <button
+        type="button"
+        class="btn btn-primary btn-wide"
+        disabled={ui.busy}
+        onclick={() => moveTo(move)}
+      >
+        Mark {move} <Icon name="arrow-right" stroke={2.5} />
+      </button>
+    {/if}
+    <a class="btn btn-secondary" href={`#/${gigPath}/edit`}>Edit</a>
+    <button
+      type="button"
+      class="btn btn-secondary"
+      onclick={() => window.print()}
+    >
+      <Icon name="printer" />
+      Print
+    </button>
+    {#snippet end()}
+      {#if canCancel}
+        <button
+          type="button"
+          class="btn btn-ghost"
+          disabled={ui.busy}
+          onclick={() => moveTo("cancelled")}
+        >
+          Cancel gig
+        </button>
+      {/if}
+    {/snippet}
+  </BottomActionBar>
+{/if}
+
+<style>
+.scroll {
+  flex: 1;
+}
+.avail-line {
+  font-size: 13px;
+  font-weight: 600;
+}
+.members li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 60px;
+  padding: 8px 16px;
+  border-bottom: var(--rule);
+}
+.who {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+.who strong {
+  font-size: 16px;
+}
+.choices {
+  display: flex;
+  gap: 6px;
+}
+.choice {
+  border-color: var(--color-divider);
+  min-width: 52px;
+}
+.choice.yes {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+.choice.no {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  border-color: var(--color-accent);
+}
+.plain {
+  color: inherit;
+  text-decoration: none;
+}
+.plain:hover {
+  color: var(--color-accent-700);
+}
+p.line.quote {
+  border-left: 2px solid var(--color-divider);
+  padding-left: 10px;
+  margin: 4px 0;
+  max-height: 9.5em;
+  overflow: auto;
+}
+.phone-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.main :global(.tag) {
+  margin-left: 6px;
+  vertical-align: 2px;
+}
+</style>

@@ -1,0 +1,245 @@
+/* App-wide rules built on the Modernist tokens. Component-specific styles live in each component. */
+
+:root {
+  --ink: var(--color-text);
+  --muted: var(--color-neutral-700);
+  --rule: 1px solid var(--color-divider);
+  --rule-2: 2px solid var(--color-divider);
+  --rule-ink: 2px solid var(--color-text);
+  --select-bg: var(--color-neutral-200);
+  --select-mark: inset 4px 0 0 var(--color-accent);
+  --topbar: 64px;
+  --tabbar: 60px;
+}
+@media (max-width: 899px) {
+  :root {
+    --topbar: 56px;
+  }
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  overflow-wrap: anywhere;
+  -webkit-text-size-adjust: 100%;
+}
+#app {
+  min-height: 100%;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+legend {
+  padding: 0;
+}
+ul,
+ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+h1,
+h2,
+h3 {
+  letter-spacing: -0.03em;
+}
+select.input {
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23201e1d' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+/* Wide buttons keep their label flush left and push the icon right. */
+.btn-wide {
+  justify-content: space-between;
+  text-align: left;
+  min-width: 180px;
+}
+.btn-block {
+  justify-content: space-between;
+}
+.btn {
+  white-space: nowrap;
+}
+.btn-primary:disabled:hover {
+  background: var(--color-accent);
+}
+@media (max-width: 899px) {
+  .btn {
+    min-height: 44px;
+  }
+  .input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
+/* Section label: 12px uppercase with a 2px rule under it. */
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.small-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kicker {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-700);
+}
+.muted {
+  color: var(--muted);
+}
+.alert-text {
+  color: var(--color-accent-700);
+}
+.pre {
+  white-space: pre-wrap;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Page heading inside a list pane: "Venues" 56px over a summary line. */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+  justify-content: space-between;
+  padding: 24px 24px 20px;
+  border-bottom: var(--rule-2);
+}
+.page-head h1 {
+  font-size: 56px;
+  line-height: 1;
+  margin: 0 0 6px;
+}
+.page-head p {
+  margin: 0;
+  font-size: 14px;
+}
+@media (max-width: 899px) {
+  .page-head {
+    padding: 16px;
+  }
+  .page-head h1 {
+    font-size: 32px;
+  }
+}
+
+/* Detail pane head: kicker, big title, sub line. */
+.detail-head {
+  padding: 22px 28px 16px;
+  border-bottom: var(--rule-2);
+}
+.detail-head h2 {
+  font-size: 36px;
+  margin: 6px 0 4px;
+}
+.detail-head p {
+  margin: 0;
+  font-size: 15px;
+}
+@media (max-width: 899px) {
+  .detail-head {
+    padding: 16px;
+  }
+  .detail-head h2 {
+    font-size: 32px;
+  }
+}
+
+/* Form fields in panes. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.field > label,
+.field > .field-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+.field-hint {
+  font-size: 12px;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.required {
+  color: var(--color-accent-700);
+}
+
+/* Small inline notice strip, e.g. the global error. */
+.notice {
+  margin: 0;
+  padding: 10px 24px;
+  font-size: 14px;
+  border-bottom: var(--rule-2);
+  background: var(--color-neutral-100);
+}
+.notice.error {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+.empty {
+  margin: 0;
+  padding: 16px 24px;
+  font-size: 14px;
+  color: var(--muted);
+}
+@media (max-width: 899px) {
+  .notice,
+  .empty {
+    padding-inline: 16px;
+  }
+}
+@media print {
+  .no-print {
+    display: none;
+  }
+}

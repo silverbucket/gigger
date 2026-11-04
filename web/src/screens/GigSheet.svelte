@@ -1,40 +1,33 @@
 <script lang="ts">
 import { type Contact, formatFee, type Gig, type Venue } from "@gigger/schemas";
+import { longDate, mapUrl } from "../lib/format";
 
+/** The printable gig sheet. Hidden on screen; Print shows only this. */
 let {
   gig,
   bandName,
   currency,
   venue,
   contacts,
-  onback,
 }: {
   gig: Gig;
   bandName: string;
   currency: string;
   venue?: Venue;
   contacts: Contact[];
-  onback: () => void;
 } = $props();
 const address = $derived((venue?.address ?? gig.address)?.trim());
 const fee = $derived(formatFee(gig.fee, currency, navigator.language));
 </script>
-<article class="gig-sheet">
-  <div class="actions">
-    <button type="button" onclick={onback}>Back to gig</button
-    ><button type="button" onclick={() => window.print()}>
-      Print gig sheet
-    </button>
-  </div>
-  <h3>Gig sheet — {gig.title}</h3>
+
+<article class="gig-sheet" aria-label="Gig sheet">
+  <p class="kicker">Gig sheet</p>
+  <h1>{gig.title}</h1>
+  <p class="date"><time datetime={gig.date}>{longDate(gig.date)}</time></p>
   <dl>
     {#if bandName.trim()}
       <dt>Band</dt>
       <dd>{bandName}</dd>
-    {/if}
-    {#if gig.date}
-      <dt>Date</dt>
-      <dd><time datetime={gig.date}>{gig.date}</time></dd>
     {/if}
     {#if venue?.name || gig.venue}
       <dt>Venue</dt>
@@ -44,10 +37,7 @@ const fee = $derived(formatFee(gig.fee, currency, navigator.language));
       <dt>Address</dt>
       <dd>
         {address}
-        <a
-          href={`https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`}
-          target="_blank"
-          rel="noreferrer"
+        <a href={mapUrl(address)} target="_blank" rel="noreferrer"
           >Map and directions</a
         >
       </dd>
@@ -102,54 +92,55 @@ const fee = $derived(formatFee(gig.fee, currency, navigator.language));
     {/if}
     {#if gig.notes?.trim()}
       <dt>Notes</dt>
-      <dd class="notes">{gig.notes}</dd>
+      <dd class="pre">{gig.notes}</dd>
     {/if}
   </dl>
 </article>
+
 <style>
 .gig-sheet {
-  max-width: 44rem;
-  overflow-wrap: anywhere;
+  display: none;
+}
+h1 {
+  font-size: 36px;
+  margin: 4px 0;
+}
+.date {
+  font-size: 16px;
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #201e1d;
+}
+dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  margin: 0;
+}
+dt,
+dd {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #999;
 }
 dt {
-  font-weight: 700;
-  margin-top: 1rem;
-}
-dd {
-  margin: 0.25rem 0 1rem;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 dd p {
-  margin-block: 0.4rem;
+  margin: 0 0 4px;
 }
-.notes {
-  white-space: pre-wrap;
+a {
+  color: inherit;
+  margin-left: 8px;
 }
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-button {
-  min-height: 44px;
-  padding: 0.65rem;
-  font: inherit;
-}
+/* App.svelte hides everything else when printing. */
 @media print {
-  :global(body *) {
-    visibility: hidden;
-  }
-  .gig-sheet,
-  .gig-sheet :global(*) {
-    visibility: visible;
-  }
   .gig-sheet {
-    position: absolute;
-    inset: 0;
-    max-width: none;
+    display: block;
     padding: 1cm;
-  }
-  .actions {
-    display: none;
+    background: white;
   }
   dt {
     break-after: avoid;

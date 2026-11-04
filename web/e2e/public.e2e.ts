@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { expect, go, login, openGig, test } from "./fixtures";
 
 test("publishing a page copies only public gig fields and the page serves them", async ({
   page,
@@ -18,20 +18,17 @@ test("publishing a page copies only public gig fields and the page serves them",
     title: "Maybe show",
     status: "offered",
   });
-  await page.goto("/login");
-  await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Username", { exact: true }).fill(account.username);
-  await page.getByLabel("Password", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await page.getByLabel("View band").selectOption(account.bandId);
+  page.on("dialog", (dialog) => dialog.accept());
+  await login(page, account);
+  await go(page, "band/public");
   const slug = `touring-${account.username.slice(4, 12)}`;
   const address = page.getByRole("textbox", { name: "Page address" });
   await expect(address).toHaveValue("touring-band");
   await address.fill(slug);
   await page.getByRole("button", { name: "Publish page", exact: true }).click();
   await expect(
-    page.getByRole("link", { name: `${new URL(page.url()).origin}/b/${slug}` }),
-  ).toBeVisible();
+    page.getByRole("link", { name: "Open page", exact: true }),
+  ).toHaveAttribute("href", `${new URL(page.url()).origin}/b/${slug}`);
   await expect(page.getByRole("alert")).toHaveCount(0);
   const publicPath = `/storage/storage/${account.username}/public/gigger/${slug}/`;
   await expect
@@ -65,10 +62,8 @@ test("publishing a page copies only public gig fields and the page serves them",
   const ics = await (await request.get(`/b/${slug}/gigs.ics`)).text();
   expect(ics).toContain("UID:prague@");
   expect(ics).not.toMatch(/5000|Dinner|side entrance/i);
-  await page.getByRole("button", { name: /2030-06-20 · Prague show/ }).click();
-  await page
-    .getByRole("button", { name: "Mark cancelled", exact: true })
-    .click();
+  await openGig(page, "Prague show");
+  await page.getByRole("button", { name: "Cancel gig", exact: true }).click();
   await expect
     .poll(async () => (await request.get(`${publicPath}gigs/prague`)).status())
     .toBe(404);
@@ -89,15 +84,12 @@ test("separate sessions preserve independent removals and sync an offline cancel
 }) => {
   await account.seedGig({ id: "one", title: "First show" });
   await account.seedGig({ id: "two", title: "Second show" });
-  const login = async (tab: typeof page) => {
-    await tab.goto("/login");
-    await expect(tab.getByText("Loading…", { exact: true })).toHaveCount(0);
-    await tab.getByLabel("Username", { exact: true }).fill(account.username);
-    await tab.getByLabel("Password", { exact: true }).fill(account.password);
-    await tab.getByRole("button", { name: "Log in", exact: true }).click();
-    await tab.getByLabel("View band").selectOption(account.bandId);
+  const open = async (tab: typeof page) => {
+    tab.on("dialog", (dialog) => dialog.accept());
+    await login(tab, account);
   };
-  await login(page);
+  await open(page);
+  await go(page, "band/public");
   const slug = `test-${account.username.slice(4, 12)}`;
   await page.getByRole("textbox", { name: "Page address" }).fill(slug);
   await page.getByRole("button", { name: "Publish page", exact: true }).click();
@@ -112,21 +104,17 @@ test("separate sessions preserve independent removals and sync an offline cancel
   const second = await browser.newContext();
   try {
     const other = await second.newPage();
-    await login(other);
-    await other
-      .getByRole("button", { name: /2030-06-20 · Second show/ })
-      .click();
+    await open(other);
+    await openGig(other, "Second show");
     await second.setOffline(true);
     await other
-      .getByRole("button", { name: "Mark cancelled", exact: true })
+      .getByRole("button", { name: "Cancel gig", exact: true })
       .click();
     await expect(
       other.getByText(/public gig removal is waiting to sync/),
     ).toBeVisible();
-    await page.getByRole("button", { name: /2030-06-20 · First show/ }).click();
-    await page
-      .getByRole("button", { name: "Mark cancelled", exact: true })
-      .click();
+    await openGig(page, "First show");
+    await page.getByRole("button", { name: "Cancel gig", exact: true }).click();
     await expect.poll(gigIds).toEqual(["two"]);
     await second.setOffline(false);
     await expect.poll(gigIds, { timeout: 30000 }).toEqual([]);

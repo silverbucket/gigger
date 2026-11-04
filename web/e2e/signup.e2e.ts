@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { go } from "./fixtures";
 
 test("signup rejects invalid inputs and succeeds after correcting them", async ({
   page,
@@ -39,15 +40,17 @@ test("signup rejects invalid inputs and succeeds after correcting them", async (
   );
   await password.fill(crypto.randomUUID());
   await page.getByRole("button", { name: "Sign up", exact: true }).click();
-  await page.getByLabel("View band").selectOption({ label: "Signup Band" });
+  // A single band opens straight away.
   await expect(
-    page.getByRole("heading", { name: "Signup Band", exact: true, level: 2 }),
-  ).toBeVisible();
+    page.getByLabel("View band").locator("option:checked"),
+  ).toHaveText("Signup Band");
+  await go(page, "band/settings");
   // The browser locale (en-US here) picks the new band's currency.
-  await expect(page.getByLabel("Band currency", { exact: true })).toHaveValue(
-    "USD",
-  );
-  await page.getByRole("link", { name: "Log out", exact: true }).click();
+  await expect(page.getByLabel(/^Band currency/)).toHaveValue("USD");
+  await page
+    .getByRole("link", { name: "Log out", exact: true })
+    .or(page.getByRole("button", { name: "Log out", exact: true }))
+    .click();
   await expect(
     page.getByRole("button", { name: "Log in", exact: true }),
   ).toBeVisible();
