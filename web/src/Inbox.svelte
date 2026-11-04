@@ -243,8 +243,10 @@ $effect(() => {
       `/api/messages/events?${new URLSearchParams({ ticket })}`,
     );
     events.onmessage = () => void storage.startSync();
+    // The ticket is spent, so the browser's own retry would only earn a 401; reopen with a new one instead.
     events.onerror = () => {
-      if (events?.readyState === EventSource.CLOSED) reopen();
+      events?.close();
+      reopen();
     };
   }
   open().catch(reopen);
