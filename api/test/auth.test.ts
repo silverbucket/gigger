@@ -187,6 +187,7 @@ test("signup, login, duplicate email and logout through the API without an accou
       { name: "items" },
       { name: "public_pages" },
       { name: "meta_pages" },
+      { name: "email_accounts" },
     ]);
   } finally {
     backend.stop(true);

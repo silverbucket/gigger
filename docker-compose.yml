@@ -49,7 +49,7 @@ services:
       retries: 12
   sockethub:
     build:
-      context: https://github.com/sockethub/sockethub.git#4ec68c656f0ac5c0fe4321c8bbac6b12a0086664
+      context: https://github.com/sockethub/sockethub.git#c0c14d1df23c6dc4c647ca6a2062b87c245e9268
       target: prod
     environment:
       REDIS_URL: redis://redis:6379

@@ -1,0 +1,31 @@
+# Test additions to the stack: a Mailpit sink for outgoing email and a Sockethub
+# configuration that may talk to it. Use `make up-test`.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.28
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    volumes:
+      - ./test/certs:/certs:ro
+    environment:
+      MP_SMTP_TLS_CERT: /certs/cert.pem
+      MP_SMTP_TLS_KEY: /certs/key.pem
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_REQUIRE_STARTTLS: "1"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  sockethub:
+    environment:
+      SOCKETHUB_CONFIG: /etc/sockethub/config.json
+      NODE_EXTRA_CA_CERTS: /etc/sockethub/mail-ca.pem
+    volumes:
+      - ./test/sockethub.config.json:/etc/sockethub/config.json:ro
+      - ./test/certs/cert.pem:/etc/sockethub/mail-ca.pem:ro
+    depends_on:
+      mailpit: { condition: service_healthy }
+  api:
+    environment:
+      TOKEN_KEY: ${TOKEN_KEY:-5d41402abc4b2a76b9719d911017c592a3f0d6e1b8c47a2f9e0b1c3d5e7f9a1b}

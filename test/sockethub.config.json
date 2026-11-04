@@ -1,0 +1,12 @@
+{
+  "examples": false,
+  "platforms": [
+    "@sockethub/platform-email",
+    "@sockethub/platform-messenger",
+    "@sockethub/platform-instagram"
+  ],
+  "packageConfig": {
+    "@sockethub/platform-email": { "allowPrivateAddresses": true }
+  },
+  "redis": { "url": "redis://redis:6379" }
+}

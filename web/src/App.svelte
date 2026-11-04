@@ -108,7 +108,125 @@ $effect(() => {
   metaPage = null;
   metaPages = [];
   void loadMetaPage(bandId).catch(() => {});
+  void loadMailAccount(bandId).catch(() => {});
 });
+/** The band's mail account as the server reports it: everything but the password. */
+type MailAccount = {
+  address: string;
+  name?: string;
+  imapHost?: string;
+  imapPort: number;
+  smtpHost: string;
+  smtpPort: number;
+  login: string;
+  watching: boolean;
+  error?: string;
+};
+let mailAccount = $state<MailAccount | null>(null);
+let mailLoadedFor = $state("");
+let mailEditing = $state(false);
+let mailForm = $state({
+  address: "",
+  name: "",
+  imapHost: "",
+  imapPort: "993",
+  smtpHost: "",
+  smtpPort: "587",
+  login: "",
+  password: "",
+});
+async function loadMailAccount(bandId: string) {
+  mailLoadedFor = bandId;
+  mailEditing = false;
+  const { username, token } = account();
+  const response = await fetch(
+    `/api/email/account?${new URLSearchParams({ username, bandId })}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok) return;
+  const loaded = await response.json();
+  if (mailLoadedFor === bandId) mailAccount = loaded;
+}
+function editMailAccount() {
+  const a = mailAccount;
+  mailForm = {
+    address: a?.address ?? "",
+    name: a?.name ?? "",
+    imapHost: a?.imapHost ?? "",
+    imapPort: String(a?.imapPort ?? 993),
+    smtpHost: a?.smtpHost ?? "",
+    smtpPort: String(a?.smtpPort ?? 587),
+    login: a?.login ?? "",
+    password: "",
+  };
+  mailEditing = true;
+}
+async function saveMailAccount(event: SubmitEvent) {
+  event.preventDefault();
+  const band = current?.band;
+  if (!band) return;
+  busy = true;
+  error = "";
+  try {
+    const { username, token } = account();
+    const response = await fetch("/api/email/account", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: band.id, ...mailForm }),
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.error ?? "Could not save the email settings.");
+    if (current?.band.id === band.id) {
+      mailAccount = result;
+      mailEditing = false;
+    }
+  } catch (cause) {
+    error =
+      cause instanceof Error ? cause.message : "Could not save the settings.";
+  } finally {
+    busy = false;
+  }
+}
+async function removeMailAccount() {
+  const band = current?.band;
+  if (
+    !band ||
+    !confirm(
+      "Remove this email account? New enquiries by email will stop arriving.",
+    )
+  )
+    return;
+  busy = true;
+  error = "";
+  try {
+    const { username, token } = account();
+    const response = await fetch("/api/email/account", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ username, bandId: band.id }),
+    });
+    if (!response.ok)
+      throw new Error(
+        (await response.json()).error ?? "Could not remove the account.",
+      );
+    if (current?.band.id === band.id) {
+      mailAccount = null;
+      mailEditing = false;
+    }
+  } catch (cause) {
+    error =
+      cause instanceof Error ? cause.message : "Could not remove the account.";
+  } finally {
+    busy = false;
+  }
+}
 type FacebookSdk = {
   init(options: object): void;
   login(
@@ -403,6 +521,9 @@ function resetSession() {
   inboxEnquiry = undefined;
   metaLoadedFor = "";
   metaPage = null;
+  mailLoadedFor = "";
+  mailAccount = null;
+  mailEditing = false;
   resetMember();
 }
 function logOut(event: MouseEvent) {
@@ -710,6 +831,83 @@ onMount(() => {
           </button>
         {:else}
           <p>Facebook is not configured on this server.</p>
+        {/if}
+        <h3>Email</h3>
+        {#if mailEditing}
+          <p>
+            Enquiries sent to this address appear in the Inbox and replies go
+            out from it. Use an app password if your provider offers one.
+          </p>
+          <form onsubmit={saveMailAccount}>
+            <label
+              >Email address<input
+                type="email"
+                bind:value={mailForm.address}
+                required
+              ></label
+            ><label>Display name<input bind:value={mailForm.name}></label
+            ><label
+              >Incoming (IMAP) server<input
+                bind:value={mailForm.imapHost}
+                placeholder="imap.example.com — leave empty to only send"
+              ></label
+            ><label
+              >IMAP port<input
+                type="number"
+                min="1"
+                max="65535"
+                bind:value={mailForm.imapPort}
+              ></label
+            ><label
+              >Outgoing (SMTP) server<input
+                bind:value={mailForm.smtpHost}
+                required
+              ></label
+            ><label
+              >SMTP port<input
+                type="number"
+                min="1"
+                max="65535"
+                bind:value={mailForm.smtpPort}
+              ></label
+            ><label>Login<input bind:value={mailForm.login} required></label
+            ><label
+              >Password<input
+                type="password"
+                bind:value={mailForm.password}
+                placeholder={mailAccount ? "Unchanged" : ""}
+                required={!mailAccount}
+              ></label
+            ><button type="submit" disabled={busy}>Save email settings</button>
+            <button type="button" onclick={() => (mailEditing = false)}>
+              Cancel
+            </button>
+          </form>
+        {:else if mailAccount}
+          <p>
+            {mailAccount.watching ? "Watching" : "Sending as"}
+            {mailAccount.address}{mailAccount.watching
+              ? ". New enquiries arrive in the Inbox below."
+              : ". Replies go out by email; no mailbox is watched."}
+          </p>
+          {#if mailAccount.error}
+            <p class="error" role="alert">
+              Mailbox problem: {mailAccount.error}
+            </p>
+          {/if}
+          <button type="button" disabled={busy} onclick={editMailAccount}>
+            Change email settings
+          </button>
+          <button type="button" disabled={busy} onclick={removeMailAccount}>
+            Remove email account
+          </button>
+        {:else}
+          <p>
+            Add the band's mailbox to answer email enquiries from the Inbox.
+          </p>
+          <button type="button" disabled={busy} onclick={editMailAccount}>
+            Set up email
+          </button>
         {/if}
         <h3>Members</h3>
         <ul>

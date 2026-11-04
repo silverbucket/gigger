@@ -20,5 +20,9 @@ export function openDatabase(
   } catch {}
   // Connections made before user_id and token encryption cannot be matched by Meta's callbacks; they must be reconnected.
   db.exec("DELETE FROM meta_pages WHERE user_id IS NULL");
+  // Per-band email accounts: hosts, logins and the password live in one encrypted blob; the storage token lets the mailbox watcher write into the account.
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS email_accounts (username TEXT NOT NULL, band_id TEXT NOT NULL, address TEXT NOT NULL, settings TEXT NOT NULL, storage_token TEXT NOT NULL, cursor TEXT, error TEXT, PRIMARY KEY (username, band_id))",
+  );
   return db;
 }

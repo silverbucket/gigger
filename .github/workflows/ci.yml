@@ -14,7 +14,7 @@ jobs:
       - run: bun test
       - run: bun run build
       - run: docker compose config --quiet
-      - run: make up
+      - run: make up-test
       - run: make seed && make seed
       - name: Check proxy routes
         run: |
@@ -24,6 +24,7 @@ jobs:
           curl -fsS 'http://localhost:8080/sockethub/?EIO=4&transport=polling' | grep -q 'sid'
           curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/b/nobody | grep -q 404
       - run: AUTH_TEST_URL=http://localhost:8080/api bun test api/test/auth.integration.test.ts
+      - run: MAIL_TEST_URL=http://localhost:8080 MAILPIT_URL=http://localhost:8025 bun test api/test/messages.integration.test.ts
       - run: bunx playwright install --with-deps chromium webkit
       - run: bun run test:e2e
       - uses: actions/upload-artifact@v4
@@ -33,4 +34,4 @@ jobs:
           path: test-results/
           retention-days: 7
       - if: always()
-        run: docker compose logs && docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml logs && docker compose -f docker-compose.yml -f docker-compose.test.yml down -v

@@ -123,7 +123,11 @@ function stubSenders() {
     senders: { email: sender, messenger: sender, instagram: sender },
   };
 }
-function setup(options?: { conflictOnce?: boolean; humanAgent?: boolean }) {
+function setup(options?: {
+  conflictOnce?: boolean;
+  humanAgent?: boolean;
+  mailAccount?: boolean;
+}) {
   const armadietto = fakeArmadietto(options);
   const db = openDatabase(":memory:");
   const stub = stubSenders();
@@ -165,10 +169,29 @@ function setup(options?: { conflictOnce?: boolean; humanAgent?: boolean }) {
   db.query(
     "INSERT INTO meta_pages (page_id, ig_id, username, band_id, token, storage_token) VALUES ('page-1', 'ig-1', 'sam', 'band1', ?, ?)",
   ).run(seal("page-token"), seal("server-token"));
+  if (options?.mailAccount !== false)
+    db.query(
+      "INSERT INTO email_accounts (username, band_id, address, settings, storage_token) VALUES ('sam', 'band1', 'band@example.com', ?, ?)",
+    ).run(
+      seal(
+        JSON.stringify({
+          address: "band@example.com",
+          name: "The Band",
+          imapHost: "imap.example.com",
+          imapPort: 993,
+          smtpHost: "smtp.example.com",
+          smtpPort: 587,
+          login: "band@example.com",
+          password: "mail-secret",
+        }),
+      ),
+      seal("server-token"),
+    );
   const url = (path: string) => new URL(path, api.url);
   return {
     ...armadietto,
     ...stub,
+    db,
     url,
     stop() {
       armadietto.stop();
@@ -518,7 +541,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     expect(t.sent).toHaveLength(1);
     expect(t.sent[0]).toMatchObject({
       message: { id: message.id },
-      credentials: { access_token: "page-token" },
+      credentials: { token: "page-token", apiVersion: "v26.0" },
     });
     expect(
       t.json(
@@ -575,6 +598,12 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     expect(igReply.status).toBe(200);
     expect((await igReply.json()).actor).toEqual({ id: "ig-1" });
     expect(t.sent).toHaveLength(2);
+    expect(t.sent[1].credentials).toEqual({
+      token: "page-token",
+      apiVersion: "v26.0",
+      login: "facebook",
+      pageId: "page-1",
+    });
     expect(t.json("conversations/index")[ig].account).toBe("ig-1");
     // A conversation that ran through a Page no longer connected cannot be answered with the new one.
     const foreign = t.json("conversations/index");
@@ -606,8 +635,11 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
       bandId: "band1",
       channel: "email",
       peer: { id: "jo@example.com" },
-      account: "band@example.com",
+      account: "old-address@example.com",
       preview: "",
+      subject: "Booking for May?",
+      messageId: "<jo-2@example.com>",
+      references: ["<jo-1@example.com>"],
     };
     t.docs.set(indexPath, {
       body: new TextEncoder().encode(JSON.stringify(foreign)),
@@ -621,8 +653,34 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
       text: "by mail",
     });
     expect(mailReply.status).toBe(200);
-    expect((await mailReply.json()).actor).toEqual({ id: "band@example.com" });
+    expect(await mailReply.json()).toMatchObject({
+      actor: { id: "band@example.com", name: "The Band" },
+      target: { id: "jo@example.com" },
+      subject: "Re: Booking for May?",
+      inReplyTo: "<jo-2@example.com>",
+      references: ["<jo-1@example.com>", "<jo-2@example.com>"],
+    });
+    expect(t.sent.at(-1)?.credentials).toEqual({
+      from: "band@example.com",
+      smtp: {
+        host: "smtp.example.com",
+        port: 587,
+        secure: false,
+        username: "band@example.com",
+        password: "mail-secret",
+      },
+    });
     t.sent.pop();
+    // A band without a mail account is told to set one up rather than failing at Sockethub.
+    t.db.query("DELETE FROM email_accounts").run();
+    const unconfigured = await reply({
+      username: "sam",
+      bandId: "band1",
+      conversation: mail,
+      text: "by mail",
+    });
+    expect(unconfigured.status).toBe(409);
+    expect((await unconfigured.json()).error).toMatch(/email account/);
     expect(
       (
         await reply({
@@ -653,6 +711,21 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
     });
     expect(failed.status).toBe(502);
     expect((await failed.json()).error).toContain("platform offline");
+    // Sockethub's window-closed reason becomes an explanation of Meta's 24-hour and 7-day rules.
+    t.fail("meta:messaging-window-closed (code 10, subcode 2534022)");
+    const closed = await reply({
+      username: "sam",
+      bandId: "band1",
+      conversation,
+      text: "late",
+    });
+    expect(closed.status).toBe(502);
+    const explanation = (await closed.json()).error as string;
+    expect(explanation).toMatch(/Messenger closed the reply window/);
+    expect(explanation).toMatch(/24 hours/);
+    expect(explanation).toMatch(/7 days/);
+    expect(explanation).not.toContain("meta:");
+    t.fail("");
     const stale = t.json("conversations/index");
     stale[conversation].lastIn = "2020-01-01T00:00:00Z";
     t.docs.set(indexPath, {
