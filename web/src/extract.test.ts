@@ -72,6 +72,16 @@ test("a requested date earlier in the text wins over a later, unrelated ISO date
   expect(found.date).toBe("2027-01-17");
 });
 
+test("a dotted start time is not mistaken for an earlier date", () => {
+  const found = extractEnquiry(
+    "Start at 20.10 on 17 Jan 2027 at Kabinet Múz",
+    venues,
+    "EUR",
+    now,
+  );
+  expect(found).toMatchObject({ date: "2027-01-17", start: "20:10" });
+});
+
 test("with several known venues, picks the one asked about", () => {
   const found = extractEnquiry(
     "Ahoj! We loved your set at Café V lese. Any chance you could play Kabinet Múz on Sat 16 Jan?",

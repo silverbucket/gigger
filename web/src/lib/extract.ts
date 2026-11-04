@@ -102,15 +102,21 @@ function findDate(text: string, now: Date) {
       break;
     }
   }
-  // 17.1.2027, 17/1, 17.1.
-  const numeric = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/.exec(plain);
-  const numericFound =
-    numeric &&
-    at(
-      numeric.index,
-      resolve(Number(numeric[1]), Number(numeric[2]), year(numeric[3]), now),
+  // 17.1.2027, 17/1, 17.1. — but "start at 20.10" is a dotted time, not a date.
+  const timeWord =
+    /\b(?:at|starts?|starting|set at|on stage|doors?(?: open)?|plays?|playing)\b[^\d\n]{0,12}$/;
+  const numeric = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/g;
+  for (const match of plain.matchAll(numeric)) {
+    if (timeWord.test(plain.slice(0, match.index))) continue;
+    const found = at(
+      match.index,
+      resolve(Number(match[1]), Number(match[2]), year(match[3]), now),
     );
-  if (numericFound) candidates.push(numericFound);
+    if (found) {
+      candidates.push(found);
+      break;
+    }
+  }
 
   return candidates.sort((a, b) => a.index - b.index)[0];
 }
