@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     # One publish run per ref at a time, so the shared main/pr-N tags always come from one commit.
     concurrency:
-      group: publish-${{ github.ref }}
+      group: publish-${{ github.ref }}-${{ matrix.image }}
       cancel-in-progress: false
     permissions:
       contents: read
