@@ -1,5 +1,5 @@
-# Production: change the site name here and APP_ORIGIN in .env to move hosts.
-showday.silverbucket.net {
+# Production: the site name comes from DOMAIN in .env; APP_ORIGIN must match it.
+{$DOMAIN} {
   handle /health {
     respond "ok" 200
   }

@@ -13,7 +13,7 @@ jobs:
       - run: bun run check
       - run: bun test
       - run: bun run build
-      - run: docker compose config --quiet && APP_ORIGIN=https://showday.silverbucket.net docker compose -f compose.prod.yml config --quiet
+      - run: docker compose config --quiet && DOMAIN=example.com APP_ORIGIN=https://example.com docker compose -f compose.prod.yml config --quiet
       - run: make up-test
       - run: make seed && make seed
       - name: Check proxy routes
