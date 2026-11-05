@@ -37,7 +37,7 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml logs && docker compose -f docker-compose.yml -f docker-compose.test.yml down -v
   publish:
     needs: test
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,4 +60,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
-            ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.event.pull_request.head.sha || github.sha }}
+            ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.sha }}

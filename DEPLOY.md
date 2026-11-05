@@ -1,6 +1,6 @@
 # Deploy
 
-The production stack runs the images CI publishes to GitHub Container Registry behind Caddy with automatic HTTPS. CI tags every image with `main` plus the commit SHA on pushes to `main`, and with `pr-N` plus the commit SHA on pull requests.
+The production stack runs the images CI publishes to GitHub Container Registry behind Caddy with automatic HTTPS. CI tags every image with `main` plus the commit SHA on pushes to `main`, and with `pr-N` plus the SHA of the tested merge commit on pull requests from this repository.
 
 ## Set up the server
 
