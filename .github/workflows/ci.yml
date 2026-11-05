@@ -1,5 +1,9 @@
 name: CI
 on: [push, pull_request]
+# One run per ref at a time, so the shared main/pr-N tags of all three images come from one commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -39,10 +43,6 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # One publish run per ref at a time, so the shared main/pr-N tags always come from one commit.
-    concurrency:
-      group: publish-${{ github.ref }}-${{ matrix.image }}
-      cancel-in-progress: false
     permissions:
       contents: read
       packages: write

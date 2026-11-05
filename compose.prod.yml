@@ -72,6 +72,7 @@ services:
     restart: unless-stopped
   api:
     image: ghcr.io/silverbucket/gigger/api:${IMAGE_TAG:-main}
+    platform: linux/amd64
     environment:
       DATABASE_PATH: /data/gigger.sqlite
       ARMADIETTO_AUTH_URL: http://armadietto:8001
@@ -100,6 +101,7 @@ services:
     restart: unless-stopped
   web:
     image: ghcr.io/silverbucket/gigger/web:${IMAGE_TAG:-main}
+    platform: linux/amd64
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 10s
