@@ -39,6 +39,10 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # One publish run per ref at a time, so the shared main/pr-N tags always come from one commit.
+    concurrency:
+      group: publish-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
