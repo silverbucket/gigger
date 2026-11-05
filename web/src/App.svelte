@@ -183,7 +183,7 @@ function choose(bandId: string) {
     {#if ui.phone}
       <header class="phone-top no-print">
         <a class="brand" href="#/bookings"
-          ><span class="mark" aria-hidden="true"></span>Gigger</a
+          ><span class="mark" aria-hidden="true"></span>Showday</a
         >
         <div class="phone-picker">
           <BandPicker bands={data.all} value={data.bandId} onchange={choose} />

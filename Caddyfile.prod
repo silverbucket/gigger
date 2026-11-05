@@ -1,0 +1,33 @@
+# Production: change the site name here and APP_ORIGIN in .env to move hosts.
+showday.silverbucket.net {
+  handle /health {
+    respond "ok" 200
+  }
+  handle /.well-known/* {
+    rewrite * /storage{uri}
+    reverse_proxy armadietto:8000
+  }
+  handle /storage/storage/* {
+    reverse_proxy armadietto:8000
+  }
+  @authorization path /storage/oauth* /storage/assets/*
+  handle @authorization {
+    reverse_proxy armadietto:8000
+  }
+  handle /storage* {
+    respond 404
+  }
+  handle /sockethub* {
+    reverse_proxy sockethub:10550
+  }
+  handle /b/* {
+    reverse_proxy api:3000
+  }
+  handle /api/* {
+    uri strip_prefix /api
+    reverse_proxy api:3000
+  }
+  handle {
+    reverse_proxy web:80
+  }
+}

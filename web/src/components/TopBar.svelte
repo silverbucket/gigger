@@ -19,7 +19,7 @@ let {
 
 <header class="topbar no-print">
   <a class="brand" href="#/bookings"
-    ><span class="mark" aria-hidden="true"></span>Gigger</a
+    ><span class="mark" aria-hidden="true"></span>Showday</a
   >
   <div class="picker">{@render picker()}</div>
   <nav aria-label="Main">

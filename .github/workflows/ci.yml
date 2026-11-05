@@ -13,13 +13,13 @@ jobs:
       - run: bun run check
       - run: bun test
       - run: bun run build
-      - run: docker compose config --quiet
+      - run: docker compose config --quiet && APP_ORIGIN=https://showday.silverbucket.net docker compose -f compose.prod.yml config --quiet
       - run: make up-test
       - run: make seed && make seed
       - name: Check proxy routes
         run: |
-          curl -fsS http://localhost:8080/ | grep -q Gigger
-          curl -fsS http://localhost:8080/api/items | grep -q 'Welcome to Gigger'
+          curl -fsS http://localhost:8080/ | grep -q Showday
+          curl -fsS http://localhost:8080/api/items | grep -q 'Welcome to Showday'
           curl -fsS 'http://localhost:8080/.well-known/webfinger?resource=acct:alice@localhost:8080' | grep -q 'http://localhost:8080/storage/storage/alice'
           curl -fsS 'http://localhost:8080/sockethub/?EIO=4&transport=polling' | grep -q 'sid'
           curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/b/nobody | grep -q 404
@@ -35,3 +35,29 @@ jobs:
           retention-days: 7
       - if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml logs && docker compose -f docker-compose.yml -f docker-compose.test.yml down -v
+  publish:
+    needs: test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [api, web, armadietto]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+            ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.event.pull_request.head.sha || github.sha }}

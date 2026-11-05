@@ -229,7 +229,7 @@ export function renderIcs(page: PublicPage, identity: string) {
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Gigger//Public gigs//EN",
+    "PRODID:-//Showday//Public gigs//EN",
     `X-WR-CALNAME:${icsText(page.name)}`,
     "BEGIN:VTIMEZONE",
     "TZID:Europe/Prague",

@@ -70,7 +70,7 @@ async function authenticate(event: SubmitEvent) {
 
 <div class="auth">
   <div class="brand-side">
-    <p class="brand"><span class="mark" aria-hidden="true"></span>Gigger</p>
+    <p class="brand"><span class="mark" aria-hidden="true"></span>Showday</p>
     <p class="claim">Book it, plan it, play it, post it.</p>
     <p class="sub">Enquiries, gigs, venues and the band, in one place.</p>
   </div>
@@ -162,7 +162,7 @@ async function authenticate(event: SubmitEvent) {
         Already have an account?
         <a href="/login" onclick={(e) => switchTo("login", e)}>Log in</a>
       {:else}
-        New to Gigger?
+        New to Showday?
         <a href="/signup" onclick={(e) => switchTo("signup", e)}
           >Create an account</a
         >

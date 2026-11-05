@@ -359,7 +359,7 @@ test("gig sheet shows logistics, omits empty fields and hides other UI in print"
   ).toBeVisible();
   await expect(sheet.locator("input, select, textarea")).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Gigger", exact: true }),
+    page.getByRole("link", { name: "Showday", exact: true }),
   ).toBeHidden();
   await expect(page.getByRole("button", { name: "Print" })).toBeHidden();
   await expect(

@@ -1,0 +1,110 @@
+# Production stack: published images, Caddy on 80/443 with automatic HTTPS.
+# Run with scripts/deploy.sh; see DEPLOY.md.
+name: gigger
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      armadietto: { condition: service_healthy }
+      sockethub: { condition: service_healthy }
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+    restart: unless-stopped
+  armadietto:
+    image: ghcr.io/silverbucket/gigger/armadietto:${IMAGE_TAG:-main}
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN to the public https origin}
+    platform: linux/amd64
+    volumes:
+      - armadietto_data:/usr/share/armadietto
+      - ./armadietto/conf.json:/etc/armadietto/conf.json:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8000/storage/",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+  sockethub:
+    build:
+      context: https://github.com/sockethub/sockethub.git#c0c14d1df23c6dc4c647ca6a2062b87c245e9268
+      target: prod
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:10550/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+  api:
+    image: ghcr.io/silverbucket/gigger/api:${IMAGE_TAG:-main}
+    environment:
+      DATABASE_PATH: /data/gigger.sqlite
+      ARMADIETTO_AUTH_URL: http://armadietto:8001
+      ARMADIETTO_URL: http://armadietto:8000
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN to the public https origin}
+      SOCKETHUB_URL: http://sockethub:10550
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-}
+      META_CONFIG_ID: ${META_CONFIG_ID:-}
+      META_HUMAN_AGENT: ${META_HUMAN_AGENT:-}
+      TOKEN_KEY: ${TOKEN_KEY:-}
+    volumes:
+      - api_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+  web:
+    image: ghcr.io/silverbucket/gigger/web:${IMAGE_TAG:-main}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+volumes:
+  armadietto_data:
+  api_data:
+  caddy_data:
