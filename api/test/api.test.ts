@@ -18,7 +18,7 @@ test("seed persists once and Bun HTTP routes preserve the API", async () => {
   const server = Bun.serve({ port: 0, fetch: handler(db) });
   try {
     expect(await (await fetch(new URL("/items", server.url))).json()).toEqual([
-      { id: 1, name: "Welcome to Gigger" },
+      { id: 1, name: "Welcome to Showday" },
     ]);
     expect(await (await fetch(new URL("/health", server.url))).json()).toEqual({
       status: "ok",

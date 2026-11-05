@@ -1,0 +1,34 @@
+# Production: the site name comes from DOMAIN in .env; APP_ORIGIN must match it.
+{$DOMAIN} {
+  handle /health {
+    respond "ok" 200
+  }
+  handle /.well-known/* {
+    rewrite * /storage{uri}
+    reverse_proxy armadietto:8000
+  }
+  handle /storage/storage/* {
+    reverse_proxy armadietto:8000
+  }
+  @authorization path /storage/oauth* /storage/assets/*
+  handle @authorization {
+    reverse_proxy armadietto:8000
+  }
+  handle /storage* {
+    respond 404
+  }
+  # Only the API talks to Sockethub, over the internal network.
+  handle /sockethub* {
+    respond 404
+  }
+  handle /b/* {
+    reverse_proxy api:3000
+  }
+  handle /api/* {
+    uri strip_prefix /api
+    reverse_proxy api:3000
+  }
+  handle {
+    reverse_proxy web:80
+  }
+}

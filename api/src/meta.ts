@@ -479,7 +479,7 @@ export function metaHandler(
     /** GET /meta/deletion-status?code: deletion happens inside the callback, so every code is complete. */
     deletionStatus() {
       return new Response(
-        "Gigger removed the Facebook Page connection and the tokens it held for this account.",
+        "Showday removed the Facebook Page connection and the tokens it held for this account.",
       );
     },
   };

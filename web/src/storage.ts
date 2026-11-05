@@ -29,7 +29,7 @@ export function onSessionLogout(callback: () => void) {
 export function ensureSessionReady() {
   if (!sessionReady)
     throw new Error(
-      "Local storage is still opening or clearing. Close other Gigger tabs and try again.",
+      "Local storage is still opening or clearing. Close other Showday tabs and try again.",
     );
 }
 
