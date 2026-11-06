@@ -17,10 +17,14 @@ export const bands = (storage as RemoteStorage & Record<string, ShowdayStore>)[
   STORAGE_MODULE_SLUG
 ];
 
+export const slowStartMessage =
+  "This is taking longer than usual. Please try again.";
+
 let sessionReady = false;
 const sessionEvents = new EventTarget();
 storage.on("ready", () => {
   sessionReady = true;
+  sessionEvents.dispatchEvent(new Event("ready"));
 });
 const logoutSync =
   typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
@@ -31,17 +35,48 @@ export function onSessionLogout(callback: () => void) {
   sessionEvents.addEventListener("logout", callback);
   return () => sessionEvents.removeEventListener("logout", callback);
 }
-export function ensureSessionReady() {
-  if (!sessionReady)
-    throw new Error(
-      "Local storage is still opening or clearing. Close other Showday tabs and try again.",
-    );
+
+/** Resolves once the local cache has opened, or finished clearing the last session. */
+export function whenSessionReady(timeout = 30_000) {
+  if (sessionReady) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const ready = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      sessionEvents.removeEventListener("ready", ready);
+      reject(new Error(slowStartMessage));
+    }, timeout);
+    sessionEvents.addEventListener("ready", ready, { once: true });
+  });
+}
+
+/** Logs in or signs up with this site's account service, then opens the account. */
+export async function startSession(
+  mode: "login" | "signup",
+  fields: Record<string, unknown>,
+) {
+  await whenSessionReady();
+  const fallback = "Could not log in. Please retry.";
+  const response = await fetch(`/api/auth/${mode}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  }).catch(() => {
+    throw new Error(fallback);
+  });
+  const session = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(session.error ?? fallback);
+  await connectSession(session.username, session.token);
 }
 
 export function connectSession(username: string, token: unknown) {
   if (typeof token !== "string" || !token)
     throw new Error("Could not open your account. Please log in again.");
-  ensureSessionReady();
+  return whenSessionReady().then(() => connect(username, token));
+}
+function connect(username: string, token: string) {
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timeout);

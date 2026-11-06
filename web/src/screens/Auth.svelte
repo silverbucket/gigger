@@ -2,14 +2,16 @@
 import { currencyForLocale } from "@showday/schemas";
 import Icon from "../components/Icon.svelte";
 import { router } from "../lib/router.svelte";
-import { connectSession, ensureSessionReady, storage } from "../storage";
+import { startSession, storage, whenSessionReady } from "../storage";
 
 /** Log in or sign up. Signing up creates the account and its first band. */
 let {
   status,
   onsignedin,
 }: { status: string; onsignedin: () => Promise<void> } = $props();
-let mode = $state(location.pathname === "/signup" ? "signup" : "login");
+let mode = $state<"login" | "signup">(
+  location.pathname === "/signup" ? "signup" : "login",
+);
 let username = $state("");
 let email = $state("");
 let password = $state("");
@@ -28,29 +30,21 @@ async function authenticate(event: SubmitEvent) {
   busy = true;
   error = "";
   try {
-    ensureSessionReady();
     if (mode === "login" && username.trim().includes("@")) {
+      await whenSessionReady();
       password = "";
       storage.connect(username.trim());
       return;
     }
-    const response = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        email,
-        password,
-        ...(mode === "signup"
-          ? { bandName, currency: currencyForLocale(navigator.language) }
-          : {}),
-      }),
+    await startSession(mode, {
+      username,
+      email,
+      password,
+      ...(mode === "signup"
+        ? { bandName, currency: currencyForLocale(navigator.language) }
+        : {}),
     });
-    const session = await response.json();
-    if (!response.ok)
-      throw new Error(session.error ?? "Could not log in. Please retry.");
     password = "";
-    await connectSession(session.username, session.token);
     bandName = "";
     history.replaceState(null, "", "/");
     // replaceState fires no hashchange, so the router would otherwise keep
