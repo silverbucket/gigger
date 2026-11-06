@@ -9,17 +9,17 @@ import { data } from "./lib/data.svelte";
 import { inboxItems } from "./lib/inbox";
 import { threads } from "./lib/messages.svelte";
 import { router } from "./lib/router.svelte";
-import { run, staleMessage, ui } from "./lib/ui.svelte";
+import { run, staleMessage, ui, watchSession } from "./lib/ui.svelte";
 import Auth from "./screens/Auth.svelte";
 import Band from "./screens/Band.svelte";
 import Bookings from "./screens/Bookings.svelte";
 import Contacts from "./screens/Contacts.svelte";
 import OtherBands from "./screens/OtherBands.svelte";
 import Venues from "./screens/Venues.svelte";
-import { bands, logout, onSessionLogout, storage } from "./storage";
+import { bands, logout, storage } from "./storage";
 
 let signedIn = $state(false);
-let status = $state("Loading…");
+let loading = $state(true);
 let userAddress = $state("");
 
 const toSort = $derived(
@@ -69,7 +69,7 @@ function resetSession() {
   signedIn = false;
   ui.busy = false;
   ui.error = "";
-  status = "";
+  loading = false;
   userAddress = "";
   data.reset();
   threads.reset();
@@ -78,22 +78,20 @@ function resetSession() {
   router.read();
 }
 onMount(() => {
-  const unsubscribeLogout = onSessionLogout(resetSession);
+  const unwatchSession = watchSession(resetSession);
   storage.on("ready", () => {
-    status = "";
+    loading = false;
   });
   storage.on("connected", () => {
     signedIn = true;
-    status = "";
+    loading = false;
+    ui.error = "";
+    ui.notice = "";
     userAddress = storage.remote.userAddress;
     if (location.pathname !== "/")
       history.replaceState(null, "", `/${location.hash}`);
     void load();
     void meta.load();
-  });
-  storage.on("error", () => {
-    ui.error =
-      "Could not save or load changes. Please check your connection and try again.";
   });
   storage.on("disconnected", resetSession);
   let changed = false;
@@ -113,7 +111,7 @@ onMount(() => {
     }
   });
   return () => {
-    unsubscribeLogout();
+    unwatchSession();
     storage.removeEventListener("disconnected", resetSession);
     storage.stopSync();
   };
@@ -177,7 +175,7 @@ function choose(bandId: string) {
 </svelte:head>
 
 {#if !signedIn}
-  <Auth {status} onsignedin={load} />
+  <Auth status={ui.notice || (loading ? "Loading…" : "")} onsignedin={load} />
 {:else}
   <div class="shell" class:phone-detail={phoneDetail}>
     {#if ui.phone}

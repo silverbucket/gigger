@@ -1,12 +1,18 @@
+import { onSessionLogout, onSyncTrouble } from "../storage";
 import { data } from "./data.svelte";
 
 export const staleMessage =
   "This gig changed somewhere else, reload to see the latest";
+export const loginAgainMessage = "Please log in again.";
+export const syncTroubleMessage =
+  "Changes are not syncing right now. Showday will keep trying.";
 
 /** One busy flag and one error line for the whole app. */
 class Ui {
   busy = $state(false);
   error = $state("");
+  /** A calm line on the login screen, e.g. after the server ended the session. */
+  notice = $state("");
   /** Matches the phone layout breakpoint in app.css. */
   phone = $state(
     typeof matchMedia !== "undefined" &&
@@ -39,4 +45,23 @@ export async function run(
   } finally {
     ui.busy = false;
   }
+}
+
+/**
+ * An ended session sends the user to log in again; sync that keeps failing
+ * shows in the error line until it recovers. Returns a function that stops.
+ */
+export function watchSession(onLogout: () => void) {
+  const stopLogout = onSessionLogout((expired) => {
+    onLogout();
+    ui.notice = expired ? loginAgainMessage : "";
+  });
+  const stopSync = onSyncTrouble((trouble) => {
+    if (trouble && !ui.error) ui.error = syncTroubleMessage;
+    else if (!trouble && ui.error === syncTroubleMessage) ui.error = "";
+  });
+  return () => {
+    stopLogout();
+    stopSync();
+  };
 }

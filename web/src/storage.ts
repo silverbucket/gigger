@@ -19,21 +19,51 @@ export const bands = (storage as RemoteStorage & Record<string, ShowdayStore>)[
 
 export const slowStartMessage =
   "This is taking longer than usual. Please try again.";
+/** How long sync may keep failing before the user is told. */
+export const syncTroubleAfter = 2 * 60_000;
 
 let sessionReady = false;
+let expiring = false;
+let failingSince: number | undefined;
+let lastFailure = 0;
+let syncTrouble = false;
 const sessionEvents = new EventTarget();
 storage.on("ready", () => {
   sessionReady = true;
   sessionEvents.dispatchEvent(new Event("ready"));
 });
+storage.on("connected", clearSyncTrouble);
+storage.on("error", (error) => {
+  const { name, message } = (error ?? {}) as {
+    name?: string;
+    message?: string;
+  };
+  // 401/403: the token was revoked, or doesn't cover this app's scope.
+  if (name === "Unauthorized") expireSession();
+  else if (name === "SyncError" || /^HTTP response code/.test(`${message}`))
+    syncFailed();
+});
+storage.on("sync-done", (event) => {
+  if ((event as { completed?: boolean }).completed) clearSyncTrouble();
+});
 const logoutSync =
   typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
-    ? createLogoutSync(() => logout(false))
+    ? createLogoutSync(() => logout({ broadcast: false }))
     : undefined;
 
-export function onSessionLogout(callback: () => void) {
-  sessionEvents.addEventListener("logout", callback);
-  return () => sessionEvents.removeEventListener("logout", callback);
+/** Called with true when the server ended the session rather than the user. */
+export function onSessionLogout(callback: (expired: boolean) => void) {
+  const listener = (event: Event) =>
+    callback((event as CustomEvent<boolean>).detail);
+  sessionEvents.addEventListener("logout", listener);
+  return () => sessionEvents.removeEventListener("logout", listener);
+}
+/** Called with true once sync has kept failing for a while, and with false when it recovers. */
+export function onSyncTrouble(callback: (trouble: boolean) => void) {
+  const listener = (event: Event) =>
+    callback((event as CustomEvent<boolean>).detail);
+  sessionEvents.addEventListener("sync-trouble", listener);
+  return () => sessionEvents.removeEventListener("sync-trouble", listener);
 }
 
 /** Resolves once the local cache has opened, or finished clearing the last session. */
@@ -98,17 +128,18 @@ function connect(username: string, token: string) {
   });
 }
 
-export function logout(broadcast = true) {
+export function logout({ broadcast = true, expired = false } = {}) {
   const { userAddress, token } = storage.remote;
   sessionReady = false;
+  clearSyncTrouble();
   history.replaceState(null, "", "/login");
   // Dispatched after the URL is cleared so onSessionLogout listeners (the
   // router resync included) see it already gone.
-  sessionEvents.dispatchEvent(new Event("logout"));
+  sessionEvents.dispatchEvent(new CustomEvent("logout", { detail: expired }));
   if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
-  if (userAddress.endsWith(`@${location.host}`)) {
+  if (userAddress?.endsWith(`@${location.host}`)) {
     const username = decodeURIComponent(
       userAddress.slice(0, userAddress.lastIndexOf("@")),
     );
@@ -122,4 +153,36 @@ export function logout(broadcast = true) {
       keepalive: true,
     }).catch(() => {});
   }
+}
+
+function expireSession() {
+  if (expiring || !sessionReady || !storage.remote.connected) return;
+  expiring = true;
+  // Out of the library's error dispatch before the session is torn down.
+  setTimeout(() => {
+    expiring = false;
+    if (sessionReady && storage.remote.connected) logout({ expired: true });
+  });
+}
+function syncFailed() {
+  if (!storage.remote.connected) return;
+  const now = Date.now();
+  // Failed syncs are retried within a minute or two, so a longer gap (a device
+  // waking from sleep, say) starts a new streak rather than continuing one.
+  if (failingSince === undefined || now - lastFailure > syncTroubleAfter)
+    failingSince = now;
+  lastFailure = now;
+  if (syncTrouble || now - failingSince < syncTroubleAfter) return;
+  syncTrouble = true;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("sync-trouble", { detail: true }),
+  );
+}
+function clearSyncTrouble() {
+  failingSince = undefined;
+  if (!syncTrouble) return;
+  syncTrouble = false;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("sync-trouble", { detail: false }),
+  );
 }
