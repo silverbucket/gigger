@@ -122,7 +122,7 @@ function fakeStorage() {
     server,
     state,
     json: (path: string) => {
-      const doc = docs.get(`/storage/storage/sam/gigger/${path}`);
+      const doc = docs.get(`/storage/storage/sam/showday/${path}`);
       return doc ? JSON.parse(doc.body) : undefined;
     },
     stop: () => server.stop(true),

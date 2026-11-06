@@ -54,7 +54,7 @@ test("a read that resolves before any reset is cached as usual", async () => {
 
 test("an attachment read that resolves after reset refetches instead of caching the previous account's file", async () => {
   const attachment: Attachment = {
-    url: "gigger/a.txt",
+    url: "showday/a.txt",
     type: "application/octet-stream",
   };
   let calls = 0;

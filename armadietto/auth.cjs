@@ -1,4 +1,5 @@
 const { randomUUID } = require("node:crypto");
+const { migrateGiggerToShowday } = require("./migrate-storage.cjs");
 
 function createAuthHandler(store, clientId) {
   let pending = Promise.resolve();
@@ -20,8 +21,10 @@ function createAuthHandler(store, clientId) {
     const email =
       typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
     if (action === "token") {
+      await migrateGiggerToShowday(store, username);
       // Long-lived server token so webhooks can write into the account; the API verified the user first.
       const token = await store.authorize(clientId, username, {
+        showday: ["r", "w"],
         gigger: ["r", "w"],
       });
       return { status: 200, body: { token } };
@@ -86,20 +89,22 @@ function createAuthHandler(store, clientId) {
           };
         await store.createUser({ username, email, password: input.password });
         try {
+          await migrateGiggerToShowday(store, username);
           const band = {
             id: randomUUID(),
             name: input.bandName.trim(),
             currency: (input.currency || "EUR").toUpperCase(),
-            "@context": "http://remotestorage.io/spec/modules/gigger/band",
+            "@context": "http://remotestorage.io/spec/modules/showday/band",
           };
           const saved = await store.put(
             username,
-            `/gigger/bands/${band.id}/band`,
+            `/showday/bands/${band.id}/band`,
             "application/json",
             Buffer.from(JSON.stringify(band)),
           );
           if (!saved.created) throw new Error("Could not save initial band");
           const token = await store.authorize(clientId, username, {
+            showday: ["r", "w"],
             gigger: ["r", "w"],
           });
           return { status: 201, body: { username, token } };
@@ -116,7 +121,9 @@ function createAuthHandler(store, clientId) {
           body: { error: "Incorrect username or password." },
         };
       }
+      await migrateGiggerToShowday(store, username);
       const token = await store.authorize(clientId, username, {
+        showday: ["r", "w"],
         gigger: ["r", "w"],
       });
       return { status: 200, body: { username, token } };

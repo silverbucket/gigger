@@ -97,7 +97,7 @@ onMount(() => {
   });
   storage.on("disconnected", resetSession);
   let changed = false;
-  storage.scope("/gigger/").on("change", () => {
+  storage.scope("/showday/").on("change", () => {
     changed = true;
   });
   storage.on("sync-done", (event) => {

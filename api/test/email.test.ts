@@ -265,7 +265,7 @@ function fakeArmadietto() {
       const auth = req.headers.get("authorization");
       if (!["Bearer user-token", "Bearer read-only"].includes(auth ?? ""))
         return new Response("", { status: 401 });
-      if (/\/gigger\/bands\/band1\/band$/.test(path))
+      if (/\/showday\/bands\/band1\/band$/.test(path))
         return req.method === "GET"
           ? Response.json({ id: "band1", name: "The Band" })
           : new Response("", {

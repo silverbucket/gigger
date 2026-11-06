@@ -12,9 +12,9 @@ import RemoteStorage from "remotestoragejs";
 test("real remoteStorage module validates and stores bands and related records", async () => {
   const storage = new RemoteStorage();
   storage.addModule(Gigger);
-  storage.access.claim("gigger", "rw");
-  storage.caching.enable("/gigger/");
-  const store = (storage as RemoteStorage & { gigger: GiggerStore }).gigger;
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  const store = (storage as RemoteStorage & { showday: GiggerStore }).showday;
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
     await store.save("band", "a", { id: "a", name: "First" });
@@ -109,7 +109,7 @@ test("real remoteStorage module validates and stores bands and related records",
       store.save("band", "other", { id: "a", name: "Wrong path" }),
     ).rejects.toThrow("Band ID must match");
     await storage
-      .scope("/gigger/")
+      .scope("/showday/")
       .storeFile(
         "application/json",
         "bands/a/members/bad",
@@ -167,9 +167,9 @@ test("overview groups every status with upcoming confirmed gigs first", () => {
 test("listing fetches an uncached child even when its parent listing is fresh", async () => {
   const storage = new RemoteStorage();
   storage.addModule(Gigger);
-  storage.access.claim("gigger", "rw");
+  storage.access.claim("showday", "rw");
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
-  const client = storage.scope("/gigger/");
+  const client = storage.scope("/showday/");
   const store = createGigger(client);
   try {
     await store.save("venue", "a", {

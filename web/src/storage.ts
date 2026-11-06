@@ -1,4 +1,4 @@
-import { Gigger, type GiggerStore } from "@gigger/schemas";
+import { Gigger, type GiggerStore, STORAGE_MODULE_SLUG } from "@gigger/schemas";
 import RemoteStorage from "remotestoragejs";
 import { createLogoutSync } from "./logout-sync";
 export const storage = new RemoteStorage({
@@ -6,11 +6,12 @@ export const storage = new RemoteStorage({
   changeEvents: { local: true, window: false, remote: true, conflict: true },
 });
 storage.addModule(Gigger);
-storage.access.claim("gigger", "rw");
-storage.caching.enable("/gigger/");
-storage.caching.enable("/public/gigger/");
-export const bands = (storage as RemoteStorage & { gigger: GiggerStore })
-  .gigger;
+storage.access.claim(STORAGE_MODULE_SLUG, "rw");
+storage.caching.enable(`/${STORAGE_MODULE_SLUG}/`);
+storage.caching.enable(`/public/${STORAGE_MODULE_SLUG}/`);
+export const bands = (storage as RemoteStorage & Record<string, GiggerStore>)[
+  STORAGE_MODULE_SLUG
+];
 
 let sessionReady = false;
 const sessionEvents = new EventTarget();

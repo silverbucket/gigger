@@ -273,9 +273,21 @@ export const enquirySources = [
 export type EnquirySource = (typeof enquirySources)[number];
 export const channels = ["email", "messenger", "instagram"] as const;
 export type Channel = (typeof channels)[number];
+/** remoteStorage category folder (OAuth scope root) for Showday app data. */
+export const STORAGE_MODULE_SLUG = "showday";
+/** Previous folder name; records may still carry this in `@context` until rewritten. */
+export const LEGACY_STORAGE_MODULE_SLUG = "gigger";
+
+export function moduleContext(kind: string) {
+  return `http://remotestorage.io/spec/modules/${STORAGE_MODULE_SLUG}/${kind}`;
+}
+export function legacyModuleContext(kind: string) {
+  return `http://remotestorage.io/spec/modules/${LEGACY_STORAGE_MODULE_SLUG}/${kind}`;
+}
+
 export interface Attachment {
   type: string;
-  /** Storage path under /gigger/ once copied, or the original URL. */
+  /** Storage path under `/${STORAGE_MODULE_SLUG}/` once copied, or the original URL. */
   url: string;
   mediaType?: string;
   name?: string;
@@ -796,12 +808,13 @@ export function createGigger(client: Client, publicClient?: Client) {
   for (const [kind, schema] of Object.entries(publicSchemas))
     publicClient?.declareType(kind, schema);
   function read<K extends Kind>(kind: K, value: unknown): Records[K] {
+    if (!value || typeof value !== "object")
+      throw new Error(`Invalid ${kind} record in storage`);
+    const { "@context": _ctx, ...rest } = value as Record<string, unknown>;
     if (
-      !value ||
-      typeof value !== "object" ||
       !client.validate({
-        ...value,
-        "@context": `http://remotestorage.io/spec/modules/gigger/${kind}`,
+        ...rest,
+        "@context": moduleContext(kind),
       }).valid
     ) {
       throw new Error(`Invalid ${kind} record in storage`);
@@ -942,11 +955,14 @@ export function createGigger(client: Client, publicClient?: Client) {
     return paths;
   }
   function valid<T>(kind: string, value: unknown): T {
-    const checked = client.validate({
-      ...(value as object),
-      "@context": `http://remotestorage.io/spec/modules/gigger/${kind}`,
-    });
-    if (!checked.valid) throw new Error(`Invalid ${kind} record in storage`);
+    const { "@context": _ctx, ...rest } = value as Record<string, unknown>;
+    if (
+      !client.validate({
+        ...rest,
+        "@context": moduleContext(kind),
+      }).valid
+    )
+      throw new Error(`Invalid ${kind} record in storage`);
     return value as T;
   }
   return {
@@ -1241,7 +1257,7 @@ export function createGigger(client: Client, publicClient?: Client) {
   };
 }
 export const Gigger = {
-  name: "gigger",
+  name: STORAGE_MODULE_SLUG,
   builder: (client: Client, publicClient: Client) => ({
     exports: createGigger(client, publicClient),
   }),

@@ -1,6 +1,6 @@
 export function createLogoutSync(
   onLogout: () => void,
-  channel = new BroadcastChannel("gigger-session"),
+  channel = new BroadcastChannel("showday-session"),
 ) {
   channel.onmessage = (event: MessageEvent) => {
     if (event.data === "logout") onLogout();

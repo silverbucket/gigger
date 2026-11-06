@@ -47,8 +47,8 @@ test("new bands default to the browser locale's currency", () => {
 test("gig schema accepts numeric fees with a currency and legacy text fees", async () => {
   const rs = new RemoteStorage();
   rs.addModule(Gigger);
-  rs.access.claim("gigger", "rw");
-  const store = (rs as RemoteStorage & { gigger: GiggerStore }).gigger;
+  rs.access.claim("showday", "rw");
+  const store = (rs as RemoteStorage & { showday: GiggerStore }).showday;
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
   try {
     await store.save("band", "a", { id: "a", name: "Band", currency: "CZK" });

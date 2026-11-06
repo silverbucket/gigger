@@ -5,6 +5,7 @@ import {
   type Channel,
   conversationId,
   type Message,
+  STORAGE_MODULE_SLUG,
 } from "@gigger/schemas";
 import type { Messages } from "./messages";
 import { seal, unseal, validKey } from "./secrets";
@@ -219,7 +220,11 @@ export function metaHandler(
       const path = attachmentPath(message, n);
       // A failed storage write propagates so the webhook answers 500 and Meta redelivers.
       await rs.put(path, new Uint8Array(await file.arrayBuffer()), mediaType);
-      copies.push({ ...attachment, url: `gigger/${path}`, mediaType });
+      copies.push({
+        ...attachment,
+        url: `${STORAGE_MODULE_SLUG}/${path}`,
+        mediaType,
+      });
     }
     if (copies.length) message.object.attachment = copies;
     if (

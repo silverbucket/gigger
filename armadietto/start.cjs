@@ -1,6 +1,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const { createAuthHandler } = require("./auth.cjs");
+const { migrateGiggerToShowday } = require("./migrate-storage.cjs");
 const Armadietto = require("./lib/armadietto");
 const conf = JSON.parse(fs.readFileSync("/etc/armadietto/conf.json", "utf8"));
 process.umask(0o077);
@@ -77,17 +78,24 @@ http
           res.writeHead(400).end();
           return;
         }
-        const base = `/public/gigger/${slug}/gigs/`;
-        const listing = await store.get(username, base);
+        await migrateGiggerToShowday(store, username);
+        const bases = [
+          `/public/showday/${slug}/gigs/`,
+          `/public/gigger/${slug}/gigs/`,
+        ];
         const gigs = {};
-        for (const id of Object.keys(listing.item?.items ?? {})) {
-          if (!/^[A-Za-z0-9_-]+$/.test(id)) continue;
-          const result = await store.get(username, base + id);
-          if (result.item?.value) {
-            try {
-              gigs[id] = JSON.parse(result.item.value.toString());
-            } catch {
-              // A malformed public record must not hide other gigs.
+        for (const base of bases) {
+          const listing = await store.get(username, base);
+          for (const id of Object.keys(listing.item?.items ?? {})) {
+            if (!/^[A-Za-z0-9_-]+$/.test(id)) continue;
+            if (gigs[id]) continue;
+            const result = await store.get(username, base + id);
+            if (result.item?.value) {
+              try {
+                gigs[id] = JSON.parse(result.item.value.toString());
+              } catch {
+                // A malformed public record must not hide other gigs.
+              }
             }
           }
         }

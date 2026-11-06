@@ -312,7 +312,7 @@ test("earnings validate, recalculate, persist currencies per gig and stay out of
   );
   expect(
     (
-      await request.get(`/storage/storage/${account.username}/gigger/bands/`)
+      await request.get(`/storage/storage/${account.username}/showday/bands/`)
     ).status(),
   ).toBe(403);
   await page.reload();

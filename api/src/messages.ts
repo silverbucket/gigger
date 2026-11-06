@@ -7,6 +7,7 @@ import {
   emailReplyHeaders,
   type Message,
   messagePath,
+  moduleContext,
   needsHumanAgentTag,
   replyBlocked,
   withMessage,
@@ -18,8 +19,7 @@ import { unseal } from "./secrets";
 import type { Sender } from "./sender";
 import { type RemoteStore, remoteStore } from "./storage";
 
-const context = (kind: string) =>
-  `http://remotestorage.io/spec/modules/gigger/${kind}`;
+const context = (kind: string) => moduleContext(kind);
 const usernameRe = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 const idRe = /^[A-Za-z0-9_-]+$/;
 

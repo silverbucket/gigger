@@ -55,19 +55,19 @@ test.skipIf(!base)(
       `${origin}/storage/storage/${encodeURIComponent(username)}`,
     );
     const headers = { Authorization: `Bearer ${token}` };
-    const listing = await fetch(`${storageUrl}/gigger/bands/`, { headers });
+    const listing = await fetch(`${storageUrl}/showday/bands/`, { headers });
     expect(listing.status).toBe(200);
     const folders = Object.keys((await listing.json()).items);
     expect(folders).toHaveLength(1);
     const band = await (
-      await fetch(`${storageUrl}/gigger/bands/${folders[0]}band`, { headers })
+      await fetch(`${storageUrl}/showday/bands/${folders[0]}band`, { headers })
     ).json();
     expect(band.name).toBe("Integration Band");
     expect(band.currency).toBe("CZK");
     expect((await fetch(`${storageUrl}/other/`, { headers })).status).toBe(403);
-    expect((await fetch(`${storageUrl}/gigger/`)).status).toBe(403);
+    expect((await fetch(`${storageUrl}/showday/`)).status).toBe(403);
     expect((await post("logout", { username }, token)).status).toBe(200);
-    expect((await fetch(`${storageUrl}/gigger/`, { headers })).status).toBe(
+    expect((await fetch(`${storageUrl}/showday/`, { headers })).status).toBe(
       403,
     );
     expect((await post("logout", { username }, session.token)).status).toBe(

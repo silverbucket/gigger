@@ -104,7 +104,7 @@ test("logout clears the UI while cache cleanup and server revocation are pending
 });
 
 test("logout messages reach other tabs without echoing or reacting to unrelated messages", async () => {
-  const name = `gigger-session-test-${crypto.randomUUID()}`;
+  const name = `showday-session-test-${crypto.randomUUID()}`;
   const firstChannel = new BroadcastChannel(name);
   const secondChannel = new BroadcastChannel(name);
   let firstCount = 0;

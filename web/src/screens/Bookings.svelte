@@ -47,9 +47,12 @@ import PlayedForm from "./PlayedForm.svelte";
 let { humanAgent = false }: { humanAgent?: boolean } = $props();
 
 let view = $state<"list" | "board">(
-  (localStorage.getItem("gigger:view") as "board") === "board"
-    ? "board"
-    : "list",
+  (() => {
+    const v =
+      localStorage.getItem("showday:view") ??
+      localStorage.getItem("gigger:view");
+    return v === "board" ? "board" : "list";
+  })(),
 );
 // Upcoming first; played, cancelled and past-dated gigs are under Past.
 let filter = $state<"upcoming" | "past">("upcoming");
@@ -218,7 +221,10 @@ function matchFor(item: InboxItem) {
           { value: "board", label: "Board" },
         ]}
         bind:value={view}
-        onchange={(v) => localStorage.setItem("gigger:view", v)}
+        onchange={(v) => {
+          localStorage.removeItem("gigger:view");
+          localStorage.setItem("showday:view", v);
+        }}
       />
     {/if}
     <label class="search">

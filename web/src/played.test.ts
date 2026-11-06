@@ -44,8 +44,8 @@ test("venue averages include ties and count only fully venue-provided PA", () =>
 test("survey validation and earnings isolation using real private/public storage clients", async () => {
   const rs = new RemoteStorage();
   rs.addModule(Gigger);
-  rs.access.claim("gigger", "rw");
-  const store = (rs as RemoteStorage & { gigger: GiggerStore }).gigger;
+  rs.access.claim("showday", "rw");
+  const store = (rs as RemoteStorage & { showday: GiggerStore }).showday;
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
   try {
     await store.save("band", "a", {
@@ -154,7 +154,7 @@ test("survey validation and earnings isolation using real private/public storage
     expect(shared).not.toContain("takeHome");
     expect(await store.list("gig", "b")).toEqual([]);
     expect(
-      Object.keys((await rs.scope("/public/gigger/").getAll("bands/")) ?? {}),
+      Object.keys((await rs.scope("/public/showday/").getAll("bands/")) ?? {}),
     ).toEqual([]);
     expect((await store.markPlayed("a", "g", survey, earnings)).status).toBe(
       "played",
@@ -166,9 +166,9 @@ test("survey validation and earnings isolation using real private/public storage
 
 test("legacy venue creation and retry after gig write fails keep one survey", async () => {
   const rs = new RemoteStorage();
-  rs.access.claim("gigger", "rw");
+  rs.access.claim("showday", "rw");
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
-  const client = rs.scope("/gigger/");
+  const client = rs.scope("/showday/");
   const store = createGigger(client);
   try {
     await store.save("gig", "a", {
@@ -215,9 +215,9 @@ test("legacy venue creation and retry after gig write fails keep one survey", as
 
 test("surveys for different gigs at one venue never overwrite each other", async () => {
   const rs = new RemoteStorage();
-  rs.access.claim("gigger", "rw");
+  rs.access.claim("showday", "rw");
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
-  const store = createGigger(rs.scope("/gigger/"));
+  const store = createGigger(rs.scope("/showday/"));
   try {
     await store.save("venue", "a", { id: "v", name: "Club", address: "Main" });
     const gig = {
