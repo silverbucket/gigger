@@ -1,5 +1,5 @@
 <script lang="ts" module>
-import type { GigStatus } from "@gigger/schemas";
+import type { GigStatus } from "@showday/schemas";
 export type TagKind =
   | GigStatus
   | "private"

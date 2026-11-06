@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createServer } from "node:http";
-import { conversationId } from "@gigger/schemas";
+import { conversationId } from "@showday/schemas";
 import { Server, type Socket } from "socket.io";
 import { openDatabase } from "../src/db";
 import { type EmailAccount, emailAccounts } from "../src/email";
@@ -122,7 +122,7 @@ function fakeStorage() {
     server,
     state,
     json: (path: string) => {
-      const doc = docs.get(`/storage/storage/sam/gigger/${path}`);
+      const doc = docs.get(`/storage/storage/sam/showday/${path}`);
       return doc ? JSON.parse(doc.body) : undefined;
     },
     stop: () => server.stop(true),

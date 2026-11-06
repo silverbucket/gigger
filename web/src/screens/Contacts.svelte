@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Contact } from "@gigger/schemas";
+import type { Contact } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import ChannelGrid from "../components/ChannelGrid.svelte";

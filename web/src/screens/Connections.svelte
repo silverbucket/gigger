@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Band } from "@gigger/schemas";
+import type { Band } from "@showday/schemas";
 import Tag from "../components/Tag.svelte";
 import { api, meta } from "../lib/account.svelte";
 import { ui } from "../lib/ui.svelte";

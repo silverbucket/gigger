@@ -6,7 +6,7 @@ import {
   needsHumanAgentTag,
   replyBlocked,
   withMessage,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { openDatabase } from "../src/db";
 import { messageHandler } from "../src/messages";
 import {
@@ -58,7 +58,7 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
         ].includes(auth ?? "")
       )
         return new Response("", { status: 401 });
-      if (/\/gigger\/bands\/band[12]\/band$/.test(path))
+      if (/\/showday\/bands\/band[12]\/band$/.test(path))
         return req.method === "GET"
           ? Response.json({ id: "band1", name: "The Band" })
           : new Response("", {
@@ -92,7 +92,7 @@ function fakeArmadietto(options: { conflictOnce?: boolean } = {}) {
     },
   });
   const json = (path: string) => {
-    const doc = docs.get(`/storage/storage/sam/gigger/${path}`);
+    const doc = docs.get(`/storage/storage/sam/showday/${path}`);
     return doc ? JSON.parse(new TextDecoder().decode(doc.body)) : undefined;
   };
   return {
@@ -298,11 +298,11 @@ test("a signed Messenger event becomes a stored message with an index entry, onc
       preview: "Can you play Friday?",
     });
     const before = t.docs.get(
-      `/storage/storage/sam/gigger/conversations/index`,
+      `/storage/storage/sam/showday/conversations/index`,
     )?.etag;
     expect((await post()).status).toBe(200); // Meta retries deliveries
     expect(
-      t.docs.get(`/storage/storage/sam/gigger/conversations/index`)?.etag,
+      t.docs.get(`/storage/storage/sam/showday/conversations/index`)?.etag,
     ).toBe(before);
   } finally {
     t.stop();
@@ -356,7 +356,7 @@ test("echo events are outgoing messages and attachments are copied into storage"
         attachment: [
           {
             type: "image",
-            url: `gigger/conversations/${conversation}/2025-01/files/m_echo-0`,
+            url: `showday/conversations/${conversation}/2025-01/files/m_echo-0`,
             mediaType: "image/png",
           },
         ],
@@ -365,7 +365,7 @@ test("echo events are outgoing messages and attachments are copied into storage"
     expect(
       new TextDecoder().decode(
         t.docs.get(
-          `/storage/storage/sam/gigger/conversations/${conversation}/2025-01/files/m_echo-0`,
+          `/storage/storage/sam/showday/conversations/${conversation}/2025-01/files/m_echo-0`,
         )?.body,
       ),
     ).toBe("PNGDATA");
@@ -515,7 +515,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
       });
     const recent = new Date(Date.now() - 60000).toISOString();
     // The webhook seed is dated 2025; make the contact's last message recent so the window is open.
-    const indexPath = `/storage/storage/sam/gigger/conversations/index`;
+    const indexPath = `/storage/storage/sam/showday/conversations/index`;
     const current = t.json("conversations/index");
     current[conversation].lastIn = recent;
     t.docs.set(indexPath, {
@@ -757,7 +757,7 @@ test("with META_HUMAN_AGENT a reply after 24 hours carries the tag, after 7 days
       body: seed,
       headers: { "X-Hub-Signature-256": sign(seed) },
     });
-    const indexPath = "/storage/storage/sam/gigger/conversations/index";
+    const indexPath = "/storage/storage/sam/showday/conversations/index";
     const setLastIn = (daysAgo: number) => {
       const index = t.json("conversations/index");
       index[conversation].lastIn = new Date(

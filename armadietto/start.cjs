@@ -77,7 +77,7 @@ http
           res.writeHead(400).end();
           return;
         }
-        const base = `/public/gigger/${slug}/gigs/`;
+        const base = `/public/showday/${slug}/gigs/`;
         const listing = await store.get(username, base);
         const gigs = {};
         for (const id of Object.keys(listing.item?.items ?? {})) {

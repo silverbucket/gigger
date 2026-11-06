@@ -1,5 +1,5 @@
 <script lang="ts" module>
-import type { Availability, Gig, Member } from "@gigger/schemas";
+import type { Availability, Gig, Member } from "@showday/schemas";
 
 export const availabilityLabel: Record<Availability | "none", string> = {
   yes: "Available",

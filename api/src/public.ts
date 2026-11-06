@@ -1,5 +1,10 @@
 import type { Database } from "bun:sqlite";
-import { type PublicGig, type PublicPage, slugPattern } from "@gigger/schemas";
+import {
+  type PublicGig,
+  type PublicPage,
+  STORAGE_MODULE_SLUG,
+  slugPattern,
+} from "@showday/schemas";
 import { zip } from "./zip";
 
 type Row = PublicGig & { id: string };
@@ -279,7 +284,7 @@ export function publicHandler(
     const row = owner.get(slug);
     if (!row) return null;
     const response = await fetch(
-      storageUrl(row.username, `public/gigger/${slug}/page`),
+      storageUrl(row.username, `public/${STORAGE_MODULE_SLUG}/${slug}/page`),
       { signal: AbortSignal.timeout(10000) },
     );
     if (!response.ok) return null;
@@ -373,7 +378,7 @@ export function publicHandler(
         );
       try {
         const check = await fetch(
-          storageUrl(username, `gigger/bands/${bandId}/band`),
+          storageUrl(username, `${STORAGE_MODULE_SLUG}/bands/${bandId}/band`),
           {
             headers: { Authorization: `Bearer ${token}` },
             signal: AbortSignal.timeout(10000),

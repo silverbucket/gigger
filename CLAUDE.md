@@ -1,4 +1,4 @@
-# Gigger
+# Showday
 
 Read `README.md` for the stack, commands and data model.
 

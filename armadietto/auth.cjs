@@ -22,7 +22,7 @@ function createAuthHandler(store, clientId) {
     if (action === "token") {
       // Long-lived server token so webhooks can write into the account; the API verified the user first.
       const token = await store.authorize(clientId, username, {
-        gigger: ["r", "w"],
+        showday: ["r", "w"],
       });
       return { status: 200, body: { token } };
     }
@@ -90,17 +90,17 @@ function createAuthHandler(store, clientId) {
             id: randomUUID(),
             name: input.bandName.trim(),
             currency: (input.currency || "EUR").toUpperCase(),
-            "@context": "http://remotestorage.io/spec/modules/gigger/band",
+            "@context": "http://remotestorage.io/spec/modules/showday/band",
           };
           const saved = await store.put(
             username,
-            `/gigger/bands/${band.id}/band`,
+            `/showday/bands/${band.id}/band`,
             "application/json",
             Buffer.from(JSON.stringify(band)),
           );
           if (!saved.created) throw new Error("Could not save initial band");
           const token = await store.authorize(clientId, username, {
-            gigger: ["r", "w"],
+            showday: ["r", "w"],
           });
           return { status: 201, body: { username, token } };
         } catch (error) {
@@ -117,7 +117,7 @@ function createAuthHandler(store, clientId) {
         };
       }
       const token = await store.authorize(clientId, username, {
-        gigger: ["r", "w"],
+        showday: ["r", "w"],
       });
       return { status: 200, body: { username, token } };
     });

@@ -1,4 +1,9 @@
-import { type Contact, formatFee, type Gig, type Venue } from "@gigger/schemas";
+import {
+  type Contact,
+  formatFee,
+  type Gig,
+  type Venue,
+} from "@showday/schemas";
 import type { BandData } from "./data.svelte";
 import { fee, longDate, money, today } from "./format";
 

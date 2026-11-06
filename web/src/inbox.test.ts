@@ -2,20 +2,20 @@ import { expect, test } from "bun:test";
 import {
   attachmentPath,
   conversationId,
-  Gigger,
-  type GiggerStore,
   type Message,
   messagePath,
-} from "@gigger/schemas";
+  Showday,
+  type ShowdayStore,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 test("the app reads server-written messages and the conversation index through the real module", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
-  storage.access.claim("gigger", "rw");
-  storage.caching.enable("/gigger/");
-  const store = (storage as RemoteStorage & { gigger: GiggerStore }).gigger;
-  const client = storage.scope("/gigger/");
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
+  const client = storage.scope("/showday/");
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
     expect(await store.conversations()).toEqual({});
@@ -33,7 +33,7 @@ test("the app reads server-written messages and the conversation index through t
         type: "Note",
         content: "Free on the 5th?",
         attachment: [
-          { type: "image", url: "gigger/x", mediaType: "image/png" },
+          { type: "image", url: "showday/x", mediaType: "image/png" },
         ],
       },
       published: "2025-01-31T23:00:00.000Z",

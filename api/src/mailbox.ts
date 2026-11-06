@@ -1,4 +1,4 @@
-import { conversationId, type Message } from "@gigger/schemas";
+import { conversationId, type Message } from "@showday/schemas";
 import SockethubClient from "@sockethub/client";
 import {
   type EmailAccount,

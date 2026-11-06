@@ -8,7 +8,7 @@ import type {
   Triage,
   Venue,
   VenueSurvey,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { bands, storage } from "../storage";
 
 export interface BandData {
@@ -77,7 +77,7 @@ class Data {
     if (!this.loaded) {
       // No stored value (first-ever load) is distinct from an explicitly
       // remembered "All bands" (stored as ""), which must stay that way.
-      const stored = localStorage.getItem("gigger:band");
+      const stored = localStorage.getItem("showday:band");
       this.bandId =
         stored === null
           ? this.all.length === 1
@@ -91,7 +91,7 @@ class Data {
   }
   choose(bandId: string) {
     this.bandId = bandId;
-    localStorage.setItem("gigger:band", bandId);
+    localStorage.setItem("showday:band", bandId);
   }
   band(bandId: string) {
     return this.all.find((item) => item.band.id === bandId);

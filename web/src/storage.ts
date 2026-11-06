@@ -1,16 +1,21 @@
-import { Gigger, type GiggerStore } from "@gigger/schemas";
+import {
+  Showday,
+  type ShowdayStore,
+  STORAGE_MODULE_SLUG,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 import { createLogoutSync } from "./logout-sync";
 export const storage = new RemoteStorage({
   discovery: { allowPrivateAddresses: true, timeout: 5000 },
   changeEvents: { local: true, window: false, remote: true, conflict: true },
 });
-storage.addModule(Gigger);
-storage.access.claim("gigger", "rw");
-storage.caching.enable("/gigger/");
-storage.caching.enable("/public/gigger/");
-export const bands = (storage as RemoteStorage & { gigger: GiggerStore })
-  .gigger;
+storage.addModule(Showday);
+storage.access.claim(STORAGE_MODULE_SLUG, "rw");
+storage.caching.enable(`/${STORAGE_MODULE_SLUG}/`);
+storage.caching.enable(`/public/${STORAGE_MODULE_SLUG}/`);
+export const bands = (storage as RemoteStorage & Record<string, ShowdayStore>)[
+  STORAGE_MODULE_SLUG
+];
 
 let sessionReady = false;
 const sessionEvents = new EventTarget();
@@ -33,7 +38,9 @@ export function ensureSessionReady() {
     );
 }
 
-export function connectSession(username: string, token: string) {
+export function connectSession(username: string, token: unknown) {
+  if (typeof token !== "string" || !token)
+    throw new Error("Could not open your account. Please log in again.");
   ensureSessionReady();
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {

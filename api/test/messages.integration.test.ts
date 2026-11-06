@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { conversationId } from "@gigger/schemas";
+import { conversationId } from "@showday/schemas";
 
 /** Runs against `make up-test`: the real API, Armadietto, the Sockethub container and a Mailpit sink. */
 const base = process.env.MAIL_TEST_URL;
@@ -27,7 +27,7 @@ test.skipIf(!base)(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     };
-    const root = `${base}/storage/storage/${username}/gigger/`;
+    const root = `${base}/storage/storage/${username}/showday/`;
     const listing = await fetch(`${root}bands/`, { headers });
     const bandId = Object.keys((await listing.json()).items)[0].replace(
       /\/$/,
@@ -40,7 +40,8 @@ test.skipIf(!base)(
       method: "PUT",
       headers: { ...headers, "If-None-Match": "*" },
       body: JSON.stringify({
-        "@context": "http://remotestorage.io/spec/modules/gigger/conversations",
+        "@context":
+          "http://remotestorage.io/spec/modules/showday/conversations",
         [conversation]: {
           bandId,
           channel: "email",

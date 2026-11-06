@@ -1,5 +1,5 @@
-import type { Gig } from "@gigger/schemas";
 import { test as base, expect, type Page } from "@playwright/test";
+import type { Gig } from "@showday/schemas";
 
 export const test = base.extend<{
   account: {
@@ -27,7 +27,7 @@ export const test = base.extend<{
     });
     expect(response.ok()).toBe(true);
     const { token } = await response.json();
-    const root = `/storage/storage/${username}/gigger/bands/`;
+    const root = `/storage/storage/${username}/showday/bands/`;
     const headers = { Authorization: `Bearer ${token}` };
     const listing = await request.get(root, { headers });
     expect(listing.ok()).toBe(true);
@@ -41,7 +41,7 @@ export const test = base.extend<{
       const saved = await request.put(`${path}${location}`, {
         headers,
         data: {
-          "@context": `http://remotestorage.io/spec/modules/gigger/${kind}`,
+          "@context": `http://remotestorage.io/spec/modules/showday/${kind}`,
           ...value,
         },
       });

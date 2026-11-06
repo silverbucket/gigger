@@ -5,7 +5,7 @@ import {
   publicStatuses,
   slugify,
   slugPattern,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import ChannelGrid from "../components/ChannelGrid.svelte";
 import Icon from "../components/Icon.svelte";

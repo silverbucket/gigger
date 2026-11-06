@@ -1,5 +1,10 @@
 <script lang="ts">
-import { type Contact, formatFee, type Gig, type Venue } from "@gigger/schemas";
+import {
+  type Contact,
+  formatFee,
+  type Gig,
+  type Venue,
+} from "@showday/schemas";
 import { longDate, mapUrl } from "../lib/format";
 
 /** The printable gig sheet. Hidden on screen; Print shows only this. */

@@ -38,7 +38,9 @@ test("signup, login, duplicate email and logout through the API without an accou
     },
     authorize: async (client: string, email: string, permissions: unknown) => {
       expect(client).toBe("http://localhost:8080");
-      expect(permissions).toEqual({ gigger: ["r", "w"] });
+      expect(permissions).toEqual({
+        showday: ["r", "w"],
+      });
       const token = crypto.randomUUID();
       const user = users.get(email);
       if (!user) throw new Error("Missing user");
@@ -53,6 +55,7 @@ test("signup, login, duplicate email and logout through the API without an accou
       records.set(email + path, JSON.parse(body.toString()));
       return { created: true };
     },
+    _resolvePath: (user: string, rel: string) => `${user}:${rel}`,
     removeUser: async (email: string) => users.delete(email),
   };
   const internal = createAuthHandler(store, "http://localhost:8080");
@@ -104,7 +107,9 @@ test("signup, login, duplicate email and logout through the API without an accou
         key.startsWith("default-currency/"),
       )?.[1].currency,
     ).toBe("EUR");
-    expect([...records.keys()][0]).toMatch(/^sam\/gigger\/bands\/[^/]+\/band$/);
+    expect([...records.keys()][0]).toMatch(
+      /^sam\/showday\/bands\/[^/]+\/band$/,
+    );
     expect(
       (
         await post("signup", {

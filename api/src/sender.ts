@@ -1,4 +1,4 @@
-import type { Channel, Message } from "@gigger/schemas";
+import type { Channel, Message } from "@showday/schemas";
 import SockethubClient from "@sockethub/client";
 
 export interface Sender {

@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { Contact, EnquirySource } from "@gigger/schemas";
-import { enquirySources, type Gig, type OtherBand } from "@gigger/schemas";
+import type { Contact, EnquirySource } from "@showday/schemas";
+import { enquirySources, type Gig, type OtherBand } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import Icon from "../components/Icon.svelte";

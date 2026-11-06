@@ -1,4 +1,4 @@
-import type { Venue } from "@gigger/schemas";
+import type { Venue } from "@showday/schemas";
 import { normalize, shortDate, today } from "./format";
 
 /** What an enquiry message seems to ask for. Everything is a suggestion to check before saving. */

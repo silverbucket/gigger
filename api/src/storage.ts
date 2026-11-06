@@ -1,7 +1,7 @@
 /** Minimal remoteStorage HTTP client for one account, used for server-side message writes. */
 export function remoteStore(baseUrl: string, username: string, token: string) {
   const url = (path: string) =>
-    `${baseUrl}/storage/storage/${encodeURIComponent(username)}/gigger/${path}`;
+    `${baseUrl}/storage/storage/${encodeURIComponent(username)}/showday/${path}`;
   const authorization = { Authorization: `Bearer ${token}` };
   const timeout = () => AbortSignal.timeout(10000);
   async function get<T>(path: string) {

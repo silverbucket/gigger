@@ -41,8 +41,8 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
         });
       if (
         [
-          "/storage/storage/sam/public/gigger/the-band/page",
-          "/storage/storage/sam/public/gigger/renamed/page",
+          "/storage/storage/sam/public/showday/the-band/page",
+          "/storage/storage/sam/public/showday/renamed/page",
         ].includes(path)
       )
         return Response.json({
@@ -64,7 +64,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
             evil: { date: "2999-01-01", venue: "X", ticketUrl: "javascript:1" },
           },
         });
-      if (path === "/storage/storage/sam/gigger/bands/band1/band")
+      if (path === "/storage/storage/sam/showday/bands/band1/band")
         return req.headers.get("authorization") === `Bearer ${bandToken}`
           ? Response.json({ id: "band1", name: "The Band" })
           : new Response("", { status: 401 });

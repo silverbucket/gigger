@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
-import type { Attachment, Message } from "@gigger/schemas";
+import type { Attachment, Message } from "@showday/schemas";
 
 // Threads is loaded outside Svelte's compiler, where $state has no meaning;
 // stubbing it as identity lets the module run as plain JS for this test.
@@ -54,7 +54,7 @@ test("a read that resolves before any reset is cached as usual", async () => {
 
 test("an attachment read that resolves after reset refetches instead of caching the previous account's file", async () => {
   const attachment: Attachment = {
-    url: "gigger/a.txt",
+    url: "showday/a.txt",
     type: "application/octet-stream",
   };
   let calls = 0;

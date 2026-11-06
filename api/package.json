@@ -1,5 +1,5 @@
 {
-  "name": "@gigger/api",
+  "name": "@showday/api",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "seed": "bun src/seed.ts"
   },
   "dependencies": {
-    "@gigger/schemas": "workspace:*",
+    "@showday/schemas": "workspace:*",
     "@sockethub/client": "^5.0.0-beta.1",
     "socket.io-client": "^4.8.4"
   },

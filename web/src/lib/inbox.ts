@@ -5,7 +5,7 @@ import type {
   ConversationIndex,
   Gig,
   Triage,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { normalize } from "./format";
 
 export const channelTag: Record<Channel | "other", string> = {

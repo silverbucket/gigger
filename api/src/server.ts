@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { type Channel, schemas } from "@gigger/schemas";
+import { type Channel, schemas } from "@showday/schemas";
 import { authHandler } from "./auth";
 import { openDatabase } from "./db";
 import { emailAccounts, emailHandler, type Watchers } from "./email";

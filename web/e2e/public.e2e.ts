@@ -30,7 +30,7 @@ test("publishing a page copies only public gig fields and the page serves them",
     page.getByRole("link", { name: "Open page", exact: true }),
   ).toHaveAttribute("href", `${new URL(page.url()).origin}/b/${slug}`);
   await expect(page.getByRole("alert")).toHaveCount(0);
-  const publicPath = `/storage/storage/${account.username}/public/gigger/${slug}/`;
+  const publicPath = `/storage/storage/${account.username}/public/showday/${slug}/`;
   await expect
     .poll(async () => (await request.get(`${publicPath}gigs/prague`)).status())
     .toBe(200);

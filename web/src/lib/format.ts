@@ -4,7 +4,7 @@ import {
   formatFee,
   formatMoney,
   type Gig,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 
 /** The interface is English, so dates read in English too; money keeps the browser's locale. */
 const dateLocale = "en-GB";

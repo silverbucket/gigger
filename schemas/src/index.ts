@@ -273,9 +273,15 @@ export const enquirySources = [
 export type EnquirySource = (typeof enquirySources)[number];
 export const channels = ["email", "messenger", "instagram"] as const;
 export type Channel = (typeof channels)[number];
+/** remoteStorage category folder (OAuth scope root) for Showday app data. */
+export const STORAGE_MODULE_SLUG = "showday";
+export function moduleContext(kind: string) {
+  return `http://remotestorage.io/spec/modules/${STORAGE_MODULE_SLUG}/${kind}`;
+}
+
 export interface Attachment {
   type: string;
-  /** Storage path under /gigger/ once copied, or the original URL. */
+  /** Storage path under `/${STORAGE_MODULE_SLUG}/` once copied, or the original URL. */
   url: string;
   mediaType?: string;
   name?: string;
@@ -767,7 +773,7 @@ export function recordPath(kind: Kind, bandId: string, recordId = bandId) {
     ? `${base}band`
     : `${base}${kind}s/${safeId(recordId)}`;
 }
-export function createGigger(client: Client, publicClient?: Client) {
+export function createShowday(client: Client, publicClient?: Client) {
   for (const [kind, schema] of Object.entries(schemas))
     client.declareType(kind, schema);
   client.declareType("pendingPublicDelete", {
@@ -801,7 +807,7 @@ export function createGigger(client: Client, publicClient?: Client) {
       typeof value !== "object" ||
       !client.validate({
         ...value,
-        "@context": `http://remotestorage.io/spec/modules/gigger/${kind}`,
+        "@context": moduleContext(kind),
       }).valid
     ) {
       throw new Error(`Invalid ${kind} record in storage`);
@@ -942,11 +948,13 @@ export function createGigger(client: Client, publicClient?: Client) {
     return paths;
   }
   function valid<T>(kind: string, value: unknown): T {
-    const checked = client.validate({
-      ...(value as object),
-      "@context": `http://remotestorage.io/spec/modules/gigger/${kind}`,
-    });
-    if (!checked.valid) throw new Error(`Invalid ${kind} record in storage`);
+    if (
+      !client.validate({
+        ...(value as object),
+        "@context": moduleContext(kind),
+      }).valid
+    )
+      throw new Error(`Invalid ${kind} record in storage`);
     return value as T;
   }
   return {
@@ -1240,13 +1248,13 @@ export function createGigger(client: Client, publicClient?: Client) {
     list,
   };
 }
-export const Gigger = {
-  name: "gigger",
+export const Showday = {
+  name: STORAGE_MODULE_SLUG,
   builder: (client: Client, publicClient: Client) => ({
-    exports: createGigger(client, publicClient),
+    exports: createShowday(client, publicClient),
   }),
 };
-export type GiggerStore = ReturnType<typeof createGigger>;
+export type ShowdayStore = ReturnType<typeof createShowday>;
 export function groupGigs(
   gigs: Gig[],
   today = new Date().toLocaleDateString("en-CA"),

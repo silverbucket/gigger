@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Contact, Conversation, Gig, Triage } from "@gigger/schemas";
+import type { Contact, Conversation, Gig, Triage } from "@showday/schemas";
 import {
   contactFromSender,
   inboxItems,

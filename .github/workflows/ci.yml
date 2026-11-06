@@ -63,5 +63,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
-            ghcr.io/silverbucket/gigger/${{ matrix.image }}:${{ github.sha }}
+            ghcr.io/silverbucket/showday/${{ matrix.image }}:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'main' }}
+            ghcr.io/silverbucket/showday/${{ matrix.image }}:${{ github.sha }}

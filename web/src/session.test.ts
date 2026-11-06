@@ -1,11 +1,24 @@
 import { expect, spyOn, test } from "bun:test";
 import { createLogoutSync } from "./logout-sync";
 import {
+  connectSession,
   ensureSessionReady,
   logout,
   onSessionLogout,
   storage,
 } from "./storage";
+
+test("a missing local session token never starts OAuth", () => {
+  const connect = spyOn(storage, "connect");
+  try {
+    expect(() => connectSession("nick", undefined)).toThrow(
+      "Could not open your account. Please log in again.",
+    );
+    expect(connect).not.toHaveBeenCalled();
+  } finally {
+    connect.mockRestore();
+  }
+});
 
 test("logout clears the UI while cache cleanup and server revocation are pending", async () => {
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
@@ -104,7 +117,7 @@ test("logout clears the UI while cache cleanup and server revocation are pending
 });
 
 test("logout messages reach other tabs without echoing or reacting to unrelated messages", async () => {
-  const name = `gigger-session-test-${crypto.randomUUID()}`;
+  const name = `showday-session-test-${crypto.randomUUID()}`;
   const firstChannel = new BroadcastChannel(name);
   const secondChannel = new BroadcastChannel(name);
   let firstCount = 0;

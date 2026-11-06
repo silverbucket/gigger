@@ -1,20 +1,20 @@
 import { expect, test } from "bun:test";
 import {
-  createGigger,
+  createShowday,
   type Gig,
-  Gigger,
-  type GiggerStore,
   groupGigs,
   recordPath,
-} from "@gigger/schemas";
+  Showday,
+  type ShowdayStore,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 test("real remoteStorage module validates and stores bands and related records", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
-  storage.access.claim("gigger", "rw");
-  storage.caching.enable("/gigger/");
-  const store = (storage as RemoteStorage & { gigger: GiggerStore }).gigger;
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
     await store.save("band", "a", { id: "a", name: "First" });
@@ -109,7 +109,7 @@ test("real remoteStorage module validates and stores bands and related records",
       store.save("band", "other", { id: "a", name: "Wrong path" }),
     ).rejects.toThrow("Band ID must match");
     await storage
-      .scope("/gigger/")
+      .scope("/showday/")
       .storeFile(
         "application/json",
         "bands/a/members/bad",
@@ -166,11 +166,11 @@ test("overview groups every status with upcoming confirmed gigs first", () => {
 
 test("listing fetches an uncached child even when its parent listing is fresh", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
-  storage.access.claim("gigger", "rw");
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
-  const client = storage.scope("/gigger/");
-  const store = createGigger(client);
+  const client = storage.scope("/showday/");
+  const store = createShowday(client);
   try {
     await store.save("venue", "a", {
       id: "v",
