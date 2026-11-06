@@ -9,7 +9,13 @@ import { data } from "./lib/data.svelte";
 import { inboxItems } from "./lib/inbox";
 import { threads } from "./lib/messages.svelte";
 import { router } from "./lib/router.svelte";
-import { run, staleMessage, ui, watchSession } from "./lib/ui.svelte";
+import {
+  run,
+  staleMessage,
+  syncTroubleMessage,
+  ui,
+  watchSession,
+} from "./lib/ui.svelte";
 import Auth from "./screens/Auth.svelte";
 import Band from "./screens/Band.svelte";
 import Bookings from "./screens/Bookings.svelte";
@@ -257,6 +263,9 @@ function choose(bandId: string) {
           Dismiss
         </button>
       </p>
+    {/if}
+    {#if ui.syncTrouble}
+      <p class="notice no-print" role="status">{syncTroubleMessage}</p>
     {/if}
     {#if data.pendingPublicDeletes}
       <p class="notice no-print" role="status">

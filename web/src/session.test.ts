@@ -24,8 +24,9 @@ import {
 const globals = globalThis as Record<string, unknown>;
 globals.$state = (value: unknown) => value;
 globals.$derived = (value: unknown) => value;
-const { loginAgainMessage, syncTroubleMessage, ui, watchSession } =
+const { loginAgainMessage, run, syncTroubleMessage, ui, watchSession } =
   await import("./lib/ui.svelte");
+const { data } = await import("./lib/data.svelte");
 afterAll(() => {
   delete globals.$state;
   delete globals.$derived;
@@ -449,16 +450,17 @@ test("transient sync failures retry quietly", async () => {
     failSyncAt(start, 0, serverError());
     failSyncAt(start, 10, new Error("Unknown IndexedDB error"));
     failSyncAt(start, 110, serverError());
-    expect(ui.error).toBe("");
+    expect(ui.syncTrouble).toBe(false);
 
     // A sync that gets through ends the streak.
     storage._emit("sync-done", { completed: true });
     failSyncAt(start, 130, offline());
-    expect(ui.error).toBe("");
+    expect(ui.syncTrouble).toBe(false);
 
     // So does a long quiet spell, like a laptop asleep overnight.
     failSyncAt(start, 8 * 60 * 60, offline());
     await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ui.syncTrouble).toBe(false);
     expect(ui.error).toBe("");
     expect(ui.notice).toBe("");
     expect(disconnect).not.toHaveBeenCalled();
@@ -472,7 +474,7 @@ test("transient sync failures retry quietly", async () => {
   }
 });
 
-test("sync that keeps failing shows a plain error until it recovers", async () => {
+test("sync that keeps failing says so until it recovers", async () => {
   await whenSessionReady();
   const page = browser();
   const unwatch = watchSession(() => {});
@@ -482,38 +484,73 @@ test("sync that keeps failing shows a plain error until it recovers", async () =
     signIn();
     for (let seconds = 0; seconds < syncTroubleAfter / 1000; seconds += 10) {
       failSyncAt(start, seconds, seconds % 20 ? offline() : serverError());
-      expect(ui.error).toBe("");
+      expect(ui.syncTrouble).toBe(false);
     }
     failSyncAt(start, syncTroubleAfter / 1000, offline());
-    expect(ui.error).toBe(syncTroubleMessage);
+    expect(ui.syncTrouble).toBe(true);
+    expect(ui.error).toBe("");
     expect(syncTroubleMessage).toBe(
       "Changes are not syncing right now. Showday will keep trying.",
     );
 
     // A sync that still has failing requests is not a recovery.
     storage._emit("sync-done", { completed: false });
-    expect(ui.error).toBe(syncTroubleMessage);
+    expect(ui.syncTrouble).toBe(true);
     storage._emit("sync-done", { completed: true });
-    expect(ui.error).toBe("");
+    expect(ui.syncTrouble).toBe(false);
 
-    // Dismissed, it stays away while the same outage goes on.
-    for (let seconds = 200; seconds <= 400; seconds += 60)
-      failSyncAt(start, seconds, offline());
-    expect(ui.error).toBe(syncTroubleMessage);
-    ui.error = "";
-    failSyncAt(start, 460, offline());
-    expect(ui.error).toBe("");
-
-    // It never replaces an error the user is already looking at.
-    storage._emit("sync-done", { completed: true });
-    ui.error = "Could not save changes. Please retry.";
-    for (let seconds = 500; seconds <= 700; seconds += 60)
-      failSyncAt(start, seconds, offline());
-    expect(ui.error).toBe("Could not save changes. Please retry.");
+    // Ending the session takes it down too.
+    failSyncAt(start, 300, offline());
+    failSyncAt(start, 300 + syncTroubleAfter / 1000, offline());
+    expect(ui.syncTrouble).toBe(true);
+    const stalled = stallCleanup();
+    logout();
+    expect(ui.syncTrouble).toBe(false);
+    await finishCleanup(stalled);
   } finally {
     setSystemTime();
     unwatch();
+    ui.syncTrouble = false;
+    signOutQuietly();
+    page.restore();
+  }
+});
+
+test("edits and their errors leave the not-syncing line up for the whole outage", async () => {
+  await whenSessionReady();
+  const page = browser();
+  const unwatch = watchSession(() => {});
+  const load = spyOn(data, "load").mockResolvedValue(undefined);
+  const start = Date.now();
+  try {
+    signIn();
+    failSyncAt(start, 0, offline());
+    failSyncAt(start, syncTroubleAfter / 1000, offline());
+    expect(ui.syncTrouble).toBe(true);
+
+    expect(await run(async () => {})).toBe(true);
+    expect(ui.syncTrouble).toBe(true);
+    const failed = await run(async () => {
+      throw new Error("Could not save changes. Please retry.");
+    });
+    expect(failed).toBe(false);
+    expect(ui.error).toBe("Could not save changes. Please retry.");
+    expect(ui.syncTrouble).toBe(true);
+
+    // Dismissing that error leaves the outage showing as it goes on.
     ui.error = "";
+    for (let seconds = 180; seconds <= 600; seconds += 60)
+      failSyncAt(start, seconds, offline());
+    expect(ui.syncTrouble).toBe(true);
+
+    storage._emit("sync-done", { completed: true });
+    expect(ui.syncTrouble).toBe(false);
+  } finally {
+    setSystemTime();
+    unwatch();
+    load.mockRestore();
+    ui.error = "";
+    ui.syncTrouble = false;
     signOutQuietly();
     page.restore();
   }

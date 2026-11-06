@@ -13,6 +13,8 @@ class Ui {
   error = $state("");
   /** A calm line on the login screen, e.g. after the server ended the session. */
   notice = $state("");
+  /** Sync keeps failing. Kept apart from the error line, which every change clears. */
+  syncTrouble = $state(false);
   /** Matches the phone layout breakpoint in app.css. */
   phone = $state(
     typeof matchMedia !== "undefined" &&
@@ -49,7 +51,7 @@ export async function run(
 
 /**
  * An ended session sends the user to log in again; sync that keeps failing
- * shows in the error line until it recovers. Returns a function that stops.
+ * raises ui.syncTrouble until it recovers. Returns a function that stops.
  */
 export function watchSession(onLogout: () => void) {
   const stopLogout = onSessionLogout((expired) => {
@@ -57,8 +59,7 @@ export function watchSession(onLogout: () => void) {
     ui.notice = expired ? loginAgainMessage : "";
   });
   const stopSync = onSyncTrouble((trouble) => {
-    if (trouble && !ui.error) ui.error = syncTroubleMessage;
-    else if (!trouble && ui.error === syncTroubleMessage) ui.error = "";
+    ui.syncTrouble = trouble;
   });
   return () => {
     stopLogout();
