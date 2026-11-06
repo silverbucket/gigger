@@ -38,7 +38,9 @@ export function ensureSessionReady() {
     );
 }
 
-export function connectSession(username: string, token: string) {
+export function connectSession(username: string, token: unknown) {
+  if (typeof token !== "string" || !token)
+    throw new Error("Could not open your account. Please log in again.");
   ensureSessionReady();
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
