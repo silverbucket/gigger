@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { conversationId } from "@gigger/schemas";
+import { conversationId } from "@showday/schemas";
 
 /** Runs against `make up-test`: the real API, Armadietto, the Sockethub container and a Mailpit sink. */
 const base = process.env.MAIL_TEST_URL;

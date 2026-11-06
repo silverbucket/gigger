@@ -9,7 +9,7 @@ import {
   paOptions,
   type SurveyInput,
   type VenueSurvey,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import Icon from "../components/Icon.svelte";

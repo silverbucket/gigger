@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import {
   calculateTakeHome,
-  createGigger,
-  Gigger,
-  type GiggerStore,
+  createShowday,
+  Showday,
+  type ShowdayStore,
   type VenueSurvey,
   venueAverages,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 const survey: VenueSurvey = {
@@ -43,9 +43,9 @@ test("venue averages include ties and count only fully venue-provided PA", () =>
 });
 test("survey validation and earnings isolation using real private/public storage clients", async () => {
   const rs = new RemoteStorage();
-  rs.addModule(Gigger);
+  rs.addModule(Showday);
   rs.access.claim("showday", "rw");
-  const store = (rs as RemoteStorage & { showday: GiggerStore }).showday;
+  const store = (rs as RemoteStorage & { showday: ShowdayStore }).showday;
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
   try {
     await store.save("band", "a", {
@@ -169,7 +169,7 @@ test("legacy venue creation and retry after gig write fails keep one survey", as
   rs.access.claim("showday", "rw");
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
   const client = rs.scope("/showday/");
-  const store = createGigger(client);
+  const store = createShowday(client);
   try {
     await store.save("gig", "a", {
       id: "g",
@@ -217,7 +217,7 @@ test("surveys for different gigs at one venue never overwrite each other", async
   const rs = new RemoteStorage();
   rs.access.claim("showday", "rw");
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
-  const store = createGigger(rs.scope("/showday/"));
+  const store = createShowday(rs.scope("/showday/"));
   try {
     await store.save("venue", "a", { id: "v", name: "Club", address: "Main" });
     const gig = {

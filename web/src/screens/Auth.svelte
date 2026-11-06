@@ -1,5 +1,5 @@
 <script lang="ts">
-import { currencyForLocale } from "@gigger/schemas";
+import { currencyForLocale } from "@showday/schemas";
 import Icon from "../components/Icon.svelte";
 import { router } from "../lib/router.svelte";
 import { connectSession, ensureSessionReady, storage } from "../storage";

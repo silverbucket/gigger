@@ -4,7 +4,7 @@ import {
   type PublicPage,
   STORAGE_MODULE_SLUG,
   slugPattern,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { zip } from "./zip";
 
 type Row = PublicGig & { id: string };
@@ -283,15 +283,10 @@ export function publicHandler(
   async function loadPage(slug: string) {
     const row = owner.get(slug);
     if (!row) return null;
-    let response = await fetch(
+    const response = await fetch(
       storageUrl(row.username, `public/${STORAGE_MODULE_SLUG}/${slug}/page`),
       { signal: AbortSignal.timeout(10000) },
     );
-    if (!response.ok)
-      response = await fetch(
-        storageUrl(row.username, `public/gigger/${slug}/page`),
-        { signal: AbortSignal.timeout(10000) },
-      );
     if (!response.ok) return null;
     const metadata = await response.json();
     const listing = await fetch(`${internalUrl}/public-gigs`, {
@@ -382,21 +377,13 @@ export function publicHandler(
           400,
         );
       try {
-        let check = await fetch(
+        const check = await fetch(
           storageUrl(username, `${STORAGE_MODULE_SLUG}/bands/${bandId}/band`),
           {
             headers: { Authorization: `Bearer ${token}` },
             signal: AbortSignal.timeout(10000),
           },
         );
-        if (!check.ok)
-          check = await fetch(
-            storageUrl(username, `gigger/bands/${bandId}/band`),
-            {
-              headers: { Authorization: `Bearer ${token}` },
-              signal: AbortSignal.timeout(10000),
-            },
-          );
         if (!check.ok) return fail("Log in again to publish this page.", 401);
       } catch {
         return fail("Storage service unavailable. Please retry.", 503);

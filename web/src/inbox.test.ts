@@ -2,19 +2,19 @@ import { expect, test } from "bun:test";
 import {
   attachmentPath,
   conversationId,
-  Gigger,
-  type GiggerStore,
   type Message,
   messagePath,
-} from "@gigger/schemas";
+  Showday,
+  type ShowdayStore,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 test("the app reads server-written messages and the conversation index through the real module", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
+  storage.addModule(Showday);
   storage.access.claim("showday", "rw");
   storage.caching.enable("/showday/");
-  const store = (storage as RemoteStorage & { showday: GiggerStore }).showday;
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
   const client = storage.scope("/showday/");
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {

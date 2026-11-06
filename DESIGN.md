@@ -1,4 +1,4 @@
-# Gigger design rules (for agents)
+# Showday design rules (for agents)
 
 Put this file in the repo root and reference it from CLAUDE.md. Follow these rules for every new screen; don't ask.
 

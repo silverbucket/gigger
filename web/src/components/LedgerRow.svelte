@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { GigStatus } from "@gigger/schemas";
+import type { GigStatus } from "@showday/schemas";
 import { capitalize, dayNumber, monthShort, weekday } from "../lib/format";
 import Tag from "./Tag.svelte";
 

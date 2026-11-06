@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Gig, GigStatus } from "@gigger/schemas";
+import type { Gig, GigStatus } from "@showday/schemas";
 import { availabilitySummary } from "../components/AvailabilityCells.svelte";
 import Icon from "../components/Icon.svelte";
 import LedgerRow from "../components/LedgerRow.svelte";
@@ -47,12 +47,7 @@ import PlayedForm from "./PlayedForm.svelte";
 let { humanAgent = false }: { humanAgent?: boolean } = $props();
 
 let view = $state<"list" | "board">(
-  (() => {
-    const v =
-      localStorage.getItem("showday:view") ??
-      localStorage.getItem("gigger:view");
-    return v === "board" ? "board" : "list";
-  })(),
+  localStorage.getItem("showday:view") === "board" ? "board" : "list",
 );
 // Upcoming first; played, cancelled and past-dated gigs are under Past.
 let filter = $state<"upcoming" | "past">("upcoming");
@@ -221,10 +216,7 @@ function matchFor(item: InboxItem) {
           { value: "board", label: "Board" },
         ]}
         bind:value={view}
-        onchange={(v) => {
-          localStorage.removeItem("gigger:view");
-          localStorage.setItem("showday:view", v);
-        }}
+        onchange={(v) => localStorage.setItem("showday:view", v)}
       />
     {/if}
     <label class="search">

@@ -6,7 +6,7 @@ import {
   needsHumanAgentTag,
   replyBlocked,
   withMessage,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { openDatabase } from "../src/db";
 import { messageHandler } from "../src/messages";
 import {

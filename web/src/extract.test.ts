@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Venue } from "@gigger/schemas";
+import type { Venue } from "@showday/schemas";
 import { enquiryTitle, extractEnquiry } from "./lib/extract";
 
 const venues: Venue[] = [

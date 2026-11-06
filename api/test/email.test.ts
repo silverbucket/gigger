@@ -5,7 +5,7 @@ import {
   emailReplyHeaders,
   type Message,
   withMessage,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { openDatabase } from "../src/db";
 import {
   emailAccounts,

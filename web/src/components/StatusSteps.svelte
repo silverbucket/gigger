@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { GigStatus } from "@gigger/schemas";
+import type { GigStatus } from "@showday/schemas";
 
 /** enquiry → offered → confirmed → played as four equal cells: done = ink, current = accent, later = empty. */
 let { status }: { status: GigStatus } = $props();

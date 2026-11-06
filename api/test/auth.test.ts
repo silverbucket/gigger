@@ -40,7 +40,6 @@ test("signup, login, duplicate email and logout through the API without an accou
       expect(client).toBe("http://localhost:8080");
       expect(permissions).toEqual({
         showday: ["r", "w"],
-        gigger: ["r", "w"],
       });
       const token = crypto.randomUUID();
       const user = users.get(email);

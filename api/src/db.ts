@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 export function openDatabase(
-  path = process.env.DATABASE_PATH ?? "gigger.sqlite",
+  path = process.env.DATABASE_PATH ?? "showday.sqlite",
 ) {
   const db = new Database(path, { create: true });
   db.exec(

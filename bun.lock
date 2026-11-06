@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "gigger",
+      "name": "showday",
       "devDependencies": {
         "@biomejs/biome": "2.6.4",
         "@playwright/test": "1.64.1",
@@ -13,9 +13,9 @@
       },
     },
     "api": {
-      "name": "@gigger/api",
+      "name": "@showday/api",
       "dependencies": {
-        "@gigger/schemas": "workspace:*",
+        "@showday/schemas": "workspace:*",
         "@sockethub/client": "^5.0.0-beta.1",
         "socket.io-client": "^4.8.4",
       },
@@ -24,12 +24,12 @@
       },
     },
     "schemas": {
-      "name": "@gigger/schemas",
+      "name": "@showday/schemas",
     },
     "web": {
-      "name": "@gigger/web",
+      "name": "@showday/web",
       "dependencies": {
-        "@gigger/schemas": "workspace:*",
+        "@showday/schemas": "workspace:*",
         "remotestoragejs": "2.0.0-beta.10",
         "svelte": "5.57.3",
       },
@@ -61,12 +61,6 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.6.4", "", { "os": "win32", "cpu": "arm64" }, "sha512-eCsqt8Ma3eVap+oyJCDnJZH60SIU464B66n3y38EUTJdM1T/HfZol1FJC9vb+sHToX0ix8XzqPcwJnOzyAJz0g=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.6.4", "", { "os": "win32", "cpu": "x64" }, "sha512-pYsMy5AThiHFOZAsngg8qN4PurM6nInKBhVX7sbj3eNpRQqo1Hb0MgCwPL7VqVMrmcEEMj9Ks3qbkallR65e8g=="],
-
-    "@gigger/api": ["@gigger/api@workspace:api"],
-
-    "@gigger/schemas": ["@gigger/schemas@workspace:schemas"],
-
-    "@gigger/web": ["@gigger/web@workspace:web"],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
@@ -113,6 +107,12 @@
     "@rolldown/binding-win32-x64-msvc": ["@rolldown/binding-win32-x64-msvc@1.2.16", "", { "os": "win32", "cpu": "x64" }, "sha512-1lv1KvX0Z871zfk7vw+dnXMMnHNyDwMzWG8Kv3HxDXMOhzCX4SHc7HK319fInP0i+0p9D8brkfzL7pJOaGl+tw=="],
 
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.1", "", {}, "sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw=="],
+
+    "@showday/api": ["@showday/api@workspace:api"],
+
+    "@showday/schemas": ["@showday/schemas@workspace:schemas"],
+
+    "@showday/web": ["@showday/web@workspace:web"],
 
     "@socket.io/component-emitter": ["@socket.io/component-emitter@3.1.2", "", {}, "sha512-9BCxFwvbGg/RsZK9tjXd8s4UcwR0MWeFQ1XEKIQVVvAGJyINdrqKMcTRyLoK8Rse1GjzLV9cwjWV1olXRWEXVA=="],
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createServer } from "node:http";
-import type { Message } from "@gigger/schemas";
+import type { Message } from "@showday/schemas";
 import { Server } from "socket.io";
 import { sockethubSender } from "../src/sender";
 

@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import {
   type Gig,
-  Gigger,
-  type GiggerStore,
   publicGig,
+  Showday,
+  type ShowdayStore,
   slugify,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 const privateValues = [
@@ -23,11 +23,11 @@ const privateValues = [
 
 test("confirmed gigs publish only public fields and unpublish when cancelled or private", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
+  storage.addModule(Showday);
   storage.access.claim("showday", "rw");
   storage.caching.enable("/showday/");
   storage.caching.enable("/public/showday/");
-  const store = (storage as RemoteStorage & { showday: GiggerStore }).showday;
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
   const pub = storage.scope("/public/showday/");
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
@@ -157,8 +157,8 @@ test("status publication can be retried after a public write fails", async () =>
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
-  const { createGigger } = await import("@gigger/schemas");
-  const store = createGigger(privateClient, publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
   try {
     await store.save("band", "a", { id: "a", name: "Band", slug: "band" });
     await store.save("gig", "a", {
@@ -243,8 +243,8 @@ test("uncached offline removals are queued and retried without deleting a reconf
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
-  const { createGigger } = await import("@gigger/schemas");
-  const store = createGigger(privateClient, publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
   const getPrivate = privateClient.getObject.bind(privateClient);
   privateClient.getObject = (path, _maxAge) => getPrivate(path);
   try {
@@ -299,8 +299,8 @@ test("old address cleanup survives interruption and finds uncached public record
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
-  const { createGigger } = await import("@gigger/schemas");
-  const store = createGigger(privateClient, publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
   try {
     await store.save("band", "a", { id: "a", name: "Band", slug: "old" });
     await store.save("gig", "a", {

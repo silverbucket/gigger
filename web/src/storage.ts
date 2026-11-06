@@ -1,15 +1,19 @@
-import { Gigger, type GiggerStore, STORAGE_MODULE_SLUG } from "@gigger/schemas";
+import {
+  Showday,
+  type ShowdayStore,
+  STORAGE_MODULE_SLUG,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 import { createLogoutSync } from "./logout-sync";
 export const storage = new RemoteStorage({
   discovery: { allowPrivateAddresses: true, timeout: 5000 },
   changeEvents: { local: true, window: false, remote: true, conflict: true },
 });
-storage.addModule(Gigger);
+storage.addModule(Showday);
 storage.access.claim(STORAGE_MODULE_SLUG, "rw");
 storage.caching.enable(`/${STORAGE_MODULE_SLUG}/`);
 storage.caching.enable(`/public/${STORAGE_MODULE_SLUG}/`);
-export const bands = (storage as RemoteStorage & Record<string, GiggerStore>)[
+export const bands = (storage as RemoteStorage & Record<string, ShowdayStore>)[
   STORAGE_MODULE_SLUG
 ];
 

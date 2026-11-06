@@ -4,9 +4,9 @@ import {
   feeAmount,
   formatFee,
   formatMoney,
-  Gigger,
-  type GiggerStore,
-} from "@gigger/schemas";
+  Showday,
+  type ShowdayStore,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 const plain = (text = "") => text.replace(/[\u00a0\u202f]/g, " ");
@@ -46,9 +46,9 @@ test("new bands default to the browser locale's currency", () => {
 });
 test("gig schema accepts numeric fees with a currency and legacy text fees", async () => {
   const rs = new RemoteStorage();
-  rs.addModule(Gigger);
+  rs.addModule(Showday);
   rs.access.claim("showday", "rw");
-  const store = (rs as RemoteStorage & { showday: GiggerStore }).showday;
+  const store = (rs as RemoteStorage & { showday: ShowdayStore }).showday;
   await new Promise<void>((resolve) => rs.on("ready", () => resolve()));
   try {
     await store.save("band", "a", { id: "a", name: "Band", currency: "CZK" });

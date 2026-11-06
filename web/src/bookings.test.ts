@@ -3,11 +3,11 @@ import {
   type Contact,
   canMoveStatus,
   type Gig,
-  Gigger,
-  type GiggerStore,
   gigStatuses,
   recordPath,
-} from "@gigger/schemas";
+  Showday,
+  type ShowdayStore,
+} from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
 
 test("status moves cover every pair and keep terminal statuses closed", () => {
@@ -26,10 +26,10 @@ test("status moves cover every pair and keep terminal statuses closed", () => {
 
 test("linked booking schemas, band isolation and status enforcement", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
+  storage.addModule(Showday);
   storage.access.claim("showday", "rw");
   storage.caching.enable("/showday/");
-  const store = (storage as RemoteStorage & { showday: GiggerStore }).showday;
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
     await store.save("venue", "a", {
@@ -151,10 +151,10 @@ test("linked booking schemas, band isolation and status enforcement", async () =
 
 test("other bands are reusable records with contact links and band-scoped gig references", async () => {
   const storage = new RemoteStorage();
-  storage.addModule(Gigger);
+  storage.addModule(Showday);
   storage.access.claim("showday", "rw");
   storage.caching.enable("/showday/");
-  const store = (storage as RemoteStorage & { showday: GiggerStore }).showday;
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   try {
     await store.save("band", "a", { id: "a", name: "Our band" });

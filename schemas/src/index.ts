@@ -275,14 +275,8 @@ export const channels = ["email", "messenger", "instagram"] as const;
 export type Channel = (typeof channels)[number];
 /** remoteStorage category folder (OAuth scope root) for Showday app data. */
 export const STORAGE_MODULE_SLUG = "showday";
-/** Previous folder name; records may still carry this in `@context` until rewritten. */
-export const LEGACY_STORAGE_MODULE_SLUG = "gigger";
-
 export function moduleContext(kind: string) {
   return `http://remotestorage.io/spec/modules/${STORAGE_MODULE_SLUG}/${kind}`;
-}
-export function legacyModuleContext(kind: string) {
-  return `http://remotestorage.io/spec/modules/${LEGACY_STORAGE_MODULE_SLUG}/${kind}`;
 }
 
 export interface Attachment {
@@ -779,7 +773,7 @@ export function recordPath(kind: Kind, bandId: string, recordId = bandId) {
     ? `${base}band`
     : `${base}${kind}s/${safeId(recordId)}`;
 }
-export function createGigger(client: Client, publicClient?: Client) {
+export function createShowday(client: Client, publicClient?: Client) {
   for (const [kind, schema] of Object.entries(schemas))
     client.declareType(kind, schema);
   client.declareType("pendingPublicDelete", {
@@ -808,12 +802,11 @@ export function createGigger(client: Client, publicClient?: Client) {
   for (const [kind, schema] of Object.entries(publicSchemas))
     publicClient?.declareType(kind, schema);
   function read<K extends Kind>(kind: K, value: unknown): Records[K] {
-    if (!value || typeof value !== "object")
-      throw new Error(`Invalid ${kind} record in storage`);
-    const { "@context": _ctx, ...rest } = value as Record<string, unknown>;
     if (
+      !value ||
+      typeof value !== "object" ||
       !client.validate({
-        ...rest,
+        ...value,
         "@context": moduleContext(kind),
       }).valid
     ) {
@@ -955,10 +948,9 @@ export function createGigger(client: Client, publicClient?: Client) {
     return paths;
   }
   function valid<T>(kind: string, value: unknown): T {
-    const { "@context": _ctx, ...rest } = value as Record<string, unknown>;
     if (
       !client.validate({
-        ...rest,
+        ...(value as object),
         "@context": moduleContext(kind),
       }).valid
     )
@@ -1256,13 +1248,13 @@ export function createGigger(client: Client, publicClient?: Client) {
     list,
   };
 }
-export const Gigger = {
+export const Showday = {
   name: STORAGE_MODULE_SLUG,
   builder: (client: Client, publicClient: Client) => ({
-    exports: createGigger(client, publicClient),
+    exports: createShowday(client, publicClient),
   }),
 };
-export type GiggerStore = ReturnType<typeof createGigger>;
+export type ShowdayStore = ReturnType<typeof createShowday>;
 export function groupGigs(
   gigs: Gig[],
   today = new Date().toLocaleDateString("en-CA"),

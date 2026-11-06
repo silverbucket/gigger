@@ -5,7 +5,7 @@ import {
   type EnquirySource,
   type Message,
   STORAGE_MODULE_SLUG,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { bands, storage } from "../storage";
 import type { BandData } from "./data.svelte";
 import { type Extracted, enquiryTitle, extractEnquiry } from "./extract";
@@ -65,18 +65,11 @@ class Threads {
   }
   /** Copied attachments live in private storage, so they are read through remoteStorage, not a URL. */
   async fileUrl(attachment: Attachment): Promise<string> {
-    const legacyPrefix = "gigger/";
     const prefix = `${STORAGE_MODULE_SLUG}/`;
-    if (
-      !attachment.url.startsWith(prefix) &&
-      !attachment.url.startsWith(legacyPrefix)
-    )
-      return attachment.url;
+    if (!attachment.url.startsWith(prefix)) return attachment.url;
     if (!this.files[attachment.url]) {
       const generation = this.generation;
-      const rest = attachment.url.startsWith(prefix)
-        ? attachment.url.slice(prefix.length)
-        : attachment.url.slice(legacyPrefix.length);
+      const rest = attachment.url.slice(prefix.length);
       const file = (await storage
         .scope(`/${STORAGE_MODULE_SLUG}/`)
         .getFile(rest)) as {

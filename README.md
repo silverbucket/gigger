@@ -14,13 +14,13 @@ make seed
 
 Open [http://localhost:8080](http://localhost:8080). Change `PORT` in `.env` if needed. The first build downloads Sockethub source and can take several minutes. `make seed` adds the original example API item and is safe to repeat.
 
-All worktrees use the shared Compose project name `gigger`. Run `make down` before switching worktrees, then `make up` in the worktree you want to run. `make seed` and plain `docker compose` commands use the same stack and data volumes. Older stacks named after individual worktrees need a one-time shutdown; their data volumes remain separate. An explicit `-p` flag or `COMPOSE_PROJECT_NAME` overrides the shared name.
+All worktrees use the shared Compose project name `showday`. Run `make down` before switching worktrees, then `make up` in the worktree you want to run. `make seed` and plain `docker compose` commands use the same stack and data volumes. Older stacks named after individual worktrees need a one-time shutdown; their data volumes remain separate. An explicit `-p` flag or `COMPOSE_PROJECT_NAME` overrides the shared name.
 
 Sign up at `/signup` with a username, email, password, and band name. Signup creates your account and first band, then opens the app. Log in at `/login` with your username and password. Bare usernames use this site's account service; an explicit `username@host` uses that host's standard authorization flow. Sessions survive reloads. Log out from the header to clear the browser session immediately and notify other open Showday tabs to log out too. The login button remains available during local cache cleanup; if cleanup is blocked, it reports that storage is still clearing and can be retried after closing other tabs. Local token revocation runs in the background; logout does not wait for pending changes to sync.
 
 On the Band & public page screen, use New band to create bands, switch between them, and add members with just a name. Email address, phone number and Messenger handle are optional; when a new member's name matches a contact, the app offers to copy the contact's details. The private account owner acts as the band leader and can edit or remove members.
 
-Only Caddy publishes a port, bound to localhost. The API exposes `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, `/api/public/pages`, `/api/meta/*`, `/api/messages/*`, `/api/health`, `/api/items`, `/api/schemas` and the public band pages under `/b/`. Accounts, password hashes, tokens, and band data live only in Armadietto; the API keeps no user/session tables. The container-only auth hook on port 8001 uses Armadietto's existing account and authorization methods and grants `showday:rw` (and still honors legacy `gigger:rw` tokens until they are rotated). Duplicate usernames and emails are rejected. Signup initializes the first band on the server under `/showday/` and rolls back a new account if initial setup fails. The Armadietto image is pinned by digest and uses its original username routing and password hashing.
+Only Caddy publishes a port, bound to localhost. The API exposes `/api/auth/signup`, `/api/auth/login`, `/api/auth/logout`, `/api/public/pages`, `/api/meta/*`, `/api/messages/*`, `/api/health`, `/api/items`, `/api/schemas` and the public band pages under `/b/`. Accounts, password hashes, tokens, and band data live only in Armadietto; the API keeps no user/session tables. The container-only auth hook on port 8001 uses Armadietto's existing account and authorization methods and grants `showday:rw`. Duplicate usernames and emails are rejected. Signup initializes the first band on the server under `/showday/` and rolls back a new account if initial setup fails. The Armadietto image is pinned by digest and uses its original username routing and password hashing.
 
 Root WebFinger discovery and `/storage/storage/*` still provide remoteStorage access. Authorization/assets routes remain available for standard clients. The app has no storage connection widget or vendor-specific account pages. Sockethub uses `/sockethub`. SQLite retains the starter API items only.
 
@@ -46,11 +46,11 @@ AUTH_TEST_URL=http://localhost:8080/api bun test api/test/auth.integration.test.
 
 This creates disposable test accounts in the local data volume. CI runs it against its own fresh Compose stack.
 
-`bun run format` applies the single root Biome configuration, including Svelte markup. Tests use the root `bunfig.toml`. CI runs these checks and the full Compose/proxy smoke test. For UI development, run `bun run --filter @gigger/web dev`; use the Compose origin to test account and authorization behavior. Set `APP_ORIGIN` to the exact public origin when using a hostname other than localhost.
+`bun run format` applies the single root Biome configuration, including Svelte markup. Tests use the root `bunfig.toml`. CI runs these checks and the full Compose/proxy smoke test. For UI development, run `bun run --filter @showday/web dev`; use the Compose origin to test account and authorization behavior. Set `APP_ORIGIN` to the exact public origin when using a hostname other than localhost.
 
 ## Shared data module
 
-`@gigger/schemas` exports the `Gigger` remoteStorage module, JSON schemas and TypeScript types for band, member, gig, venue, contact and otherBand. Both web and API import this package. The web uses remoteStorage.js pinned to `2.0.0-beta.10`, claims `showday:rw`, and caches `/showday/` for offline use.
+`@showday/schemas` exports the `Showday` remoteStorage module, JSON schemas and TypeScript types for band, member, gig, venue, contact and otherBand. Both web and API import this package. The web uses remoteStorage.js pinned to `2.0.0-beta.10`, claims `showday:rw`, and caches `/showday/` for offline use.
 
 Records are private and scoped to a band:
 
@@ -63,7 +63,6 @@ Records are private and scoped to a band:
 - `/showday/bands/<bandId>/contacts/<contactId>`
 - `/showday/bands/<bandId>/otherBands/<otherBandId>`
 
-On login or signup, the server renames a legacy `/gigger/` (and `/public/gigger/`) tree to `/showday/` when the new tree does not exist yet, so existing test accounts keep their data.
 
 The module provides `save(kind, bandId, record)`, `bands()`, and `list(kind, bandId)`. IDs accept letters, numbers, underscores and hyphens. Gigs link to a venue with `venueId` and contacts with `contactIds`; linked records must exist within the same band. Venues have a name and address. Contacts have a name and optional email, phone, Messenger, Instagram and notes.
 

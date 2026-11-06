@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Gig } from "@gigger/schemas";
+import type { Gig } from "@showday/schemas";
 import type { BandData } from "./lib/data.svelte";
 import { sheetText, timeCells } from "./lib/gigs";
 

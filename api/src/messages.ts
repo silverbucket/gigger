@@ -11,7 +11,7 @@ import {
   needsHumanAgentTag,
   replyBlocked,
   withMessage,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import { emailAccounts, sendCredentials } from "./email";
 import { friendlyMailError } from "./mailbox";
 import { graphVersion } from "./meta";

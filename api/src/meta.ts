@@ -6,7 +6,7 @@ import {
   conversationId,
   type Message,
   STORAGE_MODULE_SLUG,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import type { Messages } from "./messages";
 import { seal, unseal, validKey } from "./secrets";
 import { remoteStore } from "./storage";

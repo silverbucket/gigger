@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { OtherBand } from "@gigger/schemas";
+import type { OtherBand } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import DetailSection from "../components/DetailSection.svelte";

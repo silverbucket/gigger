@@ -1,5 +1,5 @@
-import type { Gig } from "@gigger/schemas";
 import { test as base, expect, type Page } from "@playwright/test";
+import type { Gig } from "@showday/schemas";
 
 export const test = base.extend<{
   account: {

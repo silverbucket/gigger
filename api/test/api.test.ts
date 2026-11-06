@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { schemas } from "@gigger/schemas";
+import { schemas } from "@showday/schemas";
 import { openDatabase } from "../src/db";
 import { seed } from "../src/seed";
 import { handler } from "../src/server";
 
 test("seed persists once and Bun HTTP routes preserve the API", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "gigger-"));
+  const dir = mkdtempSync(join(tmpdir(), "showday-"));
   const path = join(dir, "test.sqlite");
   const initial = openDatabase(path);
   seed(initial);

@@ -5,7 +5,7 @@ import {
   messagePeer,
   needsHumanAgentTag,
   replyBlocked,
-} from "@gigger/schemas";
+} from "@showday/schemas";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import DetailSection from "../components/DetailSection.svelte";
 import Icon from "../components/Icon.svelte";

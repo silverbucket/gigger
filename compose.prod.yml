@@ -1,6 +1,6 @@
 # Production stack: published images, Caddy on 80/443 with automatic HTTPS.
 # Run with scripts/deploy.sh; see DEPLOY.md.
-name: gigger
+name: showday
 
 services:
   caddy:
@@ -20,7 +20,7 @@ services:
       web: { condition: service_healthy }
     restart: unless-stopped
   armadietto:
-    image: ghcr.io/silverbucket/gigger/armadietto:${IMAGE_TAG:-main}
+    image: ghcr.io/silverbucket/showday/armadietto:${IMAGE_TAG:-main}
     environment:
       APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN to the public https origin}
     platform: linux/amd64
@@ -71,10 +71,10 @@ services:
       start_period: 30s
     restart: unless-stopped
   api:
-    image: ghcr.io/silverbucket/gigger/api:${IMAGE_TAG:-main}
+    image: ghcr.io/silverbucket/showday/api:${IMAGE_TAG:-main}
     platform: linux/amd64
     environment:
-      DATABASE_PATH: /data/gigger.sqlite
+      DATABASE_PATH: /data/showday.sqlite
       ARMADIETTO_AUTH_URL: http://armadietto:8001
       ARMADIETTO_URL: http://armadietto:8000
       APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN to the public https origin}
@@ -100,7 +100,7 @@ services:
       retries: 12
     restart: unless-stopped
   web:
-    image: ghcr.io/silverbucket/gigger/web:${IMAGE_TAG:-main}
+    image: ghcr.io/silverbucket/showday/web:${IMAGE_TAG:-main}
     platform: linux/amd64
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]

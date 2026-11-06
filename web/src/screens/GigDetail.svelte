@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Availability, Gig, GigStatus, Member } from "@gigger/schemas";
+import type { Availability, Gig, GigStatus, Member } from "@showday/schemas";
 import AvailabilityCells, {
   availabilityLabel,
   availabilitySummary,
