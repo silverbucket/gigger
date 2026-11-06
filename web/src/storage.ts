@@ -48,7 +48,7 @@ storage.on("sync-done", (event) => {
 });
 const logoutSync =
   typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
-    ? createLogoutSync(() => logout({ broadcast: false }))
+    ? createLogoutSync(() => logout(false))
     : undefined;
 
 /** Called with true when the server ended the session rather than the user. */
@@ -81,6 +81,16 @@ export function whenSessionReady(timeout = 30_000) {
     sessionEvents.addEventListener("ready", ready, { once: true });
   });
 }
+/**
+ * Like whenSessionReady, before opening `address`. A session the server ended
+ * leaves its cache for the same account to pick up; another account gets a
+ * cleared one.
+ */
+export function whenSessionReadyFor(address: string) {
+  const previous = storage.remote.userAddress;
+  if (previous && previous !== address) clearCache(true);
+  return whenSessionReady();
+}
 
 /** Logs in or signs up with this site's account service, then opens the account. */
 export async function startSession(
@@ -104,9 +114,11 @@ export async function startSession(
 export function connectSession(username: string, token: unknown) {
   if (typeof token !== "string" || !token)
     throw new Error("Could not open your account. Please log in again.");
-  return whenSessionReady().then(() => connect(username, token));
+  const address = `${encodeURIComponent(username)}@${location.host}`;
+  return whenSessionReadyFor(address).then(() => connect(address, token));
 }
-function connect(username: string, token: string) {
+function connect(address: string, token: string) {
+  const resuming = Boolean(storage.remote.userAddress);
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timeout);
@@ -115,6 +127,8 @@ function connect(username: string, token: string) {
     };
     const connected = () => {
       cleanup();
+      // Sync restarts by itself only on a fresh cache.
+      if (resuming) void storage.startSync();
       resolve();
     };
     const failed = () => {
@@ -124,45 +138,65 @@ function connect(username: string, token: string) {
     const timeout = setTimeout(failed, 15000);
     storage.on("connected", connected);
     storage.on("error", failed);
-    storage.connect(`${encodeURIComponent(username)}@${location.host}`, token);
+    storage.connect(address, token);
   });
 }
 
-export function logout({ broadcast = true, expired = false } = {}) {
+export function logout(broadcast = true) {
   const { userAddress, token } = storage.remote;
-  sessionReady = false;
+  leave(false);
+  clearCache(broadcast);
+  revoke(userAddress, token);
+}
+
+function expireSession() {
+  if (expiring || !storage.remote.connected) return;
+  expiring = true;
+  // Out of the library's error dispatch before the session is touched.
+  setTimeout(() => {
+    expiring = false;
+    if (storage.remote.connected) expire();
+  });
+}
+/**
+ * Back to the login screen, keeping the cache: changes that have not synced
+ * yet go up once the same account logs in again.
+ */
+function expire() {
+  const { userAddress, token } = storage.remote;
+  storage.stopSync();
+  storage.remote.configure({ token: null });
+  leave(true);
+  revoke(userAddress, token);
+}
+function leave(expired: boolean) {
   clearSyncTrouble();
   history.replaceState(null, "", "/login");
   // Dispatched after the URL is cleared so onSessionLogout listeners (the
   // router resync included) see it already gone.
   sessionEvents.dispatchEvent(new CustomEvent("logout", { detail: expired }));
+}
+function clearCache(broadcast: boolean) {
+  sessionReady = false;
   if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
-  if (userAddress?.endsWith(`@${location.host}`)) {
-    const username = decodeURIComponent(
-      userAddress.slice(0, userAddress.lastIndexOf("@")),
-    );
-    void fetch("/api/auth/logout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username }),
-      keepalive: true,
-    }).catch(() => {});
-  }
 }
-
-function expireSession() {
-  if (expiring || !sessionReady || !storage.remote.connected) return;
-  expiring = true;
-  // Out of the library's error dispatch before the session is torn down.
-  setTimeout(() => {
-    expiring = false;
-    if (sessionReady && storage.remote.connected) logout({ expired: true });
-  });
+/** Revokes a token from this site's account service in the background. */
+function revoke(userAddress: string, token: string | false | undefined) {
+  if (!token || !userAddress?.endsWith(`@${location.host}`)) return;
+  const username = decodeURIComponent(
+    userAddress.slice(0, userAddress.lastIndexOf("@")),
+  );
+  void fetch("/api/auth/logout", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ username }),
+    keepalive: true,
+  }).catch(() => {});
 }
 function syncFailed() {
   if (!storage.remote.connected) return;

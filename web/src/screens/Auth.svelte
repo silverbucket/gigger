@@ -2,7 +2,7 @@
 import { currencyForLocale } from "@showday/schemas";
 import Icon from "../components/Icon.svelte";
 import { router } from "../lib/router.svelte";
-import { startSession, storage, whenSessionReady } from "../storage";
+import { startSession, storage, whenSessionReadyFor } from "../storage";
 
 /** Log in or sign up. Signing up creates the account and its first band. */
 let {
@@ -31,7 +31,7 @@ async function authenticate(event: SubmitEvent) {
   error = "";
   try {
     if (mode === "login" && username.trim().includes("@")) {
-      await whenSessionReady();
+      await whenSessionReadyFor(username.trim());
       password = "";
       storage.connect(username.trim());
       return;

@@ -251,7 +251,7 @@ test("a revoked or out-of-scope token sends the user to log in again, not to che
   const unwatch = watchSession(() => {
     resets++;
   });
-  const stalled = stallCleanup();
+  const disconnect = spyOn(storage, "disconnect");
   try {
     ui.error = "";
     ui.notice = "";
@@ -265,22 +265,165 @@ test("a revoked or out-of-scope token sends the user to log in again, not to che
     expect(ui.notice).toBe(loginAgainMessage);
     expect(loginAgainMessage).toBe("Please log in again.");
     expect(resets).toBe(1);
-    expect(stalled).toHaveBeenCalledTimes(1);
-    expect(storage.remote.token).toBeFalsy();
     expect(page.path).toBe("/login");
+    expect(storage.remote.connected).toBe(false);
+    expect(storage.remote.token).toBeFalsy();
+    expect(storage.remote.userAddress).toBe("leader@localhost:8080");
+    // The dead token is revoked as on logout, but the cache stays open.
     expect(page.requests.map((request) => request.url)).toEqual([
       "/api/auth/logout",
     ]);
+    expect(page.requests[0]?.init.headers).toMatchObject({
+      Authorization: "Bearer session-token",
+    });
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(await settles(whenSessionReady())).toBe(true);
 
     // Late failures from the ended session change nothing.
     storage._emit("error", new RemoteStorage.Unauthorized());
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(stalled).toHaveBeenCalledTimes(1);
-    expect(ui.error).toBe("");
+    expect(resets).toBe(1);
+    expect(page.requests).toHaveLength(1);
   } finally {
     unwatch();
-    await finishCleanup(stalled);
+    disconnect.mockRestore();
+    signOutQuietly();
     ui.notice = "";
+    page.restore();
+  }
+});
+
+/**
+ * Opens a fresh cache with a stand-in storage server: an empty account where
+ * pushes made with `rejected` get a 401. Sync handles finished requests in
+ * order, so a request left hanging, here or by an earlier test, would hold
+ * back every push behind it.
+ */
+async function storageServer(rejected: string) {
+  logout();
+  await whenSessionReady();
+  const pushes: { path: string; body: unknown; token: unknown }[] = [];
+  let pushed = () => {};
+  const get = spyOn(storage.remote, "get").mockResolvedValue({
+    statusCode: 404,
+  });
+  const put = spyOn(storage.remote, "put").mockImplementation(
+    async (path, body) => {
+      const { token } = storage.remote;
+      pushes.push({ path, body, token });
+      pushed();
+      return token === rejected
+        ? { statusCode: 401 }
+        : { statusCode: 201, revision: `${pushes.length}` };
+    },
+  );
+  return {
+    pushes,
+    nextPush: () =>
+      new Promise<void>((resolve) => {
+        pushed = resolve;
+      }),
+    restore() {
+      get.mockRestore();
+      put.mockRestore();
+    },
+  };
+}
+/** Resolves with `expired` the next time the session ends. */
+function sessionEnds() {
+  return new Promise<boolean>((resolve) => {
+    const stop = onSessionLogout((expired) => {
+      stop();
+      resolve(expired);
+    });
+  });
+}
+const draft = () => storage.scope("/showday/");
+async function cachedDraft() {
+  const file = (await draft().getFile("draft.txt", false)) as {
+    data?: unknown;
+  };
+  return file.data;
+}
+
+test("changes that had not synced when the token was rejected go up after logging in again", async () => {
+  await whenSessionReady();
+  const page = browser(async (url, init) => {
+    if (url === "/api/auth/logout") return new Response(null);
+    const { username } = JSON.parse(String(init.body));
+    return Response.json({ username, token: "fresh-token" });
+  });
+  const connect = spyOn(storage, "connect").mockImplementation(
+    (address, token) => {
+      signIn(address.slice(0, address.indexOf("@")), token);
+    },
+  );
+  const server = await storageServer("rejected-token");
+  const disconnect = spyOn(storage, "disconnect");
+  try {
+    signIn("leader", "rejected-token");
+    const ended = sessionEnds();
+    await draft().storeFile("text/plain", "draft.txt", "Set list v2");
+    expect(await ended).toBe(true);
+    expect(server.pushes[0]).toMatchObject({
+      path: "/showday/draft.txt",
+      token: "rejected-token",
+    });
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(await cachedDraft()).toBe("Set list v2");
+
+    const pushed = server.nextPush();
+    await startSession("login", { username: "leader", password: "secret" });
+    await pushed;
+    expect(server.pushes.at(-1)).toEqual({
+      path: "/showday/draft.txt",
+      body: "Set list v2",
+      token: "fresh-token",
+    });
+    expect(disconnect).not.toHaveBeenCalled();
+  } finally {
+    connect.mockRestore();
+    disconnect.mockRestore();
+    server.restore();
+    const stalled = stallCleanup();
+    logout();
+    await finishCleanup(stalled);
+    page.restore();
+  }
+});
+
+test("logging in as someone else after the token was rejected starts from a cleared cache", async () => {
+  await whenSessionReady();
+  const page = browser(async (url, init) => {
+    if (url === "/api/auth/logout") return new Response(null);
+    const { username } = JSON.parse(String(init.body));
+    return Response.json({ username, token: `token-for-${username}` });
+  });
+  const connect = spyOn(storage, "connect").mockImplementation(
+    (address, token) => {
+      signIn(address.slice(0, address.indexOf("@")), token);
+    },
+  );
+  const server = await storageServer("rejected-token");
+  try {
+    signIn("leader", "rejected-token");
+    const ended = sessionEnds();
+    await draft().storeFile("text/plain", "draft.txt", "Set list v2");
+    expect(await ended).toBe(true);
+    expect(await cachedDraft()).toBe("Set list v2");
+
+    await startSession("login", { username: "deputy", password: "secret" });
+    expect(connect).toHaveBeenCalledWith(
+      "deputy@localhost:8080",
+      "token-for-deputy",
+    );
+    expect(await cachedDraft()).toBeUndefined();
+  } finally {
+    connect.mockRestore();
+    server.restore();
+    const stalled = stallCleanup();
+    logout();
+    await finishCleanup(stalled);
     page.restore();
   }
 });
