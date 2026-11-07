@@ -202,7 +202,12 @@ export function metaHandler(
     return next;
   }
   async function store(row: PageRow, message: Message) {
-    const rs = remoteStore(armadiettoUrl, row.username, row.storage_token);
+    const rs = remoteStore(
+      armadiettoUrl,
+      row.username,
+      row.storage_token,
+      env.APP_ORIGIN ?? "http://localhost:8080",
+    );
     const copies: Attachment[] = [];
     for (const [n, attachment] of (message.object.attachment ?? []).entries()) {
       let file: Response | undefined;

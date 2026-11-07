@@ -95,7 +95,7 @@ export function messageHandler(
       !token
     )
       return null;
-    const store = remoteStore(armadiettoUrl, username, token);
+    const store = remoteStore(armadiettoUrl, username, token, appOrigin);
     try {
       const band = await store.get(`bands/${bandId}/band`);
       if (!band.value) return null;

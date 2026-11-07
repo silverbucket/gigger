@@ -1,8 +1,23 @@
+/** Headers for Armadietto behind TLS termination (https.force reads X-Forwarded-Proto). */
+export function armadiettoStorageHeaders(
+  token: string,
+  appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+) {
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (appOrigin.startsWith("https://")) headers["X-Forwarded-Proto"] = "https";
+  return headers;
+}
+
 /** Minimal remoteStorage HTTP client for one account, used for server-side message writes. */
-export function remoteStore(baseUrl: string, username: string, token: string) {
+export function remoteStore(
+  baseUrl: string,
+  username: string,
+  token: string,
+  appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+) {
   const url = (path: string) =>
     `${baseUrl}/storage/storage/${encodeURIComponent(username)}/showday/${path}`;
-  const authorization = { Authorization: `Bearer ${token}` };
+  const authorization = armadiettoStorageHeaders(token, appOrigin);
   const timeout = () => AbortSignal.timeout(10000);
   async function get<T>(path: string) {
     const response = await fetch(url(path), {

@@ -158,6 +158,7 @@ export function mailboxWatchers(
         armadiettoUrl,
         account.username,
         account.storageToken,
+        process.env.APP_ORIGIN ?? "http://localhost:8080",
       );
       let ended!: (reason: Error) => void;
       const ending = new Promise<Error>((resolve) => {
