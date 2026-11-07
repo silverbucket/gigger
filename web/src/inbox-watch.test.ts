@@ -103,7 +103,8 @@ test("failed ticket request sets the list stream retrying state", async () => {
         retrying = value;
       },
     },
-    async () => new Response("", { status: 503 }),
+    (async (_input: RequestInfo | URL) =>
+      new Response("", { status: 503 })) as unknown as typeof fetch,
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(retrying).toBeTrue();
