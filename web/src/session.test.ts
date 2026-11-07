@@ -9,6 +9,7 @@ import {
 import RemoteStorage from "remotestoragejs";
 import { createLogoutSync } from "./logout-sync";
 import {
+  bands,
   connectSession,
   logout,
   onSessionLogout,
@@ -513,30 +514,18 @@ test("a 403 on another module's folder does not end the session", async () => {
 
 /**
  * Opens a fresh cache with a stand-in storage server: an empty account where
- * pushes made with `rejected` get a 401. Sync handles finished requests in
- * order, so a request left hanging, here or by an earlier test, would hold
- * back every push behind it.
+ * pushes made with `rejected` get a 401, and every request gets `down` while
+ * that is set. Sync handles finished requests in order, so a request left
+ * hanging, here or by an earlier test, would hold back every push behind it.
  */
-async function storageServer(rejected: string) {
+async function storageServer(rejected = "") {
   signOutQuietly();
   await whenSessionReady();
   const pushes: { path: string; body: unknown; token: unknown }[] = [];
   let pushed = () => {};
-  const get = spyOn(storage.remote, "get").mockResolvedValue({
-    statusCode: 404,
-  });
-  const put = spyOn(storage.remote, "put").mockImplementation(
-    async (path, body) => {
-      const { token } = storage.remote;
-      pushes.push({ path, body, token });
-      pushed();
-      return token === rejected
-        ? { statusCode: 401 }
-        : { statusCode: 201, revision: `${pushes.length}` };
-    },
-  );
-  return {
+  const server = {
     pushes,
+    down: undefined as number | undefined,
     nextPush: () =>
       new Promise<void>((resolve) => {
         pushed = resolve;
@@ -546,6 +535,21 @@ async function storageServer(rejected: string) {
       put.mockRestore();
     },
   };
+  const get = spyOn(storage.remote, "get").mockImplementation(async () => ({
+    statusCode: server.down ?? 404,
+  }));
+  const put = spyOn(storage.remote, "put").mockImplementation(
+    async (path, body) => {
+      const { token } = storage.remote;
+      pushes.push({ path, body, token });
+      pushed();
+      if (server.down) return { statusCode: server.down };
+      return token === rejected
+        ? { statusCode: 401 }
+        : { statusCode: 201, revision: `${pushes.length}` };
+    },
+  );
+  return server;
 }
 const draft = () => storage.scope("/showday/");
 async function cachedDraft() {
@@ -554,6 +558,53 @@ async function cachedDraft() {
   };
   return file.data;
 }
+
+test("a change the server keeps refusing is kept on this device without holding up the app", async () => {
+  await whenSessionReady();
+  const page = browser(async () => new Response(null));
+  const marks = showdayStorage();
+  const unwatch = watchSession(() => {});
+  const server = await storageServer();
+  try {
+    ui.error = "";
+    signIn();
+    const band = { id: "band", name: "Band", currency: "CZK" };
+    await bands.save("band", band.id, band);
+    server.down = 503;
+
+    const saving = run(() =>
+      bands.save("band", band.id, { ...band, currency: "EUR" }),
+    );
+    expect(ui.busy).toBe(true);
+    expect(await saving).toBe(true);
+    expect(ui.busy).toBe(false);
+    expect(ui.error).toBe("");
+    expect(data.band(band.id)?.band.currency).toBe("EUR");
+    // The reload asked the server, which refused the change.
+    expect(server.pushes.map((push) => push.path)).toContain(
+      "/showday/bands/band/band",
+    );
+    expect(page.path).not.toBe("/login");
+    expect(storage.remote.connected).toBe(true);
+
+    server.down = undefined;
+    const pushed = server.nextPush();
+    void storage.startSync();
+    await pushed;
+    const sent = server.pushes.at(-1);
+    expect(sent?.path).toBe("/showday/bands/band/band");
+    expect(JSON.parse(String(sent?.body))).toMatchObject({ currency: "EUR" });
+  } finally {
+    unwatch();
+    server.restore();
+    const stalled = stallCleanup();
+    logout();
+    await finishCleanup(stalled);
+    data.reset();
+    marks.restore();
+    page.restore();
+  }
+});
 
 test("changes that had not synced when the token was rejected go up after logging in again", async () => {
   await whenSessionReady();

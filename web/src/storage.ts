@@ -13,6 +13,17 @@ storage.addModule(Showday);
 storage.access.claim(STORAGE_MODULE_SLUG, "rw");
 storage.caching.enable(`/${STORAGE_MODULE_SLUG}/`);
 storage.caching.enable(`/public/${STORAGE_MODULE_SLUG}/`);
+type Get = (path: string, maxAge?: false | number) => Promise<unknown>;
+const library = storage as unknown as {
+  get: Get;
+  _setGPD: (impl: unknown, context?: unknown) => void;
+};
+const setGPD = library._setGPD.bind(storage);
+// The library installs a new get each time its cache opens.
+library._setGPD = (impl, context) => {
+  setGPD(impl, context);
+  library.get = cacheIfServerFails(library.get);
+};
 export const bands = (storage as RemoteStorage & Record<string, ShowdayStore>)[
   STORAGE_MODULE_SLUG
 ];
@@ -52,7 +63,7 @@ storage.on("connected", () => {
     new CustomEvent("token-rejected", { detail: false }),
   );
   setCacheMark(cacheAccountKey, storage.remote.userAddress);
-  installSyncScopeGuard();
+  installSyncGuards();
 });
 // Only once the library has deleted the cache.
 storage.on("disconnected", () => {
@@ -274,6 +285,17 @@ function isAppStoragePath(path: string) {
   );
 }
 
+/**
+ * Reads that set no maxAge of their own settle for the cache when the server
+ * cannot vouch for it, as they do offline. Reads that set one still fail.
+ */
+function cacheIfServerFails(get: Get): Get {
+  return (path, maxAge) =>
+    maxAge === undefined
+      ? get(path, undefined).catch(() => get(path, false))
+      : get(path, maxAge);
+}
+
 type SyncLike = {
   interpretStatus: (status: number | string) => { unAuth?: boolean };
   dealWithFailure: (path: string) => Promise<void>;
@@ -282,14 +304,41 @@ type SyncLike = {
     action: string,
     response: { statusCode: number | string },
   ) => Promise<boolean>;
+  queueGetRequest: (path: string) => Promise<unknown>;
+  finishUnsuccessfulTask: (task: unknown, error: unknown) => Promise<void>;
 };
 
-/** Stops remotestorage.js treating out-of-app 403 responses like a revoked token. */
-function installSyncScopeGuard() {
+/**
+ * Stops remotestorage.js treating out-of-app 403 responses like a revoked
+ * token, and fails reads waiting on the server once a sync request fails. The
+ * library settles those only when a request succeeds, so a server that keeps
+ * failing would otherwise hold them, and whatever awaits them, forever.
+ */
+function installSyncGuards() {
   const sync = storage.sync as
-    | (SyncLike & { __showdayScopeGuard?: boolean })
+    | (SyncLike & { __showdayGuards?: boolean })
     | undefined;
-  if (!sync || sync.__showdayScopeGuard) return;
+  if (!sync || sync.__showdayGuards) return;
+  const waiting = new Set<(error: unknown) => void>();
+  const queueGetRequest = sync.queueGetRequest.bind(sync);
+  sync.queueGetRequest = (path) =>
+    new Promise((resolve, reject) => {
+      const fail = (error: unknown) => {
+        waiting.delete(fail);
+        reject(error);
+      };
+      waiting.add(fail);
+      queueGetRequest(path).then((response) => {
+        waiting.delete(fail);
+        resolve(response);
+      }, fail);
+    });
+  const finishUnsuccessfulTask = sync.finishUnsuccessfulTask.bind(sync);
+  sync.finishUnsuccessfulTask = (task, error) => {
+    // All of them: requests queued behind a failure wait for the next sync.
+    for (const fail of [...waiting]) fail(error);
+    return finishUnsuccessfulTask(task, error);
+  };
   const handleResponse = sync.handleResponse.bind(sync);
   sync.handleResponse = async (path, action, response) => {
     const status = sync.interpretStatus(response.statusCode);
@@ -305,7 +354,7 @@ function installSyncScopeGuard() {
     }
     return handleResponse(path, action, response);
   };
-  sync.__showdayScopeGuard = true;
+  sync.__showdayGuards = true;
 }
 
 function leave(expired: boolean) {
