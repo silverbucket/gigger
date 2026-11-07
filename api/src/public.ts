@@ -230,8 +230,14 @@ h1{font-size:clamp(2rem,12vw,3.5rem);line-height:.95;margin:0 0 .6rem;font-weigh
 .lede,.bio{margin:0;color:var(--muted)}
 .bio{margin-top:.75rem;font-size:1.0625rem;white-space:pre-wrap;color:var(--page-text)}
 h2{font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin:2.75rem 0 0;padding-bottom:.4rem;border-bottom:2px solid var(--rule)}
+.gigs-head{margin:2.75rem 0 0}
+.gigs-toggle{display:flex;flex-wrap:wrap;gap:1.5rem;margin:0;padding:0 0 .4rem;border-bottom:2px solid var(--rule)}
+.gigs-toggle button{font:inherit;font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;background:none;border:0;padding:.75rem 0;margin:0;color:var(--muted);cursor:pointer;min-height:2.75rem;text-decoration:none}
+.gigs-toggle button[aria-selected="true"]{color:var(--page-text);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:.35rem}
+.gig-panel[hidden]{display:none}
 .contact-links{margin:.75rem 0 0;display:grid;gap:.35rem}
 .contact-links a{text-decoration:underline}
+.follow{margin-top:2.75rem}
 .socials{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:1rem}
 .socials a{display:inline-flex;align-items:center;justify-content:center;width:2.75rem;height:2.75rem;color:var(--page-text);opacity:.9;text-decoration:none}
 .socials a:hover,.socials a:focus-visible{color:var(--page-accent);opacity:1}
@@ -285,7 +291,6 @@ function socialIcon(platform: SocialPlatform) {
 }
 function contactSection(page: PublicPage, cs: boolean) {
   const contact = page.contact;
-  const socials = page.socials ?? [];
   const rows: string[] = [];
   if (contact?.email)
     rows.push(
@@ -301,25 +306,127 @@ function contactSection(page: PublicPage, cs: boolean) {
       `<a href="${esc(href)}" rel="noopener noreferrer">${esc(contact.website.replace(/^https?:\/\//, ""))}</a>`,
     );
   }
-  if (!rows.length && !socials.length) return "";
+  if (!rows.length) return "";
   const title = cs ? "Kontakt" : "Contact";
-  const links = rows.length
-    ? `<div class="contact-links">${rows.join("")}</div>`
-    : "";
-  const icons = socials.length
-    ? `<nav class="socials" aria-label="${esc(title)}">${socials
-        .map(
-          (link) =>
-            `<a href="${esc(link.url)}" aria-label="${esc(socialLabels[link.platform])}" target="_blank" rel="noopener">${socialIcon(link.platform)}</a>`,
-        )
-        .join("")}</nav>`
-    : "";
   return `<section class="contact" aria-labelledby="contact">
 <h2 id="contact">${title}</h2>
-${links}
-${icons}
+<div class="contact-links">${rows.join("")}</div>
 </section>`;
 }
+function followSection(page: PublicPage, cs: boolean) {
+  const socials = page.socials ?? [];
+  if (!socials.length) return "";
+  const title = cs ? "Sledujte" : "Follow";
+  return `<section class="follow" aria-labelledby="follow">
+<h2 id="follow">${title}</h2>
+<nav class="socials" aria-label="${esc(title)}">${socials
+    .map(
+      (link) =>
+        `<a href="${esc(link.url)}" aria-label="${esc(socialLabels[link.platform])}" target="_blank" rel="noopener">${socialIcon(link.platform)}</a>`,
+    )
+    .join("")}</nav>
+</section>`;
+}
+function upcomingBlock(
+  upcoming: ReturnType<typeof splitGigs>["upcoming"],
+  empty: string,
+  tickets: string,
+  fmt: ReturnType<typeof formatter>,
+  lang: string,
+  today: string,
+) {
+  if (!upcoming.length) return `<p class="empty">${empty}</p>`;
+  const items = upcoming
+    .map(
+      (gig) => `<li>
+<time lang="${esc(lang)}" datetime="${gig.date}${gig.start ? `T${gig.start}` : ""}"><span class="day">${esc(fmt(gig, { day: "numeric" }))}</span><span class="month">${esc(fmt(gig, { month: "short" }))}</span>${gig.date.slice(0, 4) !== today.slice(0, 4) ? `<span class="year">${gig.date.slice(0, 4)}</span>` : ""}</time>
+<div>
+<p class="where">${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</p>
+<p class="when" lang="${esc(lang)}">${esc(fmt(gig, { weekday: "long" }))}${gig.start ? `, ${esc(fmt(gig, { hour: "numeric", minute: "2-digit" }))}` : ""}</p>
+${gig.description ? `<p class="desc">${esc(gig.description)}</p>` : ""}
+${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">${tickets}</a>` : ""}
+</div>
+</li>`,
+    )
+    .join("\n");
+  return `<ol class="gigs">\n${items}\n</ol>`;
+}
+function pastBlock(
+  past: ReturnType<typeof splitGigs>["past"],
+  fmt: ReturnType<typeof formatter>,
+  lang: string,
+) {
+  if (!past.length) return "";
+  const items = past
+    .map(
+      (gig) =>
+        `<li><time lang="${esc(lang)}" datetime="${gig.date}">${esc(fmt(gig, { dateStyle: "medium" }))}</time><span>${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</span></li>`,
+    )
+    .join("\n");
+  return `<ul class="past">\n${items}\n</ul>`;
+}
+function gigsSection(
+  upcoming: ReturnType<typeof splitGigs>["upcoming"],
+  past: ReturnType<typeof splitGigs>["past"],
+  labels: {
+    upcomingHeading: string;
+    toggleUpcoming: string;
+    togglePast: string;
+    empty: string;
+    tickets: string;
+  },
+  fmt: ReturnType<typeof formatter>,
+  lang: string,
+  today: string,
+) {
+  const upcomingHtml = upcomingBlock(
+    upcoming,
+    labels.empty,
+    labels.tickets,
+    fmt,
+    lang,
+    today,
+  );
+  const pastHtml = pastBlock(past, fmt, lang);
+  if (!past.length) {
+    return `<section class="gigs-area" aria-labelledby="gigs-label">
+<h2 id="gigs-label">${labels.upcomingHeading}</h2>
+${upcomingHtml}
+</section>`;
+  }
+  return `<section class="gigs-area">
+<div class="gigs-head">
+<div class="gigs-toggle" role="tablist" aria-label="${esc(labels.upcomingHeading)}">
+<button type="button" role="tab" id="gigs-upcoming-tab" aria-selected="true" aria-controls="gigs-upcoming-panel">${esc(labels.toggleUpcoming)}</button>
+<button type="button" role="tab" id="gigs-past-tab" aria-selected="false" aria-controls="gigs-past-panel">${esc(labels.togglePast)}</button>
+</div>
+</div>
+<div class="gig-panel" id="gigs-upcoming-panel" role="tabpanel" aria-labelledby="gigs-upcoming-tab">
+${upcomingHtml}
+</div>
+<div class="gig-panel" id="gigs-past-panel" role="tabpanel" aria-labelledby="gigs-past-tab" hidden>
+${pastHtml}
+</div>
+</section>`;
+}
+const gigsToggleScript = `<script>
+(function () {
+  const upcoming = document.getElementById("gigs-upcoming-tab");
+  const past = document.getElementById("gigs-past-tab");
+  if (!upcoming || !past) return;
+  const upcomingPanel = document.getElementById("gigs-upcoming-panel");
+  const pastPanel = document.getElementById("gigs-past-panel");
+  const show = (which) => {
+    const onUpcoming = which === "upcoming";
+    upcoming.setAttribute("aria-selected", onUpcoming ? "true" : "false");
+    past.setAttribute("aria-selected", onUpcoming ? "false" : "true");
+    upcomingPanel.hidden = !onUpcoming;
+    pastPanel.hidden = onUpcoming;
+  };
+  upcoming.addEventListener("click", () => show("upcoming"));
+  past.addEventListener("click", () => show("past"));
+})();
+</script>`;
 
 /** `base` is the URL prefix for the JSON and ICS links: "/b/<slug>/" when served, "" inside the export. */
 export function renderPage(page: PublicPage, base: string, today: string) {
@@ -336,8 +443,9 @@ export function renderPage(page: PublicPage, base: string, today: string) {
     ? {
         title: "živě",
         description: metaDescription,
-        upcoming: "Nadcházející koncerty",
-        past: "Minulé koncerty",
+        upcomingHeading: "Nadcházející koncerty",
+        toggleUpcoming: "Nadcházející",
+        togglePast: "Minulé",
         empty: "Zatím nejsou ohlášené žádné koncerty. Zkuste to později.",
         none: "Momentálně nejsou naplánované žádné koncerty",
         tickets: "Vstupenky",
@@ -348,8 +456,9 @@ export function renderPage(page: PublicPage, base: string, today: string) {
     : {
         title: "live",
         description: metaDescription,
-        upcoming: "Upcoming gigs",
-        past: "Past gigs",
+        upcomingHeading: "Upcoming gigs",
+        toggleUpcoming: "Upcoming",
+        togglePast: "Past",
         empty: "No gigs announced yet. Check back soon.",
         none: "Nothing booked right now",
         tickets: "Tickets",
@@ -357,25 +466,6 @@ export function renderPage(page: PublicPage, base: string, today: string) {
         json: "Gig data as JSON",
         count: `${upcoming.length} upcoming ${upcoming.length === 1 ? "gig" : "gigs"}`,
       };
-  const upcomingItems = upcoming
-    .map(
-      (gig) => `<li>
-<time lang="${esc(lang)}" datetime="${gig.date}${gig.start ? `T${gig.start}` : ""}"><span class="day">${esc(fmt(gig, { day: "numeric" }))}</span><span class="month">${esc(fmt(gig, { month: "short" }))}</span>${gig.date.slice(0, 4) !== today.slice(0, 4) ? `<span class="year">${gig.date.slice(0, 4)}</span>` : ""}</time>
-<div>
-<p class="where">${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</p>
-<p class="when" lang="${esc(lang)}">${esc(fmt(gig, { weekday: "long" }))}${gig.start ? `, ${esc(fmt(gig, { hour: "numeric", minute: "2-digit" }))}` : ""}</p>
-${gig.description ? `<p class="desc">${esc(gig.description)}</p>` : ""}
-${gig.ticketUrl ? `<a class="tickets" href="${esc(gig.ticketUrl)}">${labels.tickets}</a>` : ""}
-</div>
-</li>`,
-    )
-    .join("\n");
-  const pastItems = past
-    .map(
-      (gig) =>
-        `<li><time lang="${esc(lang)}" datetime="${gig.date}">${esc(fmt(gig, { dateStyle: "medium" }))}</time><span>${esc(gig.venue)}${gig.city ? `, ${esc(gig.city)}` : ""}</span></li>`,
-    )
-    .join("\n");
   const lede = [
     ...(page.city ? [page.city] : []),
     upcoming.length ? labels.count : labels.none,
@@ -401,17 +491,15 @@ ${page.banner ? `<figure class="banner"><img src="${esc(base)}banner" alt=""></f
 ${page.bio ? `<p class="bio">${esc(page.bio)}</p>` : ""}
 </header>
 <main>
-<section aria-labelledby="upcoming">
-<h2 id="upcoming">${labels.upcoming}</h2>
-${upcoming.length ? `<ol class="gigs">\n${upcomingItems}\n</ol>` : `<p class="empty">${labels.empty}</p>`}
-</section>
-${past.length ? `<section aria-labelledby="past">\n<h2 id="past">${labels.past}</h2>\n<ul class="past">\n${pastItems}\n</ul>\n</section>` : ""}
+${gigsSection(upcoming, past, labels, fmt, lang, today)}
 ${contactSection(page, cs)}
+${followSection(page, cs)}
 </main>
 <footer>
 <a href="${base}gigs.ics">${labels.calendar}</a>
 <a href="${base}gigs.json">${labels.json}</a>
 </footer>
+${past.length ? gigsToggleScript : ""}
 </body>
 </html>
 `;

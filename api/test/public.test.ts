@@ -185,11 +185,12 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
   }
 });
 
-test("contact section lists social icons after links and omits them from the header", () => {
+test("follow section lists social icons and stays separate from contact", () => {
   const html = renderPage(
     {
       name: "The Low Hums",
       gigs: {},
+      contact: { email: "book@example.com" },
       socials: [
         { platform: "instagram", url: "https://instagram.com/x" },
         { platform: "facebook", url: "https://www.facebook.com/x" },
@@ -199,12 +200,47 @@ test("contact section lists social icons after links and omits them from the hea
     "2030-01-01",
   );
   expect(html).toContain('class="contact"');
+  expect(html).toContain('class="follow"');
+  expect(html).toContain('id="follow"');
+  expect(html).toMatch(/class="socials"/);
   expect(html).toContain('aria-label="Instagram"');
   expect(html).toContain('href="https://www.facebook.com/x"');
   expect(html.indexOf('class="bio"')).toBe(-1);
-  expect(html.indexOf('class="socials"')).toBeGreaterThan(
-    html.indexOf('id="contact"'),
+  expect(html.indexOf('id="follow"')).toBeGreaterThan(html.indexOf('id="contact"'));
+  expect(html.indexOf('class="socials"')).toBeGreaterThan(html.indexOf('id="follow"'));
+});
+
+test("socials alone render follow without contact", () => {
+  const html = renderPage(
+    {
+      name: "Solo",
+      gigs: {},
+      socials: [{ platform: "instagram", url: "https://instagram.com/x" }],
+    },
+    "",
+    "2030-01-01",
   );
+  expect(html).not.toContain('id="contact"');
+  expect(html).toContain('id="follow"');
+});
+
+test("past gigs use an upcoming/past toggle instead of stacked sections", () => {
+  const html = renderPage(
+    {
+      name: "Band",
+      gigs: {
+        future: { date: "2030-06-01", venue: "Club" },
+        old: { date: "2020-01-01", venue: "Hall" },
+      },
+    },
+    "",
+    "2030-01-01",
+  );
+  expect(html).toContain('id="gigs-upcoming-tab"');
+  expect(html).toContain("Upcoming");
+  expect(html).toContain("Past");
+  expect(html).not.toContain("Upcoming gigs");
+  expect(html).toContain('id="gigs-past-panel" hidden');
 });
 
 test("cleanPage keeps public profile fields and drops private gig data", () => {
@@ -276,13 +312,14 @@ test("public page translates labels and shows years on upcoming cards when neede
     "2030-01-01",
   );
   for (const label of [
-    "Nadcházející koncerty",
-    "Minulé koncerty",
+    "Nadcházející",
+    "Minulé",
     "Vstupenky",
     "Přidat koncerty do kalendáře",
     "Data koncertů ve formátu JSON",
   ])
     expect(czech).toContain(label);
+  expect(czech).not.toContain("Nadcházející koncerty");
   expect(czech).toContain('<span class="year">2031</span>');
   expect(czech).not.toContain('<span class="year">2030</span>');
   const english = renderPage(

@@ -438,6 +438,78 @@ test("a 403 on another module's folder does not end the session", async () => {
   }
 });
 
+test("repeated out-of-scope 403 responses do not show sync trouble", async () => {
+  await whenSessionReady();
+  const page = browser();
+  const unwatch = watchSession(() => {});
+  const start = Date.now();
+  try {
+    signIn();
+    const sync = storage.sync as {
+      handleResponse: (
+        path: string,
+        action: string,
+        response: { statusCode: number },
+      ) => Promise<boolean>;
+    };
+    for (
+      let seconds = 0;
+      seconds <= syncTroubleAfter / 1000 + 30;
+      seconds += 5
+    ) {
+      setSystemTime(start + seconds * 1000);
+      await sync
+        .handleResponse("/gigger/", "get", { statusCode: 403 })
+        .catch(() => {});
+    }
+    expect(ui.syncTrouble).toBe(false);
+  } finally {
+    setSystemTime();
+    unwatch();
+    signOutQuietly();
+    page.restore();
+  }
+});
+
+test("a 403 on another module's folder does not end the session", async () => {
+  await whenSessionReady();
+  const page = browser();
+  let resets = 0;
+  const unwatch = watchSession(() => {
+    resets++;
+  });
+  const disconnect = spyOn(storage, "disconnect");
+  try {
+    signIn();
+    const sync = storage.sync as {
+      handleResponse: (
+        path: string,
+        action: string,
+        response: { statusCode: number },
+      ) => Promise<boolean>;
+    };
+    expect(sync).toBeDefined();
+    await expect(
+      sync.handleResponse("/gigger/", "get", { statusCode: 403 }),
+    ).rejects.toThrow("Storage path is outside Showday scope.");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ui.notice).toBe("");
+    expect(ui.syncTrouble).toBe(false);
+    expect(resets).toBe(0);
+    expect(page.path).not.toBe("/login");
+    expect(storage.remote.connected).toBe(true);
+    expect(storage.remote.token).toBe("session-token");
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(page.requests).toHaveLength(0);
+  } finally {
+    unwatch();
+    disconnect.mockRestore();
+    signOutQuietly();
+    page.restore();
+  }
+});
+
 /**
  * Opens a fresh cache with a stand-in storage server: an empty account where
  * pushes made with `rejected` get a 401. Sync handles finished requests in
