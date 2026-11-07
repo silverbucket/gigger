@@ -44,6 +44,7 @@ test("a revoked server token keeps the app signed in and unsynced changes stay l
   );
   await saveCurrency.click();
   await pushed;
+  await page.unroute(storageRequests);
   await expect(saveCurrency).toBeEnabled();
   await expect(currency).toHaveValue("EUR");
   const revoked = await request.post("/api/auth/logout", {

@@ -29,6 +29,15 @@ class Ui {
 }
 export const ui = new Ui();
 
+/** Storage may keep retrying while the UI should stay usable. */
+const reloadCapMs = 2_000;
+async function reloadAfterChange() {
+  await Promise.race([
+    data.load(),
+    new Promise<void>((resolve) => setTimeout(resolve, reloadCapMs)),
+  ]);
+}
+
 /** Runs a change, reloads the data and reports a failure in the app's error line. */
 export async function run(
   action: () => Promise<unknown>,
@@ -38,7 +47,7 @@ export async function run(
   ui.error = "";
   try {
     await action();
-    await data.load();
+    await reloadAfterChange();
     return true;
   } catch (cause) {
     ui.error =
