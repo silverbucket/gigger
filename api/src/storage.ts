@@ -1,10 +1,17 @@
+import { resolveAppOrigin } from "./app-origin";
+
+const HTTPS_SCHEME = "https://";
+const FORWARDED_PROTO_HEADER = "X-Forwarded-Proto";
+const FORWARDED_PROTO_HTTPS = "https";
+
 /** Headers for Armadietto behind TLS termination (https.force reads X-Forwarded-Proto). */
 export function armadiettoStorageHeaders(
   token: string,
-  appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+  appOrigin = resolveAppOrigin(),
 ) {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (appOrigin.startsWith("https://")) headers["X-Forwarded-Proto"] = "https";
+  if (appOrigin.startsWith(HTTPS_SCHEME))
+    headers[FORWARDED_PROTO_HEADER] = FORWARDED_PROTO_HTTPS;
   return headers;
 }
 
@@ -13,7 +20,7 @@ export function remoteStore(
   baseUrl: string,
   username: string,
   token: string,
-  appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+  appOrigin = resolveAppOrigin(),
 ) {
   const url = (path: string) =>
     `${baseUrl}/storage/storage/${encodeURIComponent(username)}/showday/${path}`;
