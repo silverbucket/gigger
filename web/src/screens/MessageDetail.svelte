@@ -145,8 +145,10 @@ async function send(event: SubmitEvent) {
     {item.state === "toSort"
       ? "To sort"
       : item.state === "archived"
-        ? "Not a booking"
-        : "Enquiry"}
+        ? "Reviewed"
+        : item.state === "discarded"
+          ? "Discarded"
+          : "Enquiry"}
     · {channelName[conversation.channel]} ·
     {messageTimeLong(conversation.lastIn ?? item.latest)}
   </p>
@@ -364,6 +366,15 @@ async function send(event: SubmitEvent) {
       >
         Not a booking
       </button>
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={ui.busy}
+        onclick={() =>
+          run(() => bands.discardConversation(data.band.id, item.id))}
+      >
+        Discard
+      </button>
     {:else if item.state === "archived"}
       <button
         type="button"
@@ -373,6 +384,16 @@ async function send(event: SubmitEvent) {
           run(() => bands.unarchiveConversation(data.band.id, item.id))}
       >
         Back to sort
+      </button>
+    {:else if item.state === "discarded"}
+      <button
+        type="button"
+        class="btn btn-ghost"
+        disabled={ui.busy}
+        onclick={() =>
+          run(() => bands.undiscardConversation(data.band.id, item.id))}
+      >
+        Restore to sort
       </button>
     {/if}
   {/snippet}

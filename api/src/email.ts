@@ -24,6 +24,7 @@ export type EmailAccountRow = {
   storage_token: string;
   cursor: string | null;
   error: string | null;
+  last_mail_at?: string | null;
 };
 export interface EmailAccount {
   username: string;
@@ -32,6 +33,12 @@ export interface EmailAccount {
   storageToken: string;
   cursor?: { uidValidity: string; uid: number };
   error?: string;
+  lastMailAt?: string;
+}
+export type InboxWatchPhase = "idle" | "connecting" | "watching" | "retrying";
+export interface InboxWatchStatus {
+  phase: InboxWatchPhase;
+  live: boolean;
 }
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const hostRe = /^[^\s/\\]+$/;
@@ -120,17 +127,34 @@ export function parseSettings(
   };
 }
 /** What the browser may see: everything but the password. */
-export function publicSettings(account: EmailAccount) {
+export function publicSettings(
+  account: EmailAccount,
+  watch?: InboxWatchStatus,
+) {
   const { password: _, ...rest } = account.settings;
+  const phase =
+    watch?.phase ??
+    (account.settings.imapHost
+      ? account.error
+        ? "retrying"
+        : "idle"
+      : "idle");
   return {
     ...rest,
-    watching: !!account.settings.imapHost,
+    watching: account.settings.imapHost
+      ? (watch?.live ?? !account.error)
+      : false,
+    inboxPhase: phase,
+    ...(account.lastMailAt ? { lastMailAt: account.lastMailAt } : {}),
     ...(account.error ? { error: account.error } : {}),
   };
 }
 export interface Watchers {
   restart(username: string, bandId: string): void;
   stop(username: string, bandId: string): void;
+  watching?(username: string, bandId: string): boolean;
+  checkNow?(username: string, bandId: string): void;
+  status?(username: string, bandId: string): InboxWatchStatus;
 }
 export function emailAccounts(db: Database, env = process.env) {
   const open = (row: EmailAccountRow | null): EmailAccount | undefined =>
@@ -142,6 +166,7 @@ export function emailAccounts(db: Database, env = process.env) {
           storageToken: unseal(row.storage_token, env),
           ...(row.cursor ? { cursor: JSON.parse(row.cursor) } : {}),
           ...(row.error ? { error: row.error } : {}),
+          ...(row.last_mail_at ? { lastMailAt: row.last_mail_at } : {}),
         }
       : undefined;
   return {
@@ -160,7 +185,7 @@ export function emailAccounts(db: Database, env = process.env) {
         .map((row) => open(row) as EmailAccount),
     put(account: EmailAccount) {
       db.query(
-        "INSERT OR REPLACE INTO email_accounts (username, band_id, address, settings, storage_token, cursor, error) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO email_accounts (username, band_id, address, settings, storage_token, cursor, error, last_mail_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         account.username,
         account.bandId,
@@ -169,7 +194,13 @@ export function emailAccounts(db: Database, env = process.env) {
         seal(account.storageToken, env),
         account.cursor ? JSON.stringify(account.cursor) : null,
         account.error ?? null,
+        account.lastMailAt ?? null,
       );
+    },
+    lastMail(username: string, bandId: string, at: string) {
+      db.query(
+        "UPDATE email_accounts SET last_mail_at = ? WHERE username = ? AND band_id = ?",
+      ).run(at, username, bandId);
     },
     cursor(username: string, bandId: string, cursor: EmailAccount["cursor"]) {
       db.query(
@@ -227,9 +258,37 @@ export function emailHandler(
       if (!(await messages.verified(req, username, bandId)))
         return fail("Could not verify access to this band. Please retry.", 403);
       const account = accounts.get(username as string, bandId as string);
-      return Response.json(account ? publicSettings(account) : null, {
-        headers: noStore,
-      });
+      return Response.json(
+        account
+          ? publicSettings(
+              account,
+              watchers.status?.(account.username, account.bandId),
+            )
+          : null,
+        { headers: noStore },
+      );
+    },
+    /** POST /email/check {username, bandId}: skip inbox watch backoff and reconnect. */
+    async check(req: Request) {
+      const input = await body(req);
+      if (!input) return fail("Invalid request.", 400);
+      const { username, bandId } = input;
+      if (!(await messages.verified(req, username, bandId)))
+        return fail("Could not verify access to this band. Please retry.", 403);
+      const account = accounts.get(username as string, bandId as string);
+      if (!account)
+        return fail("No email account is set up for this band.", 404);
+      if (!account.settings.imapHost)
+        return fail("No incoming server is configured for this band.", 400);
+      watchers.checkNow?.(account.username, account.bandId);
+      if (!watchers.watching?.(account.username, account.bandId))
+        watchers.restart(account.username, account.bandId);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const fresh = accounts.get(account.username, account.bandId) ?? account;
+      return Response.json(
+        publicSettings(fresh, watchers.status?.(fresh.username, fresh.bandId)),
+        { headers: noStore },
+      );
     },
     /** PUT /email/account {username, bandId, address, name, imapHost, imapPort, smtpHost, smtpPort, login, password} */
     async put(req: Request) {
@@ -260,10 +319,17 @@ export function emailHandler(
         settings,
         storageToken,
         ...(sameMailbox && existing?.cursor ? { cursor: existing.cursor } : {}),
+        ...(existing?.lastMailAt ? { lastMailAt: existing.lastMailAt } : {}),
       };
       accounts.put(account);
       watchers.restart(account.username, account.bandId);
-      return Response.json(publicSettings(account), { headers: noStore });
+      return Response.json(
+        publicSettings(
+          account,
+          watchers.status?.(account.username, account.bandId),
+        ),
+        { headers: noStore },
+      );
     },
     /** DELETE /email/account {username, bandId}: stops watching, revokes the storage token and forgets the settings. */
     async remove(req: Request) {

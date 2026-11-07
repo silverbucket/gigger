@@ -51,8 +51,12 @@ export function handler(
       return messages.events(req);
     if (req.method === "GET" && path.startsWith("/b/"))
       return pages.serve(path);
-    if (req.method === "POST" && path === "/public/pages")
-      return pages.claim(req);
+    if (path === "/public/pages") {
+      if (req.method === "POST") return pages.claim(req);
+      if (req.method === "DELETE") return pages.unclaim(req);
+    }
+    if (req.method === "POST" && path === "/email/check")
+      return email.check(req);
     if (req.method === "POST" && /^\/auth\/(signup|login|logout)$/.test(path))
       return auth(req, path.slice(6));
     if (req.method === "GET" && path === "/health") {

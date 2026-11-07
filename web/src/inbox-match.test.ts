@@ -88,3 +88,19 @@ test("a conversation is to sort until it becomes a gig or is set aside, and retu
     c: "archived",
   });
 });
+
+test("a discarded thread returns to to sort when a newer message arrives", () => {
+  const index = {
+    d: {
+      bandId: "b",
+      channel: "email" as const,
+      peer: { id: "d@x.cz" },
+      preview: "Again",
+      lastIn: "2026-11-06T10:00:00Z",
+    },
+  };
+  const triage: Triage[] = [
+    { id: "d", status: "discarded", at: "2026-11-04T12:00:00Z" },
+  ];
+  expect(inboxItems(index, ["b"], [], triage)[0].state).toBe("toSort");
+});

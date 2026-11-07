@@ -39,6 +39,7 @@ class Data {
 
   async load() {
     const token = storage.remote.token;
+    if (token) await bands.purgeExpiredDiscarded().catch(() => {});
     const loaded = await Promise.all(
       (await bands.bands()).map(async (band) => {
         const [members, gigs, venues, contacts, otherBands, surveys, triage] =

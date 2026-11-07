@@ -130,6 +130,29 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
   }
 });
 
+test("publishBand can publish from an unsaved band snapshot", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  try {
+    await store.save("band", "a", { id: "a", name: "Band" });
+    const next = { id: "a", name: "Band", slug: "live-band" };
+    await store.publishBand("a", undefined, next);
+    expect(await publicClient.getObject("live-band/page")).toMatchObject({
+      name: "Band",
+    });
+  } finally {
+    storage.stopSync();
+  }
+});
+
 test("public copy omits unset fields and slugs are URL safe", () => {
   expect(
     publicGig({

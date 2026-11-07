@@ -17,6 +17,8 @@ type MailAccount = {
   smtpPort: number;
   login: string;
   watching: boolean;
+  inboxPhase?: "idle" | "connecting" | "watching" | "retrying";
+  lastMailAt?: string;
   error?: string;
 };
 let metaPage = $state<{ pageId: string; instagram: boolean } | null>(null);
@@ -185,6 +187,24 @@ function saveMail(event: SubmitEvent) {
     }
   }, "Could not save the settings.");
 }
+function checkMailNow() {
+  const bandId = band.id;
+  return act(async () => {
+    const next = await api<MailAccount>(
+      "/api/email/check",
+      { method: "POST", body: { bandId } },
+      "Could not check the mailbox now.",
+    );
+    if (band.id === bandId) mailAccount = next;
+  }, "Could not check the mailbox now.");
+}
+function mailStatusLine(account: MailAccount) {
+  if (!account.imapHost) return "Send only";
+  if (account.error) return "Mailbox error";
+  if (account.inboxPhase === "retrying") return "Reconnecting";
+  if (account.inboxPhase === "connecting") return "Connecting";
+  return account.watching ? "Watching inbox" : "Inbox idle";
+}
 function removeMail() {
   if (
     !confirm(
@@ -269,7 +289,7 @@ function removeMail() {
     <h3 class="label" id="mail-title">Email</h3>
     {#if mailAccount && !mailEditing}
       <Tag kind={mailAccount.error ? "proposed" : "accent"}
-        >{mailAccount.watching ? "Watching" : "Send only"}</Tag
+        >{mailStatusLine(mailAccount)}</Tag
       >
     {/if}
   </div>
@@ -392,18 +412,33 @@ function removeMail() {
     </form>
   {:else if mailAccount}
     <p>
-      {mailAccount.watching ? "Watching" : "Sending as"}
+      {mailAccount.imapHost ? mailStatusLine(mailAccount) : "Sending as"}
       <strong>{mailAccount.address}</strong>
-      {mailAccount.watching
+      {mailAccount.imapHost
         ? ". New enquiries arrive in Bookings."
         : ". Replies go out by email; no mailbox is watched."}
     </p>
+    {#if mailAccount.lastMailAt}
+      <p class="hint">
+        Last email received {new Date(mailAccount.lastMailAt).toLocaleString()}
+      </p>
+    {/if}
     {#if mailAccount.error}
       <p class="alert-text" role="alert">
         Mailbox problem: {mailAccount.error}
       </p>
     {/if}
     <div class="actions">
+      {#if mailAccount.imapHost}
+        <button
+          type="button"
+          class="btn btn-secondary"
+          disabled={ui.busy}
+          onclick={checkMailNow}
+        >
+          Check inbox now
+        </button>
+      {/if}
       <button
         type="button"
         class="btn btn-secondary"

@@ -93,6 +93,17 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
         body: JSON.stringify(body),
       }),
     );
+  const unclaim = (body: unknown, token = bandToken) =>
+    request(
+      new Request("http://localhost:8080/public/pages", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      }),
+    );
   const get = (path: string) =>
     request(new Request(`http://localhost:8080${path}`));
   try {
@@ -113,6 +124,11 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     expect(
       db.query("SELECT slug FROM public_pages WHERE username = 'sam'").all(),
     ).toEqual([{ slug: "the-band" }]);
+    expect((await unclaim(good)).status).toBe(200);
+    expect(
+      db.query("SELECT slug FROM public_pages WHERE username = 'sam'").all(),
+    ).toEqual([]);
+    expect((await claim(good)).status).toBe(200);
 
     const html = await (await get("/b/the-band")).text();
     expect(html).toContain("&lt;script&gt;");

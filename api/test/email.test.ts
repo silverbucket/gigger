@@ -366,7 +366,7 @@ test("email account settings are stored encrypted, read back without the passwor
     const saved = await call("PUT", { ...account, ...valid });
     expect(saved.status).toBe(200);
     const shown = await saved.json();
-    expect(shown).toEqual({
+    expect(shown).toMatchObject({
       address: "band@example.com",
       name: "The Band",
       imapHost: "imap.example.com",
@@ -375,6 +375,7 @@ test("email account settings are stored encrypted, read back without the passwor
       smtpPort: 587,
       login: "band@example.com",
       watching: true,
+      inboxPhase: "idle",
     });
     expect(JSON.stringify(shown)).not.toContain("app-password");
     expect(restarted).toEqual(["sam/band1"]);

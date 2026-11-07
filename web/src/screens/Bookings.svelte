@@ -52,7 +52,8 @@ let view = $state<"list" | "board">(
 // Upcoming first; played, cancelled and past-dated gigs are under Past.
 let filter = $state<"upcoming" | "past">("upcoming");
 let query = $state("");
-let showSorted = $state(false);
+let showReviewed = $state(false);
+let showDiscarded = $state(false);
 let allToSort = $state(false);
 const now = today();
 const many = $derived(data.all.length > 1 && !data.current);
@@ -91,8 +92,14 @@ function messageMatches(item: InboxItem) {
 const toSort = $derived(
   inbox.filter((i) => i.state === "toSort" && messageMatches(i)),
 );
-const sorted = $derived(
-  inbox.filter((i) => i.state !== "toSort" && messageMatches(i)),
+const reviewed = $derived(
+  inbox.filter(
+    (i) =>
+      (i.state === "converted" || i.state === "archived") && messageMatches(i),
+  ),
+);
+const discarded = $derived(
+  inbox.filter((i) => i.state === "discarded" && messageMatches(i)),
 );
 const visibleGigs = $derived(
   rows
@@ -246,7 +253,7 @@ function matchFor(item: InboxItem) {
 {/snippet}
 
 {#snippet toSortGroup()}
-  {#if toSort.length || sorted.length}
+  {#if toSort.length || reviewed.length || discarded.length}
     <section aria-labelledby="to-sort">
       <SectionLabel tone="accent" id="to-sort">
         To sort · {toSort.length}
@@ -285,8 +292,8 @@ function matchFor(item: InboxItem) {
         {:else}
           <li class="empty">Nothing to sort. New messages land here.</li>
         {/each}
-        {#if showSorted}
-          {#each sorted as item (item.id)}
+        {#if showReviewed}
+          {#each reviewed as item (item.id)}
             {@const band = bandOf(item.conversation.bandId)}
             {@const match = matchFor(item)}
             <MessageRow
@@ -303,16 +310,45 @@ function matchFor(item: InboxItem) {
           {/each}
         {/if}
       </ul>
-      {#if sorted.length}
+      {#if reviewed.length}
         <button
           type="button"
           class="link more"
-          onclick={() => (showSorted = !showSorted)}
+          onclick={() => (showReviewed = !showReviewed)}
         >
-          {showSorted
-            ? "Hide sorted messages"
-            : `Show ${sorted.length} sorted ${sorted.length === 1 ? "message" : "messages"}`}
+          {showReviewed
+            ? "Hide reviewed messages"
+            : `Show ${reviewed.length} reviewed ${reviewed.length === 1 ? "message" : "messages"}`}
         </button>
+      {/if}
+      {#if discarded.length}
+        <button
+          type="button"
+          class="link more"
+          onclick={() => (showDiscarded = !showDiscarded)}
+        >
+          {showDiscarded
+            ? "Hide discarded messages"
+            : `Show ${discarded.length} discarded ${discarded.length === 1 ? "message" : "messages"}`}
+        </button>
+        {#if showDiscarded}
+          <ul class="discarded">
+            {#each discarded as item (item.id)}
+              {@const band = bandOf(item.conversation.bandId)}
+              <MessageRow
+                href={`#/${path("bookings", "message", item.id)}`}
+                channel={channelTag[item.conversation.channel]}
+                sender={senderName(item.conversation, band)}
+                preview={item.conversation.preview}
+                match="Discarded"
+                matchTone="muted"
+                time={messageTime(item.latest)}
+                selected={item.id === selectedMessage}
+                dim
+              />
+            {/each}
+          </ul>
+        {/if}
       {/if}
     </section>
   {/if}

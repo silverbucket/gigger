@@ -25,6 +25,7 @@ import Tag from "../components/Tag.svelte";
 import { api } from "../lib/account.svelte";
 import { data } from "../lib/data.svelte";
 import { initials, normalize, plural } from "../lib/format";
+import { waitForLivePage } from "../lib/public-page";
 import { router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
 import { bands } from "../storage";
@@ -291,49 +292,63 @@ function buildPublicProfile() {
   };
   return Object.keys(next).length ? next : undefined;
 }
-function publish(event: SubmitEvent) {
+const publicDraft = $derived(slugDirty || profileDraft !== null);
+function cancelPublicDraft() {
+  slugDirty = false;
+  profileDraft = null;
+  if (band) slugValue = band.slug ?? slugify(band.name ?? "");
+}
+function savePublicPage(event: SubmitEvent) {
   event.preventDefault();
   if (!band) return;
   const previous = $state.snapshot(band);
-  const input = (event.currentTarget as HTMLFormElement).querySelector(
-    "#page-address",
-  );
-  const slug = (
-    input instanceof HTMLInputElement ? input.value : slugValue
-  ).trim();
+  const slug = slugValue.trim();
   slugValue = slug;
-  slugDirty = true;
   void run(async () => {
     const { publicProfile: _, ...bandCore } = previous;
     const locale = /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$/.test(navigator.language)
       ? navigator.language
       : undefined;
-    await api(
-      "/api/public/pages",
-      { method: "POST", body: { bandId: previous.id, slug } },
-      "Could not publish the page. Please retry.",
-    );
-    if (previous.slug && previous.slug !== slug)
+    const savedProfile = buildPublicProfile();
+    const claim = async () => {
+      await api(
+        "/api/public/pages",
+        { method: "POST", body: { bandId: previous.id, slug } },
+        "Could not publish the page. Please retry.",
+      );
+    };
+    if (!previous.slug) await claim();
+    else if (previous.slug !== slug) {
+      await claim();
       await bands.queueOldSlugCleanup(previous.id, previous.slug);
-    await bands.save("band", previous.id, {
+    }
+    const nextBand = {
       ...bandCore,
       slug,
       ...(locale ? { locale } : {}),
-    });
-    await bands.publishBand(previous.id, previous.slug || undefined);
-    const savedProfile = buildPublicProfile();
-    if (savedProfile) {
-      await bands.save("band", previous.id, {
-        ...bandCore,
-        slug,
-        ...(locale ? { locale } : {}),
-        publicProfile: savedProfile,
-      });
-      await bands.publishBand(previous.id, slug);
-    }
+      ...(savedProfile ? { publicProfile: savedProfile } : {}),
+    };
+    await bands.save("band", previous.id, nextBand);
+    await bands.publishBand(previous.id, previous.slug, nextBand);
+    await waitForLivePage(slug);
     slugDirty = false;
     profileDraft = null;
-  }, "Could not publish the page. Please retry.");
+  }, "Could not save the public page. Please retry.");
+}
+function unpublishPage() {
+  if (!band?.slug || !confirm("Take this public page down?")) return;
+  const previous = $state.snapshot(band);
+  void run(async () => {
+    await bands.unpublishBand(previous.id);
+    await api(
+      "/api/public/pages",
+      { method: "DELETE", body: { bandId: previous.id } },
+      "Could not unpublish the page. Please retry.",
+    );
+    slugDirty = false;
+    profileDraft = null;
+    slugValue = slugify(previous.name ?? "");
+  }, "Could not unpublish the page. Please retry.");
 }
 
 // New band.
@@ -500,7 +515,7 @@ function createBand(event: SubmitEvent) {
           <Tag kind="accent">{plural(listed, "gig")} listed</Tag>
         {/if}
       </div>
-      <form class="form" onsubmit={publish}>
+      <form class="form" onsubmit={savePublicPage}>
         <div class="field">
           <label for="page-address">Page address</label>
           <div class="prefix">
@@ -566,7 +581,8 @@ function createBand(event: SubmitEvent) {
           >
         </div>
         <fieldset class="field colors">
-          <legend class="label">Color</legend>
+          <legend class="label">Theme</legend>
+          <p class="hint">Theme presets</p>
           <div class="theme-swatches">
             {#each Object.entries(
               PAGE_THEME_PRESETS,
@@ -586,6 +602,7 @@ function createBand(event: SubmitEvent) {
               </button>
             {/each}
           </div>
+          <p class="hint">Custom colors</p>
           <div class="field-row ports">
             <div class="field">
               <label for="page-bg">Background</label>
@@ -699,7 +716,7 @@ function createBand(event: SubmitEvent) {
           {/if}
         </section>
         <div class="actions">
-          {#if pageUrl}
+          {#if band.slug}
             <a
               class="btn btn-secondary"
               href={pageUrl}
@@ -715,11 +732,29 @@ function createBand(event: SubmitEvent) {
             >
             <button
               type="submit"
-              class="btn btn-ghost"
+              class="btn btn-primary"
               disabled={!data.loaded || ui.busy}
             >
-              Save address
+              Save
             </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              disabled={!data.loaded || ui.busy}
+              onclick={unpublishPage}
+            >
+              Unpublish
+            </button>
+            {#if publicDraft}
+              <button
+                type="button"
+                class="btn btn-ghost"
+                disabled={ui.busy}
+                onclick={cancelPublicDraft}
+              >
+                Cancel
+              </button>
+            {/if}
           {:else}
             <button
               type="submit"
@@ -728,6 +763,16 @@ function createBand(event: SubmitEvent) {
             >
               Publish page
             </button>
+            {#if publicDraft}
+              <button
+                type="button"
+                class="btn btn-ghost"
+                disabled={ui.busy}
+                onclick={cancelPublicDraft}
+              >
+                Cancel
+              </button>
+            {/if}
           {/if}
         </div>
       </form>
