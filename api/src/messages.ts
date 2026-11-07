@@ -137,7 +137,8 @@ export function messageHandler(
       )
         return fail("Invalid request.", 400);
       const store = await verified(req, username, bandId, true);
-      if (!store) return fail("Log in again to send messages.", 401);
+      if (!store)
+        return fail("Could not verify access to this band. Please retry.", 403);
       let index: ConversationIndex | undefined;
       try {
         index = (await store.get<ConversationIndex>(conversationsPath)).value;
@@ -268,7 +269,7 @@ export function messageHandler(
       }
       const { username, bandId } = input ?? {};
       if (!(await verified(req, username, bandId)))
-        return fail("Log in again to receive messages.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       const now = Date.now();
       for (const [id, ticket] of tickets)
         if (ticket.expires < now) tickets.delete(id);
@@ -288,7 +289,7 @@ export function messageHandler(
       const ticket = tickets.get(id);
       tickets.delete(id);
       if (!ticket || ticket.expires < Date.now())
-        return fail("Log in again to receive messages.", 401);
+        return fail("Live updates are not available right now.", 401);
       const username = ticket.username;
       let keepAlive: ReturnType<typeof setInterval>;
       let self: ReadableStreamDefaultController;

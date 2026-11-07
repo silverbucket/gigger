@@ -10,6 +10,7 @@ let { band }: { band: Band } = $props();
 type MailAccount = {
   address: string;
   name?: string;
+  inboxAddress?: string;
   imapHost?: string;
   imapPort: number;
   smtpHost: string;
@@ -25,6 +26,7 @@ let mailEditing = $state(false);
 let mailForm = $state({
   address: "",
   name: "",
+  inboxAddress: "",
   imapHost: "",
   imapPort: "993",
   smtpHost: "",
@@ -158,6 +160,7 @@ function editMail() {
   mailForm = {
     address: a?.address ?? "",
     name: a?.name ?? "",
+    inboxAddress: a?.inboxAddress ?? "",
     imapHost: a?.imapHost ?? "",
     imapPort: String(a?.imapPort ?? 993),
     smtpHost: a?.smtpHost ?? "",
@@ -292,6 +295,20 @@ function removeMail() {
             <label for="mail-name">Display name</label>
             <input id="mail-name" class="input" bind:value={mailForm.name}>
           </div>
+        </div>
+        <div class="field">
+          <label for="mail-inbox">Pull mail addressed to</label>
+          <input
+            id="mail-inbox"
+            class="input"
+            type="email"
+            bind:value={mailForm.inboxAddress}
+            placeholder="Leave empty to pull everything in the mailbox"
+          >
+          <p class="hint">
+            For a shared inbox with aliases, enter the band’s address so only
+            mail to that alias is pulled in.
+          </p>
         </div>
         <div class="field-row ports">
           <div class="field">
@@ -436,6 +453,11 @@ function removeMail() {
 h3 {
   margin: 0;
   font-family: var(--font-body);
+}
+.hint {
+  font-size: 13px;
+  margin: 4px 0 0;
+  color: var(--muted);
 }
 p {
   font-size: 14px;

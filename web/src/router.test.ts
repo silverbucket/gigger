@@ -30,3 +30,17 @@ test("read() resyncs from the hash, which a session change relies on after repla
   expect(router.screen).toBe("bookings");
   expect(router.parts).toEqual([]);
 });
+
+test("settings and band routes stay separate", () => {
+  (globalThis as unknown as { location: { hash: string } }).location.hash =
+    "#/settings";
+  router.read();
+  expect(router.screen).toBe("settings");
+  expect(router.parts).toEqual([]);
+
+  (globalThis as unknown as { location: { hash: string } }).location.hash =
+    "#/band/public";
+  router.read();
+  expect(router.screen).toBe("band");
+  expect(router.parts).toEqual(["public"]);
+});

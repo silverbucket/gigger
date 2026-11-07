@@ -220,6 +220,27 @@ test("a Sockethub post becomes a stored message; our own copies and junk are ski
       object: { id: "x" },
     }),
   ).toBeNull();
+  const aliasAccount = {
+    ...account,
+    settings: {
+      ...account.settings,
+      inboxAddress: "alias@example.com",
+    },
+  };
+  expect(
+    fromMail(aliasAccount, {
+      type: "post",
+      actor: { id: "jo@example.com" },
+      object: { id: "b1", to: "band@example.com" },
+    }),
+  ).toBeNull();
+  expect(
+    fromMail(aliasAccount, {
+      type: "post",
+      actor: { id: "jo@example.com" },
+      object: { id: "b2", to: "alias@example.com" },
+    }),
+  ).toMatchObject({ actor: { id: "jo@example.com" } });
   expect(
     fromMail(
       account,
@@ -334,11 +355,11 @@ test("email account settings are stored encrypted, read back without the passwor
     );
   try {
     expect(await (await call("GET")).json()).toBeNull();
-    expect((await call("GET", undefined, "bad")).status).toBe(401);
+    expect((await call("GET", undefined, "bad")).status).toBe(403);
     const account = { username: "sam", bandId: "band1" };
     expect(
       (await call("PUT", { ...account, ...valid }, "read-only")).status,
-    ).toBe(401);
+    ).toBe(403);
     expect(
       (await call("PUT", { ...account, ...valid, smtpHost: "" })).status,
     ).toBe(400);

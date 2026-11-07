@@ -491,7 +491,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
         },
         body: JSON.stringify({ username: "sam", bandId: "band1" }),
       });
-    expect((await ticketFor("bad")).status).toBe(401);
+    expect((await ticketFor("bad")).status).toBe(403);
     const { ticket } = await (await ticketFor("user-token")).json();
     const events = await fetch(t.url(`/messages/events?ticket=${ticket}`));
     expect(events.headers.get("content-type")).toBe("text/event-stream");
@@ -566,7 +566,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
           "bad",
         )
       ).status,
-    ).toBe(401);
+    ).toBe(403);
     expect(
       (
         await reply(
@@ -574,7 +574,7 @@ test("reply saves the outgoing message, retries the index on 412, hands it to th
           "read-only",
         )
       ).status,
-    ).toBe(401);
+    ).toBe(403);
     const ig = conversationId("instagram", "band1", "fan-9");
     const withIg = t.json("conversations/index");
     withIg[ig] = {
@@ -884,7 +884,7 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
           "bad",
         )
       ).status,
-    ).toBe(401);
+    ).toBe(403);
     expect(
       (
         await post(
@@ -898,7 +898,7 @@ test("connecting a page stores the long-lived token and subscribes the app; disc
           "read-only",
         )
       ).status,
-    ).toBe(401);
+    ).toBe(403);
     // A malformed key is refused before any Page is subscribed or storage token minted.
     const badKey = metaHandler(
       db,

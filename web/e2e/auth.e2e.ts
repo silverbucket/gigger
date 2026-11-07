@@ -15,7 +15,7 @@ test("local username login opens the app without an authorization prompt", async
   expect(authorizationRequests).toEqual([]);
 });
 
-test("a session revoked on the server asks to log in again and keeps changes that had not synced", async ({
+test("a revoked server token keeps the app signed in and unsynced changes stay local", async ({
   page,
   request,
   account,
@@ -29,9 +29,8 @@ test("a session revoked on the server asks to log in again and keeps changes tha
   );
   expect(token).toBeTruthy();
 
-  await go(page, "band/settings");
+  await go(page, "settings");
   await page.getByLabel(/^Band currency/).fill("EUR");
-  // Storage is down when the change is saved, so it waits in this browser.
   const storageRequests = "**/storage/storage/**";
   await page.route(storageRequests, (route) => route.fulfill({ status: 503 }));
   const pushed = page.waitForRequest(
@@ -48,37 +47,10 @@ test("a session revoked on the server asks to log in again and keeps changes tha
   expect(revoked.ok()).toBe(true);
   await page.unroute(storageRequests);
 
-  // The next sync attempt meets the revoked token.
-  await expect(
-    page.getByText("Please log in again.", { exact: true }),
-  ).toBeVisible({ timeout: 30000 });
-  await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByText(/connection/i)).toHaveCount(0);
-  expect((await account.read("band")).currency).toBe("CZK");
-
-  // Another storage provider's address, mistyped say, asks before the change
-  // is dropped, and saying no keeps it.
-  let question = "";
-  page.once("dialog", (dialog) => {
-    question = dialog.message();
-    return dialog.dismiss();
-  });
-  await page
-    .getByLabel("Username", { exact: true })
-    .fill("someone@elsewhere.invalid");
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect.poll(() => question).toContain(account.username);
-  await expect(page).toHaveURL(/\/login$/);
-
-  await page.getByLabel("Username", { exact: true }).fill(account.username);
-  await page.getByLabel("Password", { exact: true }).fill(account.password);
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(page.getByLabel("View band")).toBeVisible();
-  await expect
-    .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
-    .toBe("EUR");
+  await expect(page).not.toHaveURL(/\/login$/);
   await expect(page.getByText("Please log in again.")).toHaveCount(0);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect((await account.read("band")).currency).toBe("CZK");
+  await expect(page.getByLabel(/^Band currency/)).toHaveValue("EUR");
 });
 
 test("a reload while another tab blocks a logout's cleanup never opens the old cache for the next account", async ({
@@ -116,7 +88,7 @@ test("a reload while another tab blocks a logout's cleanup never opens the old c
         opening.onerror = () => reject(opening.error);
       }),
   );
-  await go(page, "band/settings");
+  await go(page, "settings");
   await page
     .getByRole("link", { name: "Log out", exact: true })
     .or(page.getByRole("button", { name: "Log out", exact: true }))

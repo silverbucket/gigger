@@ -21,6 +21,7 @@ import Band from "./screens/Band.svelte";
 import Bookings from "./screens/Bookings.svelte";
 import Contacts from "./screens/Contacts.svelte";
 import OtherBands from "./screens/OtherBands.svelte";
+import Settings from "./screens/Settings.svelte";
 import Venues from "./screens/Venues.svelte";
 import { bands, logout, storage } from "./storage";
 
@@ -41,13 +42,15 @@ const nav = $derived([
   { id: "venues", label: "Venues", href: "#/venues" },
   { id: "contacts", label: "Contacts", href: "#/contacts" },
   { id: "bands", label: "Other bands", href: "#/bands" },
-  { id: "band", label: "Band & public page", href: "#/band" },
+  { id: "band", label: "Band", href: "#/band" },
+  { id: "settings", label: "Settings", href: "#/settings" },
 ]);
 const tabs = $derived([
   { id: "bookings", label: "Bookings", href: "#/bookings", count: toSort },
   { id: "contacts", label: "Contacts", href: "#/contacts" },
   { id: "venues", label: "Venues", href: "#/venues" },
   { id: "band", label: "Band", href: "#/band" },
+  { id: "settings", label: "Settings", href: "#/settings" },
 ]);
 // Other bands sits under Contacts on a phone.
 const activeTab = $derived(
@@ -279,6 +282,8 @@ function choose(bandId: string) {
         <p class="empty">Loading your bands…</p>
       {:else if router.screen === "band"}
         <Band />
+      {:else if router.screen === "settings"}
+        <Settings />
       {:else if needsBand && !data.current}
         <div class="page-head">
           <div>

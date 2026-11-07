@@ -44,7 +44,7 @@ test("signup rejects invalid inputs and succeeds after correcting them", async (
   await expect(
     page.getByLabel("View band").locator("option:checked"),
   ).toHaveText("Signup Band");
-  await go(page, "band/settings");
+  await go(page, "settings");
   // The browser locale (en-US here) picks the new band's currency.
   await expect(page.getByLabel(/^Band currency/)).toHaveValue("USD");
   await page

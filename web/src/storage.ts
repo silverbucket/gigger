@@ -23,7 +23,6 @@ export const slowStartMessage =
 export const syncTroubleAfter = 2 * 60_000;
 
 let sessionReady = false;
-let expiring = false;
 let failingSince: number | undefined;
 let lastFailure = 0;
 let syncTrouble = false;
@@ -58,10 +57,13 @@ storage.on("error", (error) => {
     name?: string;
     message?: string;
   };
-  // 401: the token was revoked. 403 on another module's tree is not a dead session.
-  if (name === "Unauthorized") expireSession();
-  else if (name === OUT_OF_SCOPE_STORAGE) return;
-  else if (name === "SyncError" || /^HTTP response code/.test(`${message}`))
+  // Stay signed in unless the user clicks Log out; auth-shaped failures retry quietly.
+  if (name === OUT_OF_SCOPE_STORAGE) return;
+  if (
+    name === "Unauthorized" ||
+    name === "SyncError" ||
+    /^HTTP response code/.test(`${message}`)
+  )
     syncFailed();
 });
 storage.on("sync-done", (event) => {
@@ -169,7 +171,7 @@ function connect(address: string, token: string) {
     const connected = () => {
       cleanup();
       // Sync restarts by itself only on a fresh cache.
-      if (resuming) void storage.startSync();
+      if (resuming && storage.sync) void storage.startSync();
       resolve();
     };
     const failed = () => {
@@ -245,26 +247,6 @@ function installSyncScopeGuard() {
   sync.__showdayScopeGuard = true;
 }
 
-function expireSession() {
-  if (expiring || !storage.remote.connected) return;
-  expiring = true;
-  // Out of the library's error dispatch before the session is touched.
-  setTimeout(() => {
-    expiring = false;
-    if (storage.remote.connected) expire();
-  });
-}
-/**
- * Back to the login screen, keeping the cache: changes that have not synced
- * yet go up once the same account logs in again.
- */
-function expire() {
-  const { userAddress, token } = storage.remote;
-  storage.stopSync();
-  storage.remote.configure({ token: null });
-  leave(true);
-  revoke(userAddress, token);
-}
 function leave(expired: boolean) {
   clearSyncTrouble();
   history.replaceState(null, "", "/login");

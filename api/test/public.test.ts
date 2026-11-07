@@ -98,7 +98,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
   try {
     expect((await get("/b/the-band")).status).toBe(404);
     const good = { username: "sam", bandId: "band1", slug: "the-band" };
-    expect((await claim(good, "wrong")).status).toBe(401);
+    expect((await claim(good, "wrong")).status).toBe(403);
     expect((await claim({ ...good, slug: "The Band" })).status).toBe(400);
     expect((await claim({ ...good, username: "../x" })).status).toBe(400);
     expect((await claim(good)).status).toBe(200);
@@ -106,7 +106,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     expect(
       (await claim({ ...good, username: "other", bandId: "band1" }, "x"))
         .status,
-    ).toBe(401);
+    ).toBe(403);
     db.query("INSERT INTO public_pages VALUES ('taken', 'other', 'b2')").run();
     expect((await claim({ ...good, slug: "taken" })).status).toBe(409);
     expect((await claim(good)).status).toBe(200);
@@ -183,6 +183,34 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     storage.stop(true);
     db.close();
   }
+});
+
+test("cleanPage keeps public profile fields and drops private gig data", () => {
+  const page = cleanPage({
+    name: "B",
+    bio: "  About the band  ",
+    banner: "banner",
+    bannerType: "image/png",
+    theme: { background: "#112233", text: "#ffffff", accent: "#445566" },
+    contact: {
+      email: "hello@example.com",
+      phone: "+1 555",
+      website: "https://example.com",
+    },
+    gigs: {},
+  });
+  expect(page).toMatchObject({
+    name: "B",
+    bio: "About the band",
+    banner: "banner",
+    bannerType: "image/png",
+    theme: { background: "#112233", text: "#ffffff", accent: "#445566" },
+    contact: {
+      email: "hello@example.com",
+      phone: "+1 555",
+      website: "https://example.com",
+    },
+  });
 });
 
 test("cleanPage drops anything that is not an allowed public field", () => {

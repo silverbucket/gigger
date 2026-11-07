@@ -1,3 +1,21 @@
+export interface PublicPageTheme {
+  background?: string;
+  text?: string;
+  accent?: string;
+}
+export interface PublicPageContact {
+  email?: string;
+  phone?: string;
+  website?: string;
+}
+/** Public-facing band profile edited with the public page; stored on the band record. */
+export interface BandPublicProfile {
+  bio?: string;
+  /** Empty string removes the banner; undefined leaves the live banner unchanged on publish. */
+  bannerDataUrl?: string;
+  theme?: PublicPageTheme;
+  contact?: PublicPageContact;
+}
 export interface Band {
   id: string;
   name: string;
@@ -6,6 +24,7 @@ export interface Band {
   slug?: string;
   /** BCP 47 locale for public dates and times, e.g. "cs-CZ". */
   locale?: string;
+  publicProfile?: BandPublicProfile;
 }
 export interface Member {
   id: string;
@@ -85,6 +104,12 @@ export interface PublicGig {
 export interface PublicPage {
   name: string;
   locale?: string;
+  bio?: string;
+  /** Storage object name under `/public/showday/<slug>/`; served as `/b/<slug>/banner`. */
+  banner?: string;
+  bannerType?: string;
+  theme?: PublicPageTheme;
+  contact?: PublicPageContact;
   gigs: Record<string, PublicGig>;
 }
 export const publicStatuses: readonly GigStatus[] = ["confirmed", "played"];
@@ -505,6 +530,40 @@ function object(
 const money = { type: "number", minimum: 0 };
 const currency = { type: "string", pattern: "^[A-Z]{3}$" };
 const ticketUrl = { type: "string", pattern: "^https?://[^\\s/]+[^\\s]*$" };
+const hexColor = { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" };
+const publicProfileSchema = {
+  type: "object",
+  properties: {
+    bio: { type: "string", maxLength: 5000 },
+    bannerDataUrl: { type: "string", maxLength: 2_200_000 },
+    theme: {
+      type: "object",
+      properties: {
+        background: hexColor,
+        text: hexColor,
+        accent: hexColor,
+      },
+      additionalProperties: false,
+    },
+    contact: {
+      type: "object",
+      properties: {
+        email,
+        phone: { type: "string" },
+        website: ticketUrl,
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+};
+const publicPageExtras = {
+  bio: { type: "string" },
+  banner: { const: "banner" },
+  bannerType: { type: "string", pattern: "^image/" },
+  theme: publicProfileSchema.properties.theme,
+  contact: publicProfileSchema.properties.contact,
+};
 const publicGigSchema = {
   type: "object",
   properties: {
@@ -527,6 +586,7 @@ export const publicSchemas = {
       "@context": { type: "string" },
       name: text,
       locale: { type: "string", pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$" },
+      ...publicPageExtras,
       gigs: { type: "object", additionalProperties: publicGigSchema },
     },
     required: ["name", "gigs"],
@@ -663,6 +723,7 @@ export const schemas = {
       currency,
       slug: { type: "string", pattern: slugPattern },
       locale: publicSchemas.publicPage.properties.locale,
+      publicProfile: publicProfileSchema,
     },
     ["name"],
   ),
@@ -757,11 +818,65 @@ export type Kind = keyof Records;
 export interface Client {
   declareType(name: string, schema: object): unknown;
   storeObject(name: string, path: string, value: object): Promise<unknown>;
+  storeFile?(
+    contentType: string,
+    path: string,
+    body: string | ArrayBuffer | ArrayBufferView,
+  ): Promise<unknown>;
   getObject(path: string, maxAge?: false | number): Promise<unknown>;
   getAll(path: string): Promise<unknown>;
   getListing(path: string, maxAge?: false | number): Promise<unknown>;
   validate(value: object): { valid?: boolean };
   remove(path: string): Promise<unknown>;
+}
+const bannerDataRe =
+  /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i;
+const maxBannerBytes = 1_500_000;
+/** Writes an uploaded banner into the band's public folder; returns public page fields. */
+export async function publishPublicBanner(
+  publicClient: Client,
+  slug: string,
+  dataUrl: string,
+) {
+  if (!publicClient.storeFile) return undefined;
+  const match = bannerDataRe.exec(dataUrl.trim());
+  if (!match) return undefined;
+  const body = Uint8Array.from(atob(match[2]), (c) => c.charCodeAt(0));
+  if (body.byteLength > maxBannerBytes) return undefined;
+  await publicClient.storeFile(match[1], `${slug}/banner`, body);
+  return { banner: "banner" as const, bannerType: match[1] };
+}
+function publicPageFields(
+  current: Band,
+  banner?: Pick<PublicPage, "banner" | "bannerType">,
+): PublicPage {
+  const profile = current.publicProfile;
+  const page: PublicPage = {
+    name: current.name,
+    gigs: {},
+    ...(current.locale ? { locale: current.locale } : {}),
+  };
+  const bio = profile?.bio?.trim();
+  if (bio) page.bio = bio.slice(0, 5000);
+  if (profile?.theme && Object.keys(profile.theme).length)
+    page.theme = profile.theme;
+  if (profile?.contact && Object.values(profile.contact).some(Boolean))
+    page.contact = {
+      ...(profile.contact.email?.trim()
+        ? { email: profile.contact.email.trim() }
+        : {}),
+      ...(profile.contact.phone?.trim()
+        ? { phone: profile.contact.phone.trim() }
+        : {}),
+      ...(profile.contact.website?.trim()
+        ? { website: profile.contact.website.trim() }
+        : {}),
+    };
+  if (banner?.banner) {
+    page.banner = banner.banner;
+    if (banner.bannerType) page.bannerType = banner.bannerType;
+  }
+  return page;
 }
 function safeId(value: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid ID");
@@ -867,11 +982,28 @@ export function createShowday(client: Client, publicClient?: Client) {
   /** Store band metadata separately from the individual public gig records. */
   async function publishPage(current: Band) {
     if (!publicClient || !current.slug) return;
-    await publicClient.storeObject("publicPage", `${current.slug}/page`, {
-      name: current.name,
-      ...(current.locale ? { locale: current.locale } : {}),
-      gigs: {},
-    });
+    const slug = current.slug;
+    const existing = (await publicClient.getObject(`${slug}/page`)) as
+      | PublicPage
+      | undefined;
+    const profile = current.publicProfile;
+    let banner: Pick<PublicPage, "banner" | "bannerType"> | undefined;
+    if (profile?.bannerDataUrl === "") {
+      await publicClient.remove(`${slug}/banner`).catch(() => {});
+    } else if (profile?.bannerDataUrl) {
+      banner = await publishPublicBanner(
+        publicClient,
+        slug,
+        profile.bannerDataUrl,
+      );
+    } else if (existing?.banner) {
+      banner = { banner: existing.banner, bannerType: existing.bannerType };
+    }
+    await publicClient.storeObject(
+      "publicPage",
+      `${slug}/page`,
+      publicPageFields(current, banner),
+    );
   }
   const publications = new Map<string, Promise<void>>();
   async function queuePublication(bandId: string, work: () => Promise<void>) {
@@ -917,6 +1049,7 @@ export function createShowday(client: Client, publicClient?: Client) {
       (await publicClient.getObject(pagePath)) ??
       (fresh ? await publicClient.getObject(pagePath, 0) : undefined);
     if (page) await publicClient.remove(pagePath);
+    await publicClient.remove(`${slug}/banner`).catch(() => {});
     return fresh && ids.length === 0 && !page;
   }
   async function list<K extends Exclude<Kind, "band">>(

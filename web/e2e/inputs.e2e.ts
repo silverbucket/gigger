@@ -33,7 +33,7 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   page,
   account,
 }) => {
-  await go(page, "band/settings");
+  await go(page, "settings");
   const currency = page.getByLabel(/^Band currency/);
   const save = page.getByRole("button", { name: "Save currency", exact: true });
   for (const value of ["CZ", "123", "C3"]) {

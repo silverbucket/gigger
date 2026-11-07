@@ -4,6 +4,7 @@ export const screens = [
   "contacts",
   "bands",
   "band",
+  "settings",
 ] as const;
 export type Screen = (typeof screens)[number];
 
