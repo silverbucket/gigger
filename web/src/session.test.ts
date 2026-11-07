@@ -311,7 +311,7 @@ test("a logout leaves the cache marked as its account's until the cleanup has de
   }
 });
 
-test("a revoked or out-of-scope token sends the user to log in again, not to check their connection", async () => {
+test("a revoked token sends the user to log in again, not to check their connection", async () => {
   await whenSessionReady();
   const page = browser(async () => new Response(null));
   let resets = 0;
@@ -356,6 +356,44 @@ test("a revoked or out-of-scope token sends the user to log in again, not to che
     disconnect.mockRestore();
     signOutQuietly();
     ui.notice = "";
+    page.restore();
+  }
+});
+
+test("a 403 on another module's folder does not end the session", async () => {
+  await whenSessionReady();
+  const page = browser();
+  let resets = 0;
+  const unwatch = watchSession(() => {
+    resets++;
+  });
+  const disconnect = spyOn(storage, "disconnect");
+  try {
+    signIn();
+    const sync = storage.sync as {
+      handleResponse: (
+        path: string,
+        action: string,
+        response: { statusCode: number },
+      ) => Promise<boolean>;
+    };
+    expect(sync).toBeDefined();
+    await expect(
+      sync.handleResponse("/gigger/", "get", { statusCode: 403 }),
+    ).rejects.toThrow("HTTP response code 403 received.");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ui.notice).toBe("");
+    expect(resets).toBe(0);
+    expect(page.path).not.toBe("/login");
+    expect(storage.remote.connected).toBe(true);
+    expect(storage.remote.token).toBe("session-token");
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(page.requests).toHaveLength(0);
+  } finally {
+    unwatch();
+    disconnect.mockRestore();
+    signOutQuietly();
     page.restore();
   }
 });
