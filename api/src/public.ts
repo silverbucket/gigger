@@ -12,7 +12,10 @@ import {
   socialPlatforms,
 } from "@showday/schemas";
 import { resolveAppOrigin } from "./app-origin";
-import { armadiettoStorageHeaders } from "./storage";
+import {
+  armadiettoPublicStorageHeaders,
+  armadiettoStorageHeaders,
+} from "./storage";
 import { zip } from "./zip";
 
 type Row = PublicGig & { id: string };
@@ -598,12 +601,16 @@ export function publicHandler(
   );
   const storageUrl = (username: string, path: string) =>
     `${armadiettoUrl}/storage/storage/${encodeURIComponent(username)}/${path}`;
+  const publicStorageHeaders = armadiettoPublicStorageHeaders(appOrigin);
   async function loadBanner(slug: string) {
     const row = owner.get(slug);
     if (!row) return null;
     const response = await fetch(
       storageUrl(row.username, `public/${STORAGE_MODULE_SLUG}/${slug}/banner`),
-      { signal: AbortSignal.timeout(10000) },
+      {
+        headers: publicStorageHeaders,
+        signal: AbortSignal.timeout(10000),
+      },
     );
     if (!response.ok) return null;
     const body = await response.arrayBuffer();
@@ -617,7 +624,10 @@ export function publicHandler(
     if (!row) return null;
     const response = await fetch(
       storageUrl(row.username, `public/${STORAGE_MODULE_SLUG}/${slug}/page`),
-      { signal: AbortSignal.timeout(10000) },
+      {
+        headers: publicStorageHeaders,
+        signal: AbortSignal.timeout(10000),
+      },
     );
     if (!response.ok) return null;
     const metadata = await response.json();
