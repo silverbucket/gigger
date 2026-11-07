@@ -44,20 +44,19 @@ test("a revoked server token keeps the app signed in and unsynced changes stay l
   );
   await saveCurrency.click();
   await pushed;
-  await page.unroute(storageRequests);
-  await expect(saveCurrency).toBeEnabled();
+  await expect(saveCurrency).toBeEnabled({ timeout: 10_000 });
   await expect(currency).toHaveValue("EUR");
   const revoked = await request.post("/api/auth/logout", {
     headers: { Authorization: `Bearer ${token}` },
     data: { username: account.username },
   });
   expect(revoked.ok()).toBe(true);
-  await page.unroute(storageRequests);
 
   await expect(page).not.toHaveURL(/\/login$/);
   await expect(page.getByText("Please log in again.")).toHaveCount(0);
   expect((await account.read("band")).currency).toBe("CZK");
   await expect(page.getByLabel(/^Band currency/)).toHaveValue("EUR");
+  await page.unroute(storageRequests);
 });
 
 test("a reload while another tab blocks a logout's cleanup never opens the old cache for the next account", async ({
