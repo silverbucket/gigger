@@ -395,20 +395,18 @@ test("a deferred watch cursor from a dying session cannot overwrite check-inbox-
       0,
     );
     await until(
-      () => sockethub.sockets.length >= 2,
-      "catch-up reconnect",
-      10000,
-    );
-    await until(
       () =>
-        [...sockethub.received]
-          .reverse()
-          .find((r) => r.payload.type === "watch")?.payload.object?.cursor
-          ?.uid === 0,
-      "watch from uid 0",
+        sockethub.received
+          .filter((r) => r.payload.type === "watch")
+          .some(
+            (r) =>
+              (r.payload.object as { cursor?: { uid?: number } })?.cursor
+                ?.uid === 0,
+          ),
+      "catch-up watch from uid 0",
       10000,
     );
-    await Bun.sleep(50);
+    await Bun.sleep(100);
     expect(accounts.get("sam", "band1")?.cursor?.uid).not.toBe(99);
   } finally {
     await watchers.stopAll();
@@ -525,6 +523,87 @@ test("check inbox now without a saved cursor starts a rescan from uid 0", async 
       "rescan watch from uid 0",
       10000,
     );
+  } finally {
+    await watchers.stopAll();
+    sockethub.stop();
+    storage.stop();
+    db.close();
+  }
+}, 20000);
+
+test("rescan watch acknowledgment waits for stored catch-up mail", async () => {
+  const sockethub = stubSockethub();
+  const storage = fakeStorage();
+  const db = openDatabase(":memory:");
+  const accounts = emailAccounts(db);
+  accounts.put({
+    username: "sam",
+    bandId: "band1",
+    settings: {
+      address: "band@example.com",
+      imapHost: "imap.example.com",
+      imapPort: 993,
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      login: "band@example.com",
+      password: "mail-secret",
+    },
+    storageToken: "server-token",
+    cursor: { uidValidity: "1", uid: 10 },
+  });
+  const messages = messageHandler(
+    db,
+    {
+      email: { send: async () => {} },
+      messenger: { send: async () => {} },
+      instagram: { send: async () => {} },
+    },
+    storage.server.url.origin,
+  );
+  const watchers = mailboxWatchers(accounts, messages, {
+    armadiettoUrl: storage.server.url.origin,
+    sockethubUrl: await sockethub.start(),
+    minDelayMs: 50,
+    maxDelayMs: 200,
+  });
+  try {
+    watchers.startAll();
+    await until(() => sockethub.received.length >= 3, "first session");
+    accounts.cursor("sam", "band1", undefined);
+    watchers.checkNow("sam", "band1");
+    await until(
+      () =>
+        sockethub.received
+          .filter((r) => r.payload.type === "watch")
+          .some(
+            (r) =>
+              (r.payload.object as { cursor?: { uid?: number } })?.cursor
+                ?.uid === 0,
+          ),
+      "rescan watch",
+      10000,
+    );
+    storage.state.broken = true;
+    sockethub.push({
+      type: "post",
+      actor: { id: "kim@example.com", type: "person" },
+      object: {
+        type: "message",
+        id: "email:band%40example.com:INBOX:1:7",
+        content: "Before cursor",
+        published: "2025-03-02T10:00:00.000Z",
+      },
+    });
+    sockethub.push({
+      type: "watch",
+      object: {
+        type: "subscription",
+        folder: "INBOX",
+        cursor: { uidValidity: "1", uid: 50 },
+      },
+    });
+    await Bun.sleep(100);
+    expect(accounts.get("sam", "band1")?.cursor?.uid).not.toBe(50);
   } finally {
     await watchers.stopAll();
     sockethub.stop();

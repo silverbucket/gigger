@@ -229,6 +229,15 @@ export function mailboxWatchers(
       let chain = Promise.resolve();
       let unstored = false;
       const sessionLive = () => run.activeSession === sessionId;
+      const scheduleCursor = (
+        cursor: NonNullable<NonNullable<MailPost["object"]>["cursor"]>,
+      ) => {
+        chain = chain.then(() => {
+          if (!sessionLive()) return;
+          if (unstored) return ended(new Error("storage unavailable"));
+          accounts.cursor(account.username, account.bandId, cursor);
+        });
+      };
       sc.socket.on("message", (activity: MailPost) => {
         if (!sessionLive()) return;
         if (
@@ -258,11 +267,7 @@ export function mailboxWatchers(
           if (activity.error) return ended(new Error(activity.error));
           const cursor = activity.object?.cursor;
           if (!cursor) return;
-          chain = chain.then(() => {
-            if (!sessionLive()) return;
-            if (unstored) return ended(new Error("storage unavailable"));
-            accounts.cursor(account.username, account.bandId, cursor);
-          });
+          scheduleCursor(cursor);
           return;
         }
         if (activity.type === "disconnect")
@@ -308,12 +313,7 @@ export function mailboxWatchers(
           actor,
           object: { folder: "INBOX", cursor: fromStart },
         });
-        if (rescanned.object?.cursor)
-          accounts.cursor(
-            account.username,
-            account.bandId,
-            rescanned.object.cursor,
-          );
+        if (rescanned.object?.cursor) scheduleCursor(rescanned.object.cursor);
       } else if (watched.object?.cursor) {
         accounts.cursor(
           account.username,

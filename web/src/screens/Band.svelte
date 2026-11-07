@@ -374,6 +374,9 @@ async function savePublicPage(event: SubmitEvent) {
       ...(locale ? { locale } : {}),
       ...(savedProfile ? { publicProfile: savedProfile } : {}),
     };
+    if (previous.slug && previous.slug !== slug) {
+      await bands.queueOldSlugCleanup(previous.id, previous.slug);
+    }
     await publishUntilLive(slug, async () => {
       await api(
         "/api/public/pages",
@@ -383,9 +386,6 @@ async function savePublicPage(event: SubmitEvent) {
       await bands.save("band", previous.id, nextBand);
       await bands.publishBand(previous.id, previous.slug, nextBand);
     });
-    if (previous.slug && previous.slug !== slug) {
-      await bands.queueOldSlugCleanup(previous.id, previous.slug);
-    }
     pageLive = true;
     slugDirty = false;
     profileDraft = null;
