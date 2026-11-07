@@ -24,5 +24,8 @@ export function openDatabase(
   db.exec(
     "CREATE TABLE IF NOT EXISTS email_accounts (username TEXT NOT NULL, band_id TEXT NOT NULL, address TEXT NOT NULL, settings TEXT NOT NULL, storage_token TEXT NOT NULL, cursor TEXT, error TEXT, PRIMARY KEY (username, band_id))",
   );
+  try {
+    db.exec("ALTER TABLE email_accounts ADD COLUMN last_mail_at TEXT");
+  } catch {}
   return db;
 }

@@ -4,6 +4,7 @@ import { resolveAppOrigin } from "./app-origin";
 import {
   type EmailAccount,
   type EmailAccounts,
+  type InboxWatchStatus,
   receiveCredentials,
 } from "./email";
 import type { Messages } from "./messages";
@@ -168,12 +169,18 @@ export function mailboxWatchers(
     wake?: () => void;
     client?: SockethubClient;
     done: Promise<void>;
+    phase: InboxWatchStatus["phase"];
   };
   const runs = new Map<string, Run>();
   const key = (username: string, bandId: string) => `${username}/${bandId}`;
+  const setPhase = (id: string, phase: InboxWatchStatus["phase"]) => {
+    const run = runs.get(id);
+    if (run) run.phase = phase;
+  };
 
   /** Connects, watches and stores mail until the session ends; resolves with the failure reason. */
   async function session(run: Run, account: EmailAccount) {
+    setPhase(`${account.username}/${account.bandId}`, "connecting");
     const sc = await SockethubClient.connect(sockethubUrl, {
       initTimeoutMs: 10000,
     });
@@ -212,6 +219,11 @@ export function mailboxWatchers(
           chain = chain.then(async () => {
             try {
               await messages.save(store, account.username, message);
+              accounts.lastMail(
+                account.username,
+                account.bandId,
+                message.received ?? message.published,
+              );
             } catch (error) {
               unstored = true;
               log(`Could not store mail for ${account.username}`, error);
@@ -265,6 +277,7 @@ export function mailboxWatchers(
           watched.object.cursor,
         );
       accounts.error(account.username, account.bandId, null);
+      setPhase(`${account.username}/${account.bandId}`, "watching");
       return await ending;
     } finally {
       run.client = undefined;
@@ -295,6 +308,7 @@ export function mailboxWatchers(
       }
       // A session that held for a while earns a fresh backoff; quick failures back off further each time.
       attempt = Date.now() - started > 60000 ? 0 : attempt + 1;
+      setPhase(id, "retrying");
       const delay = Math.min(maxDelay, minDelay * 2 ** Math.min(attempt, 20));
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, delay + Math.random() * delay * 0.2);
@@ -310,7 +324,7 @@ export function mailboxWatchers(
   function start(username: string, bandId: string) {
     const id = key(username, bandId);
     if (runs.has(id)) return;
-    const run = { stopped: false } as Run;
+    const run = { stopped: false, phase: "connecting" } as Run;
     run.done = loop(id, run);
     runs.set(id, run);
   }
@@ -338,6 +352,21 @@ export function mailboxWatchers(
     },
     watching: (username: string, bandId: string) =>
       runs.has(key(username, bandId)),
+    checkNow(username: string, bandId: string) {
+      const id = key(username, bandId);
+      runs.get(id)?.wake?.();
+    },
+    status(username: string, bandId: string): InboxWatchStatus {
+      const id = key(username, bandId);
+      const run = runs.get(id);
+      if (run) return { phase: run.phase, live: true };
+      const account = accounts.get(username, bandId);
+      if (!account?.settings.imapHost) return { phase: "idle", live: false };
+      return {
+        phase: account.error ? "retrying" : "idle",
+        live: false,
+      };
+    },
     async stopAll() {
       await Promise.all(
         [...runs.keys()].map((id) => {

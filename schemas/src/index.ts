@@ -97,10 +97,11 @@ export interface Gig {
 /** yes = available, no = can't make it, maybe = asked, no reply yet. */
 export const availabilityValues = ["yes", "no", "maybe"] as const;
 export type Availability = (typeof availabilityValues)[number];
-/** A conversation the band marked as not a booking; it returns to sort when a newer message arrives. */
+/** A reviewed inbox decision, kept for as long as the band keeps its storage. */
 export interface Triage {
   id: string;
-  status: "archived";
+  /** Not a booking; new mail after `at` returns the thread to To sort. */
+  status: "archived" | "discarded";
   at: string;
 }
 export interface Venue {
@@ -867,10 +868,10 @@ export const schemas = {
     },
     ["name"],
   ),
-  triage: object({ status: { enum: ["archived"] }, at: dateTime }, [
-    "status",
-    "at",
-  ]),
+  triage: object(
+    { status: { enum: ["archived", "discarded"] }, at: dateTime },
+    ["status", "at"],
+  ),
 };
 export type Kind = keyof Records;
 export interface Client {
@@ -1232,15 +1233,32 @@ export function createShowday(client: Client, publicClient?: Client) {
       }
     },
     /** Rewrites every public copy for the band; call after changing its slug. */
-    async publishBand(bandId: string, previousSlug?: string) {
+    async publishBand(bandId: string, previousSlug?: string, band?: Band) {
       await queuePublication(bandId, async () => {
-        const current = await publicBand(bandId);
-        if (!current?.slug) return;
+        const current = band ?? (await publicBand(bandId));
+        if (!current?.slug) {
+          throw new Error(
+            "Could not publish the page. Save the address and retry.",
+          );
+        }
         if (previousSlug && previousSlug !== current.slug)
           await removePublic(previousSlug);
         for (const gig of await list("gig", bandId))
           await publishGig(current.slug, bandId, gig);
         await publishPage(current);
+      });
+    },
+    /** Removes the public copy and clears the band slug. */
+    async unpublishBand(bandId: string) {
+      await queuePublication(bandId, async () => {
+        const current = await publicBand(bandId);
+        if (!current?.slug) return;
+        await removePublic(current.slug);
+        const { slug: _, ...rest } = current;
+        await client.storeObject("band", recordPath("band", bandId), {
+          ...rest,
+          id: bandId,
+        });
       });
     },
     async save<K extends Kind>(kind: K, bandId: string, value: Records[K]) {
@@ -1421,6 +1439,71 @@ export function createShowday(client: Client, publicClient?: Client) {
     },
     async unarchiveConversation(bandId: string, conversationId: string) {
       await client.remove(recordPath("triage", bandId, conversationId));
+    },
+    /** Hides a conversation that does not belong in the inbox; purged after 30 days. */
+    async discardConversation(
+      bandId: string,
+      conversationId: string,
+      at = new Date().toISOString(),
+    ) {
+      await client.storeObject(
+        "triage",
+        recordPath("triage", bandId, conversationId),
+        { id: conversationId, status: "discarded", at },
+      );
+    },
+    async undiscardConversation(bandId: string, conversationId: string) {
+      await client.remove(recordPath("triage", bandId, conversationId));
+    },
+    async dropConversationMessages(conversationId: string) {
+      const root = `conversations/${safeId(conversationId)}/`;
+      const months = Object.keys((await client.getListing(root)) ?? {}).filter(
+        (key) => /^\d{4}-\d{2}\/$/.test(key),
+      );
+      for (const month of months) {
+        const items = (await client.getListing(root + month)) ?? {};
+        for (const name of Object.keys(items)) {
+          if (!/^[A-Za-z0-9_-]+$/.test(name)) continue;
+          const path = root + month + name;
+          const value = await client.getObject(path);
+          if (value && typeof value === "object") {
+            const message = valid<Message>("message", value);
+            const attached = message.object.attachment ?? [];
+            for (let n = 0; n < attached.length; n++)
+              await client.remove(attachmentPath(message, n)).catch(() => {});
+          }
+          await client.remove(path);
+        }
+      }
+    },
+    async dropConversation(conversationId: string) {
+      const stored = await client.getObject(conversationsPath);
+      if (!stored || typeof stored !== "object") return;
+      const { "@context": _, ...index } = stored as Record<string, unknown>;
+      if (!(conversationId in index)) return;
+      delete index[conversationId];
+      await client.storeObject("conversations", conversationsPath, index);
+    },
+    /** Deletes discarded conversations older than 30 days; reviewed threads are left alone. */
+    async purgeExpiredDiscarded(now = Date.now()) {
+      const cutoff = new Date(now - 30 * day).toISOString();
+      const index = await this.conversations();
+      const folders = await client.getListing("bands/");
+      for (const key of Object.keys(folders ?? {}).filter((k) =>
+        k.endsWith("/"),
+      )) {
+        const bandId = key.slice(0, -1);
+        const gigs = await list("gig", bandId);
+        for (const mark of await list("triage", bandId)) {
+          if (mark.status !== "discarded" || mark.at >= cutoff) continue;
+          if (gigs.some((gig) => gig.conversationId === mark.id)) continue;
+          const lastIn = index[mark.id]?.lastIn;
+          if (lastIn && lastIn > mark.at) continue;
+          await this.dropConversationMessages(mark.id);
+          await this.dropConversation(mark.id);
+          await client.remove(recordPath("triage", bandId, mark.id));
+        }
+      }
     },
     /** Removes a contact no gig or other band links to. */
     async removeContact(bandId: string, contactId: string) {

@@ -744,5 +744,53 @@ export function publicHandler(
       claim(username, bandId, slug);
       return Response.json({ slug }, { headers: noStore });
     },
+    /** DELETE /public/pages {username, bandId} with the account's storage token. */
+    async unclaim(req: Request) {
+      const noStore = { "Cache-Control": "no-store" };
+      const fail = (error: string, status: number) =>
+        Response.json({ error }, { status, headers: noStore });
+      if (req.headers.get("origin") && req.headers.get("origin") !== appOrigin)
+        return fail("Invalid request origin.", 403);
+      let input: Record<string, unknown>;
+      try {
+        input = await req.json();
+      } catch {
+        return fail("Invalid request.", 400);
+      }
+      const { username, bandId } = input ?? {};
+      const token = req.headers.get("authorization")?.replace(/^Bearer /, "");
+      if (
+        typeof username !== "string" ||
+        !/^[a-z0-9][a-z0-9._-]{1,63}$/.test(username) ||
+        typeof bandId !== "string" ||
+        !/^[A-Za-z0-9_-]+$/.test(bandId) ||
+        !token
+      )
+        return fail("Invalid request.", 400);
+      try {
+        const check = await fetch(
+          storageUrl(username, `${STORAGE_MODULE_SLUG}/bands/${bandId}/band`),
+          {
+            headers: armadiettoStorageHeaders(token, appOrigin),
+            signal: AbortSignal.timeout(10000),
+          },
+        );
+        if (!check.ok)
+          return fail(
+            check.status === 403
+              ? "Could not reach your band data. Please retry."
+              : "Could not verify access to this band. Please retry.",
+            check.status === 401 || check.status === 403 || check.status === 404
+              ? 403
+              : 503,
+          );
+      } catch {
+        return fail("Storage service unavailable. Please retry.", 503);
+      }
+      db.query(
+        "DELETE FROM public_pages WHERE username = ? AND band_id = ?",
+      ).run(username, bandId);
+      return Response.json({ ok: true }, { headers: noStore });
+    },
   };
 }

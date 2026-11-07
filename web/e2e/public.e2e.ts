@@ -32,8 +32,13 @@ test("publishing a page copies only public gig fields and the page serves them",
   });
   await publish.click();
   await expect(
+    page.getByRole("button", { name: "Save", exact: true }),
+  ).toBeVisible({
+    timeout: 30000,
+  });
+  await expect(
     page.getByRole("link", { name: "Open page", exact: true }),
-  ).toBeVisible({ timeout: 30000 });
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Open page", exact: true }),
   ).toHaveAttribute("href", `${new URL(page.url()).origin}/b/${slug}`);

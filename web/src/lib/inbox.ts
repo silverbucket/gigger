@@ -130,7 +130,7 @@ export function contactFromSender(conversation: Conversation): Contact {
   };
 }
 
-export type InboxState = "toSort" | "converted" | "archived";
+export type InboxState = "toSort" | "converted" | "archived" | "discarded";
 export interface InboxItem {
   id: string;
   conversation: Conversation;
@@ -152,13 +152,20 @@ export function inboxItems(
     .filter(([, c]) => bandIds.includes(c.bandId))
     .map(([id, conversation]) => {
       const gig = gigs.find((g) => g.conversationId === id);
-      const archived = triage.find((t) => t.id === id);
-      // A message that arrives after it was set aside puts it back to sort.
+      const mark = triage.find((t) => t.id === id);
+      const lastIn = conversation.lastIn ?? "";
+      // A message that arrives after a review or discard decision puts it back to sort.
       const state: InboxState = gig
         ? "converted"
-        : archived && (conversation.lastIn ?? "") <= archived.at
-          ? "archived"
-          : "toSort";
+        : mark?.status === "discarded"
+          ? lastIn > mark.at
+            ? "toSort"
+            : "discarded"
+          : mark?.status === "archived"
+            ? lastIn <= mark.at
+              ? "archived"
+              : "toSort"
+            : "toSort";
       return { id, conversation, state, gig, latest: latestAt(conversation) };
     })
     .sort((a, b) => b.latest.localeCompare(a.latest));
