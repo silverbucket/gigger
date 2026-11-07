@@ -14,7 +14,13 @@ import {
   receiveCredentials,
   sendCredentials,
 } from "../src/email";
-import { friendlyMailError, fromMail, textFromHtml } from "../src/mailbox";
+import {
+  friendlyMailError,
+  fromMail,
+  mailRecipients,
+  normalizeMailAddress,
+  textFromHtml,
+} from "../src/mailbox";
 import { messageHandler } from "../src/messages";
 import { handler } from "../src/server";
 
@@ -264,6 +270,52 @@ test("a Sockethub post becomes a stored message; our own copies and junk are ski
     "Mail server problem (odd-thing).",
   );
   expect(friendlyMailError("plain")).toBe("plain");
+});
+
+test("mail recipients recognise Sockethub envelope addresses and mailto ids", () => {
+  expect(normalizeMailAddress("Booking Team <booking@example.com>")).toBe(
+    "booking@example.com",
+  );
+  expect(normalizeMailAddress("mailto:Booking@Example.com")).toBe(
+    "booking@example.com",
+  );
+  const booking = "booking@tablemountainstringband.com";
+  const aliasAccount = {
+    bandId: "b",
+    settings: {
+      address: "shared@example.com",
+      imapPort: 993,
+      smtpHost: "s",
+      smtpPort: 587,
+      login: "l",
+      password: "p",
+      inboxAddress: booking,
+    },
+  };
+  expect(
+    fromMail(aliasAccount, {
+      type: "post",
+      actor: { id: "promoter@example.com" },
+      object: {
+        id: "m1",
+        to: [{ name: "Booking", address: booking }],
+        cc: [{ address: "other@example.com", name: "CC" }],
+      },
+    }),
+  ).toMatchObject({ actor: { id: "promoter@example.com" } });
+  expect(
+    fromMail(aliasAccount, {
+      type: "post",
+      actor: { id: "promoter@example.com" },
+      object: { id: "m2", to: [{ address: "shared@example.com" }] },
+    }),
+  ).toBeNull();
+  expect(
+    mailRecipients({
+      to: [{ address: booking }],
+      object: { cc: "Promoter <promoter@example.com>" },
+    }),
+  ).toEqual(["booking@tablemountainstringband.com", "promoter@example.com"]);
 });
 
 /** Just enough remoteStorage for the handler's permission checks, plus the account service hooks. */

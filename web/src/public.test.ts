@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  type Band,
   type Gig,
   PAGE_THEME_PRESETS,
   publicGig,
@@ -349,6 +350,30 @@ test("uncached offline removals are queued and retried without deleting a reconf
     await store.retryPublicDeletes();
     expect(await getObject("band/gigs/h")).toBeTruthy();
     expect(await store.pendingDeletes()).toHaveLength(0);
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("old slug cleanup is queued before the band record switches slug", async () => {
+  const storage = new RemoteStorage();
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "old" });
+    await store.queueOldSlugCleanup("a", "old");
+    expect(await store.pendingDeletes()).toHaveLength(1);
+    await store.save("band", "a", { id: "a", name: "Band", slug: "new" });
+    expect(((await privateClient.getObject("bands/a/band")) as Band).slug).toBe(
+      "new",
+    );
+    expect(await store.pendingDeletes()).toHaveLength(1);
   } finally {
     storage.stopSync();
   }

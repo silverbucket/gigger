@@ -35,13 +35,26 @@ interface MailPost {
     cc?: unknown;
   };
 }
+/** Pulls a normalised address out of mailto ids, `Name <email>` strings, or plain emails. */
+export function normalizeMailAddress(value: string): string | undefined {
+  let email = value.trim();
+  if (!email) return undefined;
+  if (/^mailto:/i.test(email)) email = email.slice(7).trim();
+  const angle = /<([^>]+@[^>]+)>/.exec(email);
+  if (angle) email = angle[1].trim();
+  email = email
+    .replace(/^["']|["']$/g, "")
+    .trim()
+    .toLowerCase();
+  return email.includes("@") ? email : undefined;
+}
 /** Normalised recipient addresses from a Sockethub mail activity. */
 export function mailRecipients(item: MailPost): string[] {
-  const found: string[] = [];
+  const found = new Set<string>();
   const add = (value: unknown) => {
     if (typeof value === "string") {
-      const email = value.trim().toLowerCase();
-      if (email.includes("@")) found.push(email);
+      const email = normalizeMailAddress(value);
+      if (email) found.add(email);
       return;
     }
     if (Array.isArray(value)) {
@@ -49,15 +62,16 @@ export function mailRecipients(item: MailPost): string[] {
       return;
     }
     if (value && typeof value === "object") {
-      const id = (value as { id?: string }).id;
-      if (typeof id === "string") add(id);
+      const entry = value as { id?: string; address?: string };
+      if (typeof entry.address === "string") add(entry.address);
+      else if (typeof entry.id === "string") add(entry.id);
     }
   };
   add(item.to);
   add(item.cc);
   add(item.object?.to);
   add(item.object?.cc);
-  return found;
+  return [...found];
 }
 const mailIdRe = /^[^\r\n]{1,998}$/;
 const mailId = (value: unknown) =>
@@ -170,6 +184,10 @@ export function mailboxWatchers(
     client?: SockethubClient;
     done: Promise<void>;
     phase: InboxWatchStatus["phase"];
+    catchUp?: boolean;
+    /** After check inbox now without a saved cursor: learn uidValidity, then watch from uid 0. */
+    rescanWithoutCursor?: boolean;
+    activeSession?: string;
   };
   const runs = new Map<string, Run>();
   const key = (username: string, bandId: string) => `${username}/${bandId}`;
@@ -180,6 +198,8 @@ export function mailboxWatchers(
 
   /** Connects, watches and stores mail until the session ends; resolves with the failure reason. */
   async function session(run: Run, account: EmailAccount) {
+    const sessionId = crypto.randomUUID();
+    run.activeSession = sessionId;
     setPhase(`${account.username}/${account.bandId}`, "connecting");
     const sc = await SockethubClient.connect(sockethubUrl, {
       initTimeoutMs: 10000,
@@ -208,7 +228,18 @@ export function mailboxWatchers(
       // Posts are stored in arrival order; a failed write holds the cursor back so the catch-up refetches it.
       let chain = Promise.resolve();
       let unstored = false;
+      const sessionLive = () => run.activeSession === sessionId;
+      const scheduleCursor = (
+        cursor: NonNullable<NonNullable<MailPost["object"]>["cursor"]>,
+      ) => {
+        chain = chain.then(() => {
+          if (!sessionLive()) return;
+          if (unstored) return ended(new Error("storage unavailable"));
+          accounts.cursor(account.username, account.bandId, cursor);
+        });
+      };
       sc.socket.on("message", (activity: MailPost) => {
+        if (!sessionLive()) return;
         if (
           !activity?.["@context"]?.some((c) => c.includes("/platform/email/"))
         )
@@ -217,6 +248,7 @@ export function mailboxWatchers(
           const message = fromMail(account, activity);
           if (!message) return;
           chain = chain.then(async () => {
+            if (!sessionLive()) return;
             try {
               await messages.save(store, account.username, message);
               accounts.lastMail(
@@ -235,10 +267,7 @@ export function mailboxWatchers(
           if (activity.error) return ended(new Error(activity.error));
           const cursor = activity.object?.cursor;
           if (!cursor) return;
-          chain = chain.then(() => {
-            if (unstored) return ended(new Error("storage unavailable"));
-            accounts.cursor(account.username, account.bandId, cursor);
-          });
+          scheduleCursor(cursor);
           return;
         }
         if (activity.type === "disconnect")
@@ -261,25 +290,38 @@ export function mailboxWatchers(
         type: "connect",
         actor,
       });
+      const fresh = accounts.get(account.username, account.bandId) ?? account;
       const watched = await emit(sc, "message", {
         "@context": context,
         type: "watch",
         actor,
         object: {
           folder: "INBOX",
-          ...(account.cursor ? { cursor: account.cursor } : {}),
+          ...(fresh.cursor ? { cursor: fresh.cursor } : {}),
         },
       });
-      if (watched.object?.cursor)
-        accounts.cursor(
-          account.username,
-          account.bandId,
-          watched.object.cursor,
-        );
+      if (run.rescanWithoutCursor && watched.object?.cursor) {
+        const fromStart = {
+          uidValidity: watched.object.cursor.uidValidity,
+          uid: 0,
+        };
+        accounts.cursor(account.username, account.bandId, fromStart);
+        run.rescanWithoutCursor = false;
+        const rescanned = await emit(sc, "message", {
+          "@context": context,
+          type: "watch",
+          actor,
+          object: { folder: "INBOX", cursor: fromStart },
+        });
+        if (rescanned.object?.cursor) scheduleCursor(rescanned.object.cursor);
+      } else if (watched.object?.cursor) {
+        scheduleCursor(watched.object.cursor);
+      }
       accounts.error(account.username, account.bandId, null);
       setPhase(`${account.username}/${account.bandId}`, "watching");
       return await ending;
     } finally {
+      if (run.activeSession === sessionId) run.activeSession = undefined;
       run.client = undefined;
       sc.socket.disconnect();
     }
@@ -305,6 +347,11 @@ export function mailboxWatchers(
             accounts.error(username, bandId, friendlyMailError(error));
           } catch {}
         log(`Mailbox watch for ${id} ended: ${error}`);
+      }
+      if (run.catchUp) {
+        run.catchUp = false;
+        attempt = 0;
+        continue;
       }
       // A session that held for a while earns a fresh backoff; quick failures back off further each time.
       attempt = Date.now() - started > 60000 ? 0 : attempt + 1;
@@ -354,7 +401,31 @@ export function mailboxWatchers(
       runs.has(key(username, bandId)),
     checkNow(username: string, bandId: string) {
       const id = key(username, bandId);
-      runs.get(id)?.wake?.();
+      const account = accounts.get(username, bandId);
+      const rescanWithoutCursor = !account?.cursor?.uidValidity;
+      if (account?.cursor?.uidValidity) {
+        accounts.cursor(username, bandId, {
+          uidValidity: account.cursor.uidValidity,
+          uid: 0,
+        });
+      } else if (account) {
+        accounts.cursor(username, bandId, undefined);
+      }
+      const run = runs.get(id);
+      if (!run) {
+        const pending = {
+          stopped: false,
+          phase: "connecting",
+          ...(rescanWithoutCursor ? { rescanWithoutCursor: true } : {}),
+        } as Run;
+        pending.done = loop(id, pending);
+        runs.set(id, pending);
+        return;
+      }
+      if (rescanWithoutCursor) run.rescanWithoutCursor = true;
+      run.catchUp = true;
+      run.client?.socket.disconnect();
+      run.wake?.();
     },
     status(username: string, bandId: string): InboxWatchStatus {
       const id = key(username, bandId);
