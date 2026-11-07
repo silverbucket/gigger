@@ -31,10 +31,9 @@ import {
   publicPageCouldNotUnpublish,
   publishUntilLive,
 } from "../lib/public-page";
-import { storage } from "../storage";
 import { router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
-import { bands } from "../storage";
+import { bands, storage } from "../storage";
 
 const current = $derived(data.current);
 const band = $derived(current?.band);
