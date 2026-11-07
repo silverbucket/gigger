@@ -9,17 +9,23 @@ import { data } from "./lib/data.svelte";
 import { inboxItems } from "./lib/inbox";
 import { threads } from "./lib/messages.svelte";
 import { router } from "./lib/router.svelte";
-import { run, staleMessage, ui } from "./lib/ui.svelte";
+import {
+  run,
+  staleMessage,
+  syncTroubleMessage,
+  ui,
+  watchSession,
+} from "./lib/ui.svelte";
 import Auth from "./screens/Auth.svelte";
 import Band from "./screens/Band.svelte";
 import Bookings from "./screens/Bookings.svelte";
 import Contacts from "./screens/Contacts.svelte";
 import OtherBands from "./screens/OtherBands.svelte";
 import Venues from "./screens/Venues.svelte";
-import { bands, logout, onSessionLogout, storage } from "./storage";
+import { bands, logout, storage } from "./storage";
 
 let signedIn = $state(false);
-let status = $state("Loading…");
+let loading = $state(true);
 let userAddress = $state("");
 
 const toSort = $derived(
@@ -69,31 +75,30 @@ function resetSession() {
   signedIn = false;
   ui.busy = false;
   ui.error = "";
-  status = "";
+  loading = false;
   userAddress = "";
   data.reset();
   threads.reset();
-  // logout()'s replaceState fires no hashchange, so without this the router
-  // would keep showing whatever record was open when the session ended.
+  // Ending a session clears the URL with replaceState, which fires no
+  // hashchange, so without this the router would keep showing whatever record
+  // was open when the session ended.
   router.read();
 }
 onMount(() => {
-  const unsubscribeLogout = onSessionLogout(resetSession);
+  const unwatchSession = watchSession(resetSession);
   storage.on("ready", () => {
-    status = "";
+    loading = false;
   });
   storage.on("connected", () => {
     signedIn = true;
-    status = "";
+    loading = false;
+    ui.error = "";
+    ui.notice = "";
     userAddress = storage.remote.userAddress;
     if (location.pathname !== "/")
       history.replaceState(null, "", `/${location.hash}`);
     void load();
     void meta.load();
-  });
-  storage.on("error", () => {
-    ui.error =
-      "Could not save or load changes. Please check your connection and try again.";
   });
   storage.on("disconnected", resetSession);
   let changed = false;
@@ -113,7 +118,7 @@ onMount(() => {
     }
   });
   return () => {
-    unsubscribeLogout();
+    unwatchSession();
     storage.removeEventListener("disconnected", resetSession);
     storage.stopSync();
   };
@@ -177,7 +182,7 @@ function choose(bandId: string) {
 </svelte:head>
 
 {#if !signedIn}
-  <Auth {status} onsignedin={load} />
+  <Auth status={ui.notice || (loading ? "Loading…" : "")} onsignedin={load} />
 {:else}
   <div class="shell" class:phone-detail={phoneDetail}>
     {#if ui.phone}
@@ -258,6 +263,9 @@ function choose(bandId: string) {
           Dismiss
         </button>
       </p>
+    {/if}
+    {#if ui.syncTrouble}
+      <p class="notice no-print" role="status">{syncTroubleMessage}</p>
     {/if}
     {#if data.pendingPublicDeletes}
       <p class="notice no-print" role="status">

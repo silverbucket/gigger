@@ -1,4 +1,4 @@
-import { expect, login, test } from "./fixtures";
+import { expect, go, login, test } from "./fixtures";
 
 test("local username login opens the app without an authorization prompt", async ({
   page,
@@ -13,4 +13,141 @@ test("local username login opens the app without an authorization prompt", async
   await page.reload();
   await expect(page.getByLabel("View band")).toBeVisible();
   expect(authorizationRequests).toEqual([]);
+});
+
+test("a session revoked on the server asks to log in again and keeps changes that had not synced", async ({
+  page,
+  request,
+  account,
+}) => {
+  test.slow();
+  await login(page, account);
+  const token = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem("remotestorage:wireclient") ?? "{}")
+        .token as string | undefined,
+  );
+  expect(token).toBeTruthy();
+
+  await go(page, "band/settings");
+  await page.getByLabel(/^Band currency/).fill("EUR");
+  // Storage is down when the change is saved, so it waits in this browser.
+  const storageRequests = "**/storage/storage/**";
+  await page.route(storageRequests, (route) => route.fulfill({ status: 503 }));
+  const pushed = page.waitForRequest(
+    (sent) => sent.method() === "PUT" && sent.url().endsWith("/band"),
+  );
+  await page
+    .getByRole("button", { name: "Save currency", exact: true })
+    .click();
+  await pushed;
+  const revoked = await request.post("/api/auth/logout", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { username: account.username },
+  });
+  expect(revoked.ok()).toBe(true);
+  await page.unroute(storageRequests);
+
+  // The next sync attempt meets the revoked token.
+  await expect(
+    page.getByText("Please log in again.", { exact: true }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText(/connection/i)).toHaveCount(0);
+  expect((await account.read("band")).currency).toBe("CZK");
+
+  // Another storage provider's address, mistyped say, asks before the change
+  // is dropped, and saying no keeps it.
+  let question = "";
+  page.once("dialog", (dialog) => {
+    question = dialog.message();
+    return dialog.dismiss();
+  });
+  await page
+    .getByLabel("Username", { exact: true })
+    .fill("someone@elsewhere.invalid");
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect.poll(() => question).toContain(account.username);
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.getByLabel("Username", { exact: true }).fill(account.username);
+  await page.getByLabel("Password", { exact: true }).fill(account.password);
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(page.getByLabel("View band")).toBeVisible();
+  await expect
+    .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
+    .toBe("EUR");
+  await expect(page.getByText("Please log in again.")).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("a reload while another tab blocks a logout's cleanup never opens the old cache for the next account", async ({
+  page,
+  context,
+  request,
+  account,
+}) => {
+  test.slow();
+  await account.seedGig({ id: "secret", title: "Secret show" });
+  await login(page, account);
+  await go(page, "bookings");
+  await expect(
+    page.getByRole("link", { name: /Secret show/ }).first(),
+  ).toBeVisible();
+
+  // Another tab holding the cache open keeps the logout from deleting it.
+  const holder = await context.newPage();
+  await holder.route("**/other-tab", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<title>Other tab</title>",
+    }),
+  );
+  await holder.goto("/other-tab");
+  await holder.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const opening = indexedDB.open("remotestorage");
+        opening.onsuccess = () => {
+          // Kept reachable: a collected connection would be closed.
+          Object.assign(globalThis, { cache: opening.result });
+          resolve();
+        };
+        opening.onerror = () => reject(opening.error);
+      }),
+  );
+  await go(page, "band/settings");
+  await page
+    .getByRole("link", { name: "Log out", exact: true })
+    .or(page.getByRole("button", { name: "Log out", exact: true }))
+    .click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.reload();
+  await holder.close();
+
+  const other = {
+    username: `e2e-${crypto.randomUUID()}`,
+    password: crypto.randomUUID(),
+  };
+  const signedUp = await request.post("/api/auth/signup", {
+    data: {
+      ...other,
+      email: `${other.username}@example.com`,
+      bandName: "Second Band",
+      currency: "CZK",
+    },
+  });
+  expect(signedUp.ok()).toBe(true);
+  await page.getByLabel("Username", { exact: true }).fill(other.username);
+  await page.getByLabel("Password", { exact: true }).fill(other.password);
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect(page.getByLabel("View band").locator("option")).toHaveText([
+    "All bands",
+    "Second Band",
+  ]);
+  await go(page, "bookings");
+  await expect(
+    page.getByRole("link", { name: "New enquiry", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Secret show")).toHaveCount(0);
 });

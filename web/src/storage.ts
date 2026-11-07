@@ -17,31 +17,147 @@ export const bands = (storage as RemoteStorage & Record<string, ShowdayStore>)[
   STORAGE_MODULE_SLUG
 ];
 
+export const slowStartMessage =
+  "This is taking longer than usual. Please try again.";
+/** How long sync may keep failing before the user is told. */
+export const syncTroubleAfter = 2 * 60_000;
+
 let sessionReady = false;
+let expiring = false;
+let failingSince: number | undefined;
+let lastFailure = 0;
+let syncTrouble = false;
+const cacheAccountKey = "showday:account";
+const cacheClearingKey = "showday:clearing";
+const cacheMarksHere = new Map<string, string>();
+/** Set when a reload or a closed tab cut the last cache cleanup short. */
+let recovering = cacheMark(cacheClearingKey) !== undefined;
 const sessionEvents = new EventTarget();
 storage.on("ready", () => {
+  if (recovering) {
+    recovering = false;
+    // Finished before anyone logs in, out of the library's ready dispatch.
+    setTimeout(() => clearCache(false));
+    return;
+  }
   sessionReady = true;
+  sessionEvents.dispatchEvent(new Event("ready"));
+});
+storage.on("connected", () => {
+  clearSyncTrouble();
+  setCacheMark(cacheAccountKey, storage.remote.userAddress);
+});
+// Only once the library has deleted the cache.
+storage.on("disconnected", () => {
+  setCacheMark(cacheAccountKey, undefined);
+  setCacheMark(cacheClearingKey, undefined);
+});
+storage.on("error", (error) => {
+  const { name, message } = (error ?? {}) as {
+    name?: string;
+    message?: string;
+  };
+  // 401/403: the token was revoked, or doesn't cover this app's scope.
+  if (name === "Unauthorized") expireSession();
+  else if (name === "SyncError" || /^HTTP response code/.test(`${message}`))
+    syncFailed();
+});
+storage.on("sync-done", (event) => {
+  if ((event as { completed?: boolean }).completed) clearSyncTrouble();
 });
 const logoutSync =
   typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
     ? createLogoutSync(() => logout(false))
     : undefined;
 
-export function onSessionLogout(callback: () => void) {
-  sessionEvents.addEventListener("logout", callback);
-  return () => sessionEvents.removeEventListener("logout", callback);
+/** Called with true when the server ended the session rather than the user. */
+export function onSessionLogout(callback: (expired: boolean) => void) {
+  const listener = (event: Event) =>
+    callback((event as CustomEvent<boolean>).detail);
+  sessionEvents.addEventListener("logout", listener);
+  return () => sessionEvents.removeEventListener("logout", listener);
 }
-export function ensureSessionReady() {
-  if (!sessionReady)
-    throw new Error(
-      "Local storage is still opening or clearing. Close other Showday tabs and try again.",
-    );
+/** Called with true once sync has kept failing for a while, and with false when it recovers. */
+export function onSyncTrouble(callback: (trouble: boolean) => void) {
+  const listener = (event: Event) =>
+    callback((event as CustomEvent<boolean>).detail);
+  sessionEvents.addEventListener("sync-trouble", listener);
+  return () => sessionEvents.removeEventListener("sync-trouble", listener);
+}
+
+/**
+ * Resolves once the local cache has opened, or finished clearing the last
+ * session, including one a reload cut short.
+ */
+export function whenSessionReady(timeout = 30_000) {
+  if (sessionReady) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const ready = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      sessionEvents.removeEventListener("ready", ready);
+      reject(new Error(slowStartMessage));
+    }, timeout);
+    sessionEvents.addEventListener("ready", ready, { once: true });
+  });
+}
+/**
+ * Like whenSessionReady, before opening `address`, an account that has been
+ * verified or that the user chose over the cached one. A session the server
+ * ended leaves its cache for the same account to pick up; another account gets
+ * a cleared one.
+ */
+function whenSessionReadyFor(address: string) {
+  const held = cacheAccount();
+  if (held && held !== address) clearCache(true);
+  return whenSessionReady();
+}
+
+/** Logs in or signs up with this site's account service, then opens the account. */
+export async function startSession(
+  mode: "login" | "signup",
+  fields: Record<string, unknown>,
+) {
+  await whenSessionReady();
+  const fallback = "Could not log in. Please retry.";
+  const response = await fetch(`/api/auth/${mode}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  }).catch(() => {
+    throw new Error(fallback);
+  });
+  const session = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(session.error ?? fallback);
+  await connectSession(session.username, session.token);
+}
+/**
+ * Sends the browser to `address`'s storage provider to log in. That account is
+ * only verified once the provider sends the user back, so the cache is cleared
+ * for it beforehand, losing changes another account has not synced yet, only
+ * if `discard` agrees. Resolves false, with nothing touched, if it doesn't.
+ */
+export async function startProviderSession(
+  address: string,
+  discard: (held: string) => boolean,
+) {
+  const held = cacheAccount();
+  if (held && held !== address && !discard(held)) return false;
+  await whenSessionReadyFor(address);
+  storage.connect(address);
+  return true;
 }
 
 export function connectSession(username: string, token: unknown) {
   if (typeof token !== "string" || !token)
     throw new Error("Could not open your account. Please log in again.");
-  ensureSessionReady();
+  const address = `${encodeURIComponent(username)}@${location.host}`;
+  return whenSessionReadyFor(address).then(() => connect(address, token));
+}
+function connect(address: string, token: string) {
+  const resuming = cacheAccount() === address;
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timeout);
@@ -50,6 +166,8 @@ export function connectSession(username: string, token: unknown) {
     };
     const connected = () => {
       cleanup();
+      // Sync restarts by itself only on a fresh cache.
+      if (resuming) void storage.startSync();
       resolve();
     };
     const failed = () => {
@@ -59,32 +177,117 @@ export function connectSession(username: string, token: unknown) {
     const timeout = setTimeout(failed, 15000);
     storage.on("connected", connected);
     storage.on("error", failed);
-    storage.connect(`${encodeURIComponent(username)}@${location.host}`, token);
+    storage.connect(address, token);
   });
 }
 
 export function logout(broadcast = true) {
   const { userAddress, token } = storage.remote;
-  sessionReady = false;
+  leave(false);
+  clearCache(broadcast);
+  revoke(userAddress, token);
+}
+
+function expireSession() {
+  if (expiring || !storage.remote.connected) return;
+  expiring = true;
+  // Out of the library's error dispatch before the session is touched.
+  setTimeout(() => {
+    expiring = false;
+    if (storage.remote.connected) expire();
+  });
+}
+/**
+ * Back to the login screen, keeping the cache: changes that have not synced
+ * yet go up once the same account logs in again.
+ */
+function expire() {
+  const { userAddress, token } = storage.remote;
+  storage.stopSync();
+  storage.remote.configure({ token: null });
+  leave(true);
+  revoke(userAddress, token);
+}
+function leave(expired: boolean) {
+  clearSyncTrouble();
   history.replaceState(null, "", "/login");
   // Dispatched after the URL is cleared so onSessionLogout listeners (the
   // router resync included) see it already gone.
-  sessionEvents.dispatchEvent(new Event("logout"));
+  sessionEvents.dispatchEvent(new CustomEvent("logout", { detail: expired }));
+}
+function clearCache(broadcast: boolean) {
+  sessionReady = false;
+  // The cache stays marked as its account's until the library has deleted it,
+  // so a reload before then (another tab blocking the deletion, say) finishes
+  // the cleanup instead of reopening the data for whoever logs in next.
+  setCacheMark(cacheClearingKey, "1");
   if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
-  if (userAddress.endsWith(`@${location.host}`)) {
-    const username = decodeURIComponent(
-      userAddress.slice(0, userAddress.lastIndexOf("@")),
-    );
-    void fetch("/api/auth/logout", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username }),
-      keepalive: true,
-    }).catch(() => {});
+}
+/**
+ * The account whose data the local cache holds, or none while it is being
+ * deleted. Kept in localStorage for other tabs and later visits; the remote's
+ * own address won't do, as it names whoever last tried to log in, verified or
+ * not.
+ */
+function cacheAccount() {
+  return cacheMark(cacheClearingKey) === undefined
+    ? cacheMark(cacheAccountKey)
+    : undefined;
+}
+function cacheMark(key: string) {
+  try {
+    return localStorage.getItem(key) ?? undefined;
+  } catch {
+    return cacheMarksHere.get(key);
   }
+}
+function setCacheMark(key: string, value: string | undefined) {
+  if (value === undefined) cacheMarksHere.delete(key);
+  else cacheMarksHere.set(key, value);
+  try {
+    if (value === undefined) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Without localStorage, this tab's copy has to do.
+  }
+}
+/** Revokes a token from this site's account service in the background. */
+function revoke(userAddress: string, token: string | false | undefined) {
+  if (!token || !userAddress?.endsWith(`@${location.host}`)) return;
+  const username = decodeURIComponent(
+    userAddress.slice(0, userAddress.lastIndexOf("@")),
+  );
+  void fetch("/api/auth/logout", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ username }),
+    keepalive: true,
+  }).catch(() => {});
+}
+function syncFailed() {
+  if (!storage.remote.connected) return;
+  const now = Date.now();
+  // Failed syncs are retried within a minute or two, so a longer gap (a device
+  // waking from sleep, say) starts a new streak rather than continuing one.
+  if (failingSince === undefined || now - lastFailure > syncTroubleAfter)
+    failingSince = now;
+  lastFailure = now;
+  if (syncTrouble || now - failingSince < syncTroubleAfter) return;
+  syncTrouble = true;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("sync-trouble", { detail: true }),
+  );
+}
+function clearSyncTrouble() {
+  failingSince = undefined;
+  if (!syncTrouble) return;
+  syncTrouble = false;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("sync-trouble", { detail: false }),
+  );
 }
