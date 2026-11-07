@@ -106,8 +106,12 @@ test("discarded threads with a newer lastIn are not purged and show as to sort",
       "old",
     ]);
     expect(
-      inboxItems(await store.conversations(), ["a"], [], await store.list("triage", "a"))[0]
-        ?.state,
+      inboxItems(
+        await store.conversations(),
+        ["a"],
+        [],
+        await store.list("triage", "a"),
+      )[0]?.state,
     ).toBe("toSort");
   } finally {
     storage.disconnect();
