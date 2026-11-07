@@ -27,7 +27,7 @@ test("publishing a page copies only public gig fields and the page serves them",
   await address.fill(slug);
   await expect(address).toHaveValue(slug);
   const publish = page.getByRole("button", {
-    name: "Publish page",
+    name: "Publish",
     exact: true,
   });
   await publish.click();
@@ -107,7 +107,7 @@ test("separate sessions preserve independent removals and sync an offline cancel
   const address = page.getByRole("textbox", { name: "Page address" });
   await address.fill(slug);
   await expect(address).toHaveValue(slug);
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "Open page", exact: true }),
   ).toBeVisible({ timeout: 30000 });
