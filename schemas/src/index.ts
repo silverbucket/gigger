@@ -1075,9 +1075,11 @@ export function createShowday(client: Client, publicClient?: Client) {
     }
     throw new Error(publicPageCouldNotPublish);
   }
-  async function publishPage(current: Band) {
-    if (!publicClient || !current.slug)
-      throw new Error(publicPageCouldNotPublish);
+  async function publishPage(current: Band, confirmOnServer = false) {
+    if (!publicClient || !current.slug) {
+      if (confirmOnServer) throw new Error(publicPageCouldNotPublish);
+      return;
+    }
     const slug = current.slug;
     const existing = (await publicClient.getObject(`${slug}/page`)) as
       | PublicPage
@@ -1098,7 +1100,7 @@ export function createShowday(client: Client, publicClient?: Client) {
     const written = publicPageFields(current, banner);
     readPublishedPublicPage(written);
     await publicClient.storeObject("publicPage", `${slug}/page`, written);
-    await confirmPublicPage(slug, written);
+    if (confirmOnServer) await confirmPublicPage(slug, written);
   }
   const publications = new Map<string, Promise<void>>();
   async function queuePublication(bandId: string, work: () => Promise<void>) {
@@ -1268,7 +1270,7 @@ export function createShowday(client: Client, publicClient?: Client) {
           await removePublic(previousSlug);
         for (const gig of await list("gig", bandId))
           await publishGig(current.slug, bandId, gig);
-        await publishPage(current);
+        await publishPage(current, true);
       });
     },
     /** Removes the public copy and clears the band slug. */
