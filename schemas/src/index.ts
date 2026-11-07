@@ -131,6 +131,8 @@ export interface PublicPage {
   contact?: PublicPageContact;
   socials?: PublicSocialLink[];
   gigs: Record<string, PublicGig>;
+  /** Bumped on each explicit publish; used to verify the server has this write. */
+  publishedRevision?: string;
 }
 export const publicStatuses: readonly GigStatus[] = ["confirmed", "played"];
 export function publicGig(gig: Gig, venue?: Venue): PublicGig {
@@ -647,6 +649,7 @@ export const publicSchemas = {
       locale: { type: "string", pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$" },
       ...publicPageExtras,
       gigs: { type: "object", additionalProperties: publicGigSchema },
+      publishedRevision: id,
     },
     required: ["name", "gigs"],
     additionalProperties: false,
@@ -905,6 +908,44 @@ export async function publishPublicBanner(
   await publicClient.storeFile(match[1], `${slug}/banner`, body);
   return { banner: "banner" as const, bannerType: match[1] };
 }
+/** Plain-language publish failure; matched by the band settings UI. */
+export const publicPageCouldNotPublish =
+  "The public page could not be published. Try again.";
+
+function readPublishedPublicPage(page: unknown): PublicPage {
+  if (!page || typeof page !== "object")
+    throw new Error(publicPageCouldNotPublish);
+  const name = (page as PublicPage).name;
+  if (typeof name !== "string" || !name.trim())
+    throw new Error(publicPageCouldNotPublish);
+  return page as PublicPage;
+}
+
+const publicPageMetaKeys = [
+  "name",
+  "locale",
+  "city",
+  "bio",
+  "banner",
+  "bannerType",
+  "theme",
+  "contact",
+  "socials",
+  "publishedRevision",
+] as const satisfies readonly (keyof PublicPage)[];
+
+export function publicPageRemoteMatches(
+  written: PublicPage,
+  remote: unknown,
+): boolean {
+  const page = readPublishedPublicPage(remote);
+  return publicPageMetaKeys.every(
+    (key) =>
+      JSON.stringify(written[key] ?? null) ===
+      JSON.stringify(page[key] ?? null),
+  );
+}
+
 function publicPageFields(
   current: Band,
   banner?: Pick<PublicPage, "banner" | "bannerType">,
@@ -1049,8 +1090,24 @@ export function createShowday(client: Client, publicClient?: Client) {
     if (await client.getObject(pendingPath)) await client.remove(pendingPath);
   }
   /** Store band metadata separately from the individual public gig records. */
-  async function publishPage(current: Band) {
-    if (!publicClient || !current.slug) return;
+  async function confirmPublicPage(slug: string, written: PublicPage) {
+    if (!publicClient) throw new Error(publicPageCouldNotPublish);
+    if (!written.publishedRevision) throw new Error(publicPageCouldNotPublish);
+    const path = `${slug}/page`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 200));
+      try {
+        const remote = await publicClient.getObject(path, 0);
+        if (publicPageRemoteMatches(written, remote)) return;
+      } catch {}
+    }
+    throw new Error(publicPageCouldNotPublish);
+  }
+  async function publishPage(current: Band, confirmOnServer = false) {
+    if (!publicClient || !current.slug) {
+      if (confirmOnServer) throw new Error(publicPageCouldNotPublish);
+      return;
+    }
     const slug = current.slug;
     const existing = (await publicClient.getObject(`${slug}/page`)) as
       | PublicPage
@@ -1068,11 +1125,18 @@ export function createShowday(client: Client, publicClient?: Client) {
     } else if (existing?.banner) {
       banner = { banner: existing.banner, bannerType: existing.bannerType };
     }
-    await publicClient.storeObject(
-      "publicPage",
-      `${slug}/page`,
-      publicPageFields(current, banner),
-    );
+    const written = publicPageFields(current, banner);
+    if (confirmOnServer) {
+      written.publishedRevision = crypto.randomUUID();
+    } else if (
+      typeof (existing as PublicPage | undefined)?.publishedRevision ===
+      "string"
+    ) {
+      written.publishedRevision = (existing as PublicPage).publishedRevision;
+    }
+    if (confirmOnServer) readPublishedPublicPage(written);
+    await publicClient.storeObject("publicPage", `${slug}/page`, written);
+    if (confirmOnServer) await confirmPublicPage(slug, written);
   }
   const publications = new Map<string, Promise<void>>();
   async function queuePublication(bandId: string, work: () => Promise<void>) {
@@ -1235,17 +1299,14 @@ export function createShowday(client: Client, publicClient?: Client) {
     /** Rewrites every public copy for the band; call after changing its slug. */
     async publishBand(bandId: string, previousSlug?: string, band?: Band) {
       await queuePublication(bandId, async () => {
+        if (!publicClient) throw new Error(publicPageCouldNotPublish);
         const current = band ?? (await publicBand(bandId));
-        if (!current?.slug) {
-          throw new Error(
-            "Could not publish the page. Save the address and retry.",
-          );
-        }
+        if (!current?.slug) throw new Error(publicPageCouldNotPublish);
         if (previousSlug && previousSlug !== current.slug)
           await removePublic(previousSlug);
         for (const gig of await list("gig", bandId))
           await publishGig(current.slug, bandId, gig);
-        await publishPage(current);
+        await publishPage(current, true);
       });
     },
     /** Removes the public copy and clears the band slug. */

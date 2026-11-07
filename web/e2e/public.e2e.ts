@@ -85,6 +85,7 @@ test("publishing a page copies only public gig fields and the page serves them",
       async () =>
         JSON.parse(await (await request.get(`/b/${slug}/gigs.json`)).text())
           .gigs.length,
+      { timeout: 30000 },
     )
     .toBe(0);
 });

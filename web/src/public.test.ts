@@ -4,11 +4,23 @@ import {
   type Gig,
   PAGE_THEME_PRESETS,
   publicGig,
+  publicPageCouldNotPublish,
+  publicPageRemoteMatches,
   Showday,
-  type ShowdayStore,
   slugify,
 } from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
+
+/** In-memory remoteStorage has no server; treat maxAge 0 like a successful server read. */
+function mirrorCacheAsRemoteGet(client: {
+  getObject: (path: string, maxAge?: false | number) => Promise<unknown>;
+}) {
+  const getObject = client.getObject.bind(client);
+  client.getObject = async (path, maxAge?) => {
+    if (maxAge === 0) return getObject(path);
+    return getObject(path, maxAge);
+  };
+}
 
 const privateValues = [
   "5000",
@@ -29,9 +41,12 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
   storage.access.claim("showday", "rw");
   storage.caching.enable("/showday/");
   storage.caching.enable("/public/showday/");
-  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
-  const pub = storage.scope("/public/showday/");
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
   try {
     await store.save("band", "a", {
       id: "a",
@@ -68,9 +83,9 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
       status: "offered",
     };
     await store.save("gig", "a", gig);
-    expect(await pub.getObject("cesti-kluci/gigs/g")).toBeFalsy();
+    expect(await publicClient.getObject("cesti-kluci/gigs/g")).toBeFalsy();
     await store.moveGigStatus("a", "g", "confirmed");
-    const copy = await pub.getObject("cesti-kluci/gigs/g");
+    const copy = await publicClient.getObject("cesti-kluci/gigs/g");
     expect(copy).toMatchObject({
       date: "2030-06-20",
       start: "20:00",
@@ -79,7 +94,7 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
       ticketUrl: "https://tickets.example/g",
       description: "All ages",
     });
-    const page = await pub.getObject("cesti-kluci/page");
+    const page = await publicClient.getObject("cesti-kluci/page");
     expect(page).toMatchObject({ name: "Čeští Kluci", locale: "cs-CZ" });
     expect(Object.keys((page as { gigs: object }).gigs)).toEqual([]);
     for (const text of [JSON.stringify(copy), JSON.stringify(page)]) {
@@ -99,15 +114,18 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
       },
       { dealType: "fixed fee", total: 5000, takeHome: 5000, currency: "CZK" },
     );
-    const played = JSON.stringify(await pub.getObject("cesti-kluci/gigs/g"));
+    const played = JSON.stringify(
+      await publicClient.getObject("cesti-kluci/gigs/g"),
+    );
     expect(played).toContain("Club");
     expect(played).not.toMatch(/Low ceiling|takeHome|rating|5000/);
     await store.save("gig", "a", { ...gig, id: "h", status: "confirmed" });
     await store.moveGigStatus("a", "h", "cancelled");
-    expect(await pub.getObject("cesti-kluci/gigs/h")).toBeFalsy();
+    expect(await publicClient.getObject("cesti-kluci/gigs/h")).toBeFalsy();
     expect(
       Object.keys(
-        ((await pub.getObject("cesti-kluci/page")) as { gigs: object }).gigs,
+        ((await publicClient.getObject("cesti-kluci/page")) as { gigs: object })
+          .gigs,
       ),
     ).toEqual([]);
     await store.save("band", "a", {
@@ -116,12 +134,12 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
       slug: "renamed",
     });
     await store.publishBand("a", "cesti-kluci");
-    expect(await pub.getObject("cesti-kluci/page")).toBeFalsy();
-    expect(await pub.getObject("cesti-kluci/gigs/g")).toBeFalsy();
-    expect(await pub.getObject("renamed/gigs/g")).toMatchObject({
+    expect(await publicClient.getObject("cesti-kluci/page")).toBeFalsy();
+    expect(await publicClient.getObject("cesti-kluci/gigs/g")).toBeFalsy();
+    expect(await publicClient.getObject("renamed/gigs/g")).toMatchObject({
       venue: "Club",
     });
-    expect(await pub.getObject("renamed/page")).toMatchObject({
+    expect(await publicClient.getObject("renamed/page")).toMatchObject({
       name: "Renamed",
     });
     await expect(
@@ -141,6 +159,7 @@ test("unpublish clears the slug and public copy but keeps the private profile", 
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
   const { createShowday } = await import("@showday/schemas");
   const store = createShowday(privateClient, publicClient);
   try {
@@ -171,6 +190,183 @@ test("unpublish clears the slug and public copy but keeps the private profile", 
   }
 });
 
+test("publicPageRemoteMatches compares published metadata, not just the name", () => {
+  const written = {
+    name: "Band",
+    gigs: {},
+    bio: "New bio",
+    publishedRevision: "rev-new",
+  };
+  expect(
+    publicPageRemoteMatches(written, {
+      name: "Band",
+      gigs: {},
+      bio: "Old bio",
+      publishedRevision: "rev-old",
+    }),
+  ).toBeFalse();
+  expect(
+    publicPageRemoteMatches(written, {
+      name: "Band",
+      gigs: { g: { date: "2030-01-01", venue: "Club" } },
+      bio: "New bio",
+      publishedRevision: "rev-new",
+    }),
+  ).toBeTrue();
+});
+
+test("gig save still succeeds while the public page cannot be read from the server", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  const getObject = publicClient.getObject.bind(publicClient);
+  let pageOffline = false;
+  publicClient.getObject = async (path, maxAge) => {
+    if (pageOffline && path === "band/page" && maxAge === 0)
+      throw new Error("offline");
+    return getObject(path, maxAge);
+  };
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "band" });
+    await store.publishBand("a");
+    pageOffline = true;
+    await store.save("gig", "a", {
+      id: "g",
+      title: "Gig",
+      venue: "Club",
+      address: "Street",
+      contacts: [],
+      date: "2030-01-01",
+      status: "offered",
+    });
+    await store.moveGigStatus("a", "g", "confirmed");
+    expect(
+      ((await privateClient.getObject("bands/a/gigs/g")) as Gig).status,
+    ).toBe("confirmed");
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("publishBand fails when the server still has an older page revision", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  const getObject = publicClient.getObject.bind(publicClient);
+  publicClient.getObject = async (path, maxAge) => {
+    if (path === "band/page" && maxAge === 0) {
+      return {
+        name: "Band",
+        gigs: {},
+        bio: "Old bio",
+        publishedRevision: "stale-revision",
+      };
+    }
+    return getObject(path, maxAge);
+  };
+  try {
+    const next = {
+      id: "a",
+      name: "Band",
+      slug: "band",
+      publicProfile: { bio: "New bio" },
+    };
+    await expect(store.publishBand("a", undefined, next)).rejects.toThrow(
+      publicPageCouldNotPublish,
+    );
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("publishBand fails when the app has no public storage client", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient);
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "band" });
+    await expect(store.publishBand("a")).rejects.toThrow(
+      publicPageCouldNotPublish,
+    );
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("publishBand fails when the public page never appears on the server", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  const getObject = publicClient.getObject.bind(publicClient);
+  publicClient.getObject = async (path, maxAge) => {
+    if (path === "missing/page" && maxAge === 0) return undefined;
+    return getObject(path, maxAge);
+  };
+  try {
+    await store.save("band", "a", { id: "a", name: "Band", slug: "cached" });
+    await store.publishBand("a");
+    const next = { id: "a", name: "Band", slug: "missing" };
+    await expect(store.publishBand("a", "cached", next)).rejects.toThrow(
+      publicPageCouldNotPublish,
+    );
+    expect(await getObject("missing/page")).toBeTruthy();
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("publishBand rejects a band name the public page cannot serve", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  try {
+    const next = { id: "a", name: "   ", slug: "blank" } as Band;
+    await expect(store.publishBand("a", undefined, next)).rejects.toThrow(
+      publicPageCouldNotPublish,
+    );
+    expect(await publicClient.getObject("blank/page")).toBeFalsy();
+  } finally {
+    storage.stopSync();
+  }
+});
+
 test("publishBand can publish from an unsaved band snapshot", async () => {
   const storage = new RemoteStorage();
   storage.addModule(Showday);
@@ -180,6 +376,7 @@ test("publishBand can publish from an unsaved band snapshot", async () => {
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
   const { createShowday } = await import("@showday/schemas");
   const store = createShowday(privateClient, publicClient);
   try {
@@ -221,6 +418,7 @@ test("status publication can be retried after a public write fails", async () =>
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
   const { createShowday } = await import("@showday/schemas");
   const store = createShowday(privateClient, publicClient);
   try {
@@ -307,6 +505,7 @@ test("uncached offline removals are queued and retried without deleting a reconf
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
   const { createShowday } = await import("@showday/schemas");
   const store = createShowday(privateClient, publicClient);
   const getPrivate = privateClient.getObject.bind(privateClient);
@@ -387,6 +586,7 @@ test("old address cleanup survives interruption and finds uncached public record
   await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
   const privateClient = storage.scope("/showday/");
   const publicClient = storage.scope("/public/showday/");
+  mirrorCacheAsRemoteGet(publicClient);
   const { createShowday } = await import("@showday/schemas");
   const store = createShowday(privateClient, publicClient);
   try {

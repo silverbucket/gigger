@@ -342,10 +342,15 @@ export function mailboxWatchers(
         // A cursor the server no longer recognises is dropped; the watch then starts at the end of the folder.
         if (error.startsWith("email:cursor-invalid"))
           accounts.cursor(username, bandId, undefined);
-        if (!error.startsWith("email:connection-closed"))
+        if (run.catchUp) {
+          try {
+            accounts.error(username, bandId, null);
+          } catch {}
+        } else if (!error.startsWith("email:connection-closed")) {
           try {
             accounts.error(username, bandId, friendlyMailError(error));
           } catch {}
+        }
         log(`Mailbox watch for ${id} ended: ${error}`);
       }
       if (run.catchUp) {

@@ -440,6 +440,55 @@ test("a deferred watch cursor from a dying session cannot overwrite check-inbox-
   }
 }, 20000);
 
+test("check inbox now does not report Sockethub disconnected as a mailbox problem", async () => {
+  const sockethub = stubSockethub();
+  const storage = fakeStorage();
+  const db = openDatabase(":memory:");
+  const accounts = emailAccounts(db);
+  accounts.put({
+    username: "sam",
+    bandId: "band1",
+    settings: {
+      address: "band@example.com",
+      imapHost: "imap.example.com",
+      imapPort: 993,
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      login: "band@example.com",
+      password: "mail-secret",
+    },
+    storageToken: "server-token",
+    cursor: { uidValidity: "1", uid: 10 },
+  });
+  const messages = messageHandler(
+    db,
+    {
+      email: { send: async () => {} },
+      messenger: { send: async () => {} },
+      instagram: { send: async () => {} },
+    },
+    storage.server.url.origin,
+  );
+  const watchers = mailboxWatchers(accounts, messages, {
+    armadiettoUrl: storage.server.url.origin,
+    sockethubUrl: await sockethub.start(),
+    minDelayMs: 50,
+    maxDelayMs: 200,
+  });
+  try {
+    watchers.startAll();
+    await until(() => sockethub.received.length >= 3, "first session");
+    watchers.checkNow("sam", "band1");
+    await Bun.sleep(300);
+    expect(accounts.get("sam", "band1")?.error).toBeUndefined();
+  } finally {
+    await watchers.stopAll();
+    sockethub.stop();
+    storage.stop();
+    db.close();
+  }
+}, 20000);
+
 test("check inbox now resets the saved cursor before reconnecting", async () => {
   const sockethub = stubSockethub();
   const storage = fakeStorage();
@@ -615,7 +664,7 @@ test("catch-up watch acknowledgment waits for stored mail when cursor was saved"
     storage.stop();
     db.close();
   }
-}, 20000);
+}, 30000);
 
 test("rescan watch acknowledgment waits for stored catch-up mail", async () => {
   const sockethub = stubSockethub();

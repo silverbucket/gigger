@@ -8,6 +8,8 @@ import MessageRow from "../components/MessageRow.svelte";
 import SectionLabel from "../components/SectionLabel.svelte";
 import Segmented from "../components/Segmented.svelte";
 import StatCells from "../components/StatCells.svelte";
+import Tag from "../components/Tag.svelte";
+import { api } from "../lib/account.svelte";
 import { type BandData, data } from "../lib/data.svelte";
 import {
   capitalize,
@@ -34,6 +36,16 @@ import {
   matchLine,
   matchSender,
 } from "../lib/inbox";
+import {
+  aggregateBookingsInboxStatus,
+  bookingsInboxLabel,
+  bookingsInboxTagKind,
+  hasIncomingMailbox,
+  type MailWatchAccount,
+  refreshBookingsMailByBand,
+  showToSortSection,
+} from "../lib/inbox-watch";
+import { messageStream } from "../lib/message-stream.svelte";
 import { prefillFrom, senderName, threads } from "../lib/messages.svelte";
 import { path, router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
@@ -101,6 +113,44 @@ const reviewed = $derived(
 const discarded = $derived(
   inbox.filter((i) => i.state === "discarded" && messageMatches(i)),
 );
+const hasListedInbox = $derived(
+  toSort.length > 0 || reviewed.length > 0 || discarded.length > 0,
+);
+let mailByBand = $state<Record<string, MailWatchAccount>>({});
+$effect(() => {
+  const bandIds = data.inView.map((item) => item.band.id);
+  if (router.screen !== "bookings" || bandIds.length === 0) return;
+  let cancelled = false;
+  const refresh = async () => {
+    const next = await refreshBookingsMailByBand(
+      mailByBand,
+      bandIds,
+      (bandId) =>
+        api<Omit<MailWatchAccount, "bandId"> | null>("/api/email/account", {
+          query: { bandId },
+        }),
+    );
+    if (!cancelled) mailByBand = next;
+  };
+  void refresh();
+  const timer = setInterval(refresh, 5000);
+  return () => {
+    cancelled = true;
+    clearInterval(timer);
+  };
+});
+const mailAccounts = $derived(Object.values(mailByBand));
+const inboxWatch = $derived(
+  aggregateBookingsInboxStatus(mailAccounts, messageStream.retrying),
+);
+const showToSort = $derived(
+  showToSortSection(hasIncomingMailbox(mailAccounts), hasListedInbox),
+);
+function openEmailSettings(event: MouseEvent) {
+  event.preventDefault();
+  if (inboxWatch.bandId && !data.current) data.choose(inboxWatch.bandId);
+  router.go("settings");
+}
 const visibleGigs = $derived(
   rows
     .filter(({ gig }) => isUpcoming(gig, now) === (filter === "upcoming"))
@@ -253,13 +303,27 @@ function matchFor(item: InboxItem) {
 {/snippet}
 
 {#snippet toSortGroup()}
-  {#if toSort.length || reviewed.length || discarded.length}
+  {#if showToSort}
     <section aria-labelledby="to-sort">
       <SectionLabel tone="accent" id="to-sort">
         To sort · {toSort.length}
         {#snippet aside()}
-          {#if ui.phone}
-            {#if toSort.length > 3}
+          <div class="to-sort-aside">
+            {#if inboxWatch.status !== "hidden"}
+              <a
+                href="#/settings"
+                class="inbox-watch-link"
+                aria-live="polite"
+                onclick={openEmailSettings}
+              >
+                <Tag kind={bookingsInboxTagKind(inboxWatch.status)}
+                  >{bookingsInboxLabel(inboxWatch.status)}</Tag
+                >
+              </a>
+            {:else if !ui.phone}
+              <span class="muted">From email, Messenger, Instagram</span>
+            {/if}
+            {#if ui.phone && toSort.length > 3}
               <button
                 type="button"
                 class="link"
@@ -268,11 +332,21 @@ function matchFor(item: InboxItem) {
                 {allToSort ? "Show fewer" : "See all"}
               </button>
             {/if}
-          {:else}
-            <span class="muted">From email, Messenger, Instagram</span>
-          {/if}
+          </div>
         {/snippet}
       </SectionLabel>
+      {#if inboxWatch.status === "error"}
+        <p class="inbox-watch-alert" role="alert">
+          New email may not arrive.
+          <a
+            href="#/settings"
+            class="inbox-watch-settings"
+            onclick={openEmailSettings}
+            >Open email settings</a
+          >
+          to fix this.
+        </p>
+      {/if}
       <ul>
         {#each ui.phone && !allToSort
           ? toSort.slice(0, 3)
@@ -785,7 +859,44 @@ function matchFor(item: InboxItem) {
   gap: 8px;
   padding: 16px 28px;
 }
+.to-sort-aside {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+.inbox-watch-link {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 2px;
+}
+.inbox-watch-link:focus-visible,
+.inbox-watch-settings:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.inbox-watch-settings {
+  color: inherit;
+}
+.inbox-watch-alert {
+  margin: 0;
+  padding: 0 24px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-accent-700);
+}
 @media (max-width: 899px) {
+  .inbox-watch-link {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .inbox-watch-alert {
+    padding-inline: 16px;
+  }
   .list {
     padding-bottom: calc(var(--tabbar) + 16px);
   }
