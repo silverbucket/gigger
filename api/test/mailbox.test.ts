@@ -15,8 +15,17 @@ const CONTEXT = [
 ];
 
 /** A Sockethub lookalike with the email platform: acks credentials, connect and watch, and lets the test push activities. */
-function stubSockethub(options: { catchUpWatchAckUid?: number } = {}) {
-  const http = createServer((_req, res) => {
+function stubSockethub(
+  options: {
+    catchUpWatchAckUid?: number;
+    /** Leaves this many watch requests unacknowledged, like a slow mail server. */
+    holdWatchAcks?: number;
+    discoveryDelayMs?: number;
+  } = {},
+) {
+  let heldWatchAcks = options.holdWatchAcks ?? 0;
+  const http = createServer(async (_req, res) => {
+    if (options.discoveryDelayMs) await Bun.sleep(options.discoveryDelayMs);
     res.setHeader("Content-Type", "application/json");
     res.end(
       JSON.stringify({
@@ -56,6 +65,10 @@ function stubSockethub(options: { catchUpWatchAckUid?: number } = {}) {
     socket.on("message", (payload, ack) => {
       received.push({ event: "message", payload });
       if (payload.type === "watch") {
+        if (heldWatchAcks > 0) {
+          heldWatchAcks--;
+          return;
+        }
         const requested = payload.object?.cursor as
           | { uidValidity?: string; uid?: number }
           | undefined;
@@ -479,13 +492,155 @@ test("check inbox now does not report Sockethub disconnected as a mailbox proble
     watchers.startAll();
     await until(() => sockethub.received.length >= 3, "first session");
     watchers.checkNow("sam", "band1");
-    await Bun.sleep(300);
+    await until(
+      () =>
+        sockethub.sockets.length >= 2 &&
+        sockethub.received.length >= 6 &&
+        watchers.status("sam", "band1").phase === "watching",
+      "rescan session watching",
+    );
+    expect(sockethub.received[5].payload.object).toEqual({
+      folder: "INBOX",
+      cursor: { uidValidity: "1", uid: 0 },
+    });
     expect(accounts.get("sam", "band1")?.error).toBeUndefined();
   } finally {
     await watchers.stopAll();
     sockethub.stop();
     storage.stop();
     db.close();
+  }
+}, 20000);
+
+/** One watched band mailbox against a stub Sockethub and in-memory storage. */
+async function watchedMailbox(
+  stub: Parameters<typeof stubSockethub>[0] = {},
+  delays = { minDelayMs: 50, maxDelayMs: 200 },
+) {
+  const sockethub = stubSockethub(stub);
+  const storage = fakeStorage();
+  const db = openDatabase(":memory:");
+  const accounts = emailAccounts(db);
+  accounts.put({
+    username: "sam",
+    bandId: "band1",
+    settings: {
+      address: "band@example.com",
+      imapHost: "imap.example.com",
+      imapPort: 993,
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      login: "band@example.com",
+      password: "mail-secret",
+    },
+    storageToken: "server-token",
+    cursor: { uidValidity: "1", uid: 10 },
+  });
+  const messages = messageHandler(
+    db,
+    {
+      email: { send: async () => {} },
+      messenger: { send: async () => {} },
+      instagram: { send: async () => {} },
+    },
+    storage.server.url.origin,
+  );
+  const watchers = mailboxWatchers(accounts, messages, {
+    armadiettoUrl: storage.server.url.origin,
+    sockethubUrl: await sockethub.start(),
+    ...delays,
+    log: () => {},
+  });
+  return {
+    sockethub,
+    accounts,
+    watchers,
+    async close() {
+      await watchers.stopAll();
+      sockethub.stop();
+      storage.stop();
+      db.close();
+    },
+  };
+}
+
+test("check inbox now while the watch is still unacknowledged reconnects at once", async () => {
+  const { sockethub, accounts, watchers, close } = await watchedMailbox({
+    holdWatchAcks: 1,
+  });
+  try {
+    watchers.startAll();
+    await until(() => sockethub.received.length >= 3, "unacknowledged watch");
+    watchers.checkNow("sam", "band1");
+    await until(
+      () =>
+        sockethub.received.length >= 6 &&
+        watchers.status("sam", "band1").phase === "watching",
+      "rescan session watching",
+      3000,
+    );
+    expect(sockethub.received[5].payload.object).toEqual({
+      folder: "INBOX",
+      cursor: { uidValidity: "1", uid: 0 },
+    });
+    expect(accounts.get("sam", "band1")?.error).toBeUndefined();
+    const started = Date.now();
+    await watchers.stopAll();
+    expect(Date.now() - started).toBeLessThan(1000);
+  } finally {
+    await close();
+  }
+}, 20000);
+
+test("stopping while the session is still connecting ends it without opening a mailbox session", async () => {
+  const { sockethub, watchers, close } = await watchedMailbox({
+    discoveryDelayMs: 200,
+  });
+  try {
+    watchers.startAll();
+    await Bun.sleep(50);
+    await watchers.stopAll();
+    expect(watchers.watching("sam", "band1")).toBeFalse();
+    await Bun.sleep(400);
+    expect(sockethub.received).toEqual([]);
+    expect(sockethub.sockets.every((s) => !s.connected)).toBeTrue();
+  } finally {
+    await close();
+  }
+}, 20000);
+
+test("check inbox now during backoff still reports the next real mailbox failure", async () => {
+  const { sockethub, accounts, watchers, close } = await watchedMailbox(
+    {},
+    { minDelayMs: 2000, maxDelayMs: 4000 },
+  );
+  try {
+    watchers.startAll();
+    await until(() => sockethub.received.length >= 3, "first session");
+    sockethub.push({ type: "watch", error: "email:connect-failed" });
+    await until(
+      () => watchers.status("sam", "band1").phase === "retrying",
+      "backing off",
+    );
+    expect(accounts.get("sam", "band1")?.error).toMatch(/sign in/);
+    watchers.checkNow("sam", "band1");
+    await until(
+      () =>
+        sockethub.received.length >= 6 &&
+        watchers.status("sam", "band1").phase === "watching",
+      "rescan without waiting for backoff",
+      1500,
+    );
+    expect(accounts.get("sam", "band1")?.error).toBeUndefined();
+    sockethub.push({ type: "watch", error: "email:connect-failed" });
+    await until(
+      () => accounts.get("sam", "band1")?.error !== undefined,
+      "later failure reported",
+      1500,
+    );
+    expect(watchers.status("sam", "band1").phase).toBe("retrying");
+  } finally {
+    await close();
   }
 }, 20000);
 
