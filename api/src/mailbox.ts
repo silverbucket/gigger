@@ -228,8 +228,9 @@ export function mailboxWatchers(
       // Posts are stored in arrival order; a failed write holds the cursor back so the catch-up refetches it.
       let chain = Promise.resolve();
       let unstored = false;
+      const sessionLive = () => run.activeSession === sessionId;
       sc.socket.on("message", (activity: MailPost) => {
-        if (run.activeSession !== sessionId) return;
+        if (!sessionLive()) return;
         if (
           !activity?.["@context"]?.some((c) => c.includes("/platform/email/"))
         )
@@ -238,6 +239,7 @@ export function mailboxWatchers(
           const message = fromMail(account, activity);
           if (!message) return;
           chain = chain.then(async () => {
+            if (!sessionLive()) return;
             try {
               await messages.save(store, account.username, message);
               accounts.lastMail(
@@ -257,6 +259,7 @@ export function mailboxWatchers(
           const cursor = activity.object?.cursor;
           if (!cursor) return;
           chain = chain.then(() => {
+            if (!sessionLive()) return;
             if (unstored) return ended(new Error("storage unavailable"));
             accounts.cursor(account.username, account.bandId, cursor);
           });
@@ -322,6 +325,7 @@ export function mailboxWatchers(
       setPhase(`${account.username}/${account.bandId}`, "watching");
       return await ending;
     } finally {
+      if (run.activeSession === sessionId) run.activeSession = undefined;
       run.client = undefined;
       sc.socket.disconnect();
     }

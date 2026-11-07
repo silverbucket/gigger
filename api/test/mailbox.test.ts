@@ -72,11 +72,14 @@ function stubSockethub() {
     received,
     sockets,
     current: () => sockets.at(-1) as Socket,
-    push: (activity: Record<string, unknown>) =>
-      (sockets.at(-1) as Socket).emit("message", {
-        "@context": CONTEXT,
-        ...activity,
-      }),
+    push: (activity: Record<string, unknown>, socketIndex?: number) =>
+      (socketIndex !== undefined ? sockets[socketIndex] : sockets.at(-1))?.emit(
+        "message",
+        {
+          "@context": CONTEXT,
+          ...activity,
+        },
+      ),
     start: () =>
       new Promise<string>((resolve) =>
         http.listen(0, () =>
@@ -339,6 +342,82 @@ test("the mailbox watcher connects with the saved cursor, stores posted mail, ke
   }
 }, 20000);
 
+test("a deferred watch cursor from a dying session cannot overwrite check-inbox-now", async () => {
+  const sockethub = stubSockethub();
+  const storage = fakeStorage();
+  const db = openDatabase(":memory:");
+  const accounts = emailAccounts(db);
+  accounts.put({
+    username: "sam",
+    bandId: "band1",
+    settings: {
+      address: "band@example.com",
+      imapHost: "imap.example.com",
+      imapPort: 993,
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      login: "band@example.com",
+      password: "mail-secret",
+    },
+    storageToken: "server-token",
+    cursor: { uidValidity: "1", uid: 10 },
+  });
+  const messages = messageHandler(
+    db,
+    {
+      email: { send: async () => {} },
+      messenger: { send: async () => {} },
+      instagram: { send: async () => {} },
+    },
+    storage.server.url.origin,
+  );
+  const watchers = mailboxWatchers(accounts, messages, {
+    armadiettoUrl: storage.server.url.origin,
+    sockethubUrl: await sockethub.start(),
+    minDelayMs: 50,
+    maxDelayMs: 200,
+  });
+  try {
+    watchers.startAll();
+    await until(() => sockethub.sockets.length >= 1, "first connection");
+    await until(() => sockethub.received.length >= 3, "first session");
+    watchers.checkNow("sam", "band1");
+    expect(accounts.get("sam", "band1")?.cursor?.uid).toBe(0);
+    sockethub.push(
+      {
+        type: "watch",
+        object: {
+          type: "subscription",
+          folder: "INBOX",
+          cursor: { uidValidity: "1", uid: 99 },
+        },
+      },
+      0,
+    );
+    await until(
+      () => sockethub.sockets.length >= 2,
+      "catch-up reconnect",
+      10000,
+    );
+    await until(
+      () =>
+        [...sockethub.received]
+          .reverse()
+          .find((r) => r.payload.type === "watch")?.payload.object?.cursor
+          ?.uid === 0,
+      "watch from uid 0",
+      10000,
+    );
+    await Bun.sleep(50);
+    expect(accounts.get("sam", "band1")?.cursor?.uid).not.toBe(99);
+  } finally {
+    await watchers.stopAll();
+    sockethub.stop();
+    storage.stop();
+    db.close();
+  }
+}, 20000);
+
 test("check inbox now resets the saved cursor before reconnecting", async () => {
   const sockethub = stubSockethub();
   const storage = fakeStorage();
@@ -388,7 +467,7 @@ test("check inbox now resets the saved cursor before reconnecting", async () => 
     storage.stop();
     db.close();
   }
-});
+}, 20000);
 
 test("check inbox now without a saved cursor starts a rescan from uid 0", async () => {
   const sockethub = stubSockethub();
