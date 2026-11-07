@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { DEFAULT_APP_ORIGIN } from "../src/app-origin";
-import { armadiettoStorageHeaders, remoteStore } from "../src/storage";
+import {
+  armadiettoPublicStorageHeaders,
+  armadiettoStorageHeaders,
+  remoteStore,
+} from "../src/storage";
 
 test("armadietto storage requests send X-Forwarded-Proto when APP_ORIGIN is https", async () => {
   const seen: string[] = [];
@@ -23,12 +27,16 @@ test("armadietto storage requests send X-Forwarded-Proto when APP_ORIGIN is http
     const band = await store.get<{ id: string }>("bands/band1/band");
     expect(band.value?.id).toBe("band1");
     expect(seen).toEqual(["https"]);
-    expect(armadiettoStorageHeaders("t", DEFAULT_APP_ORIGIN)).toEqual({
-      Authorization: "Bearer t",
+    expect(armadiettoPublicStorageHeaders(DEFAULT_APP_ORIGIN)).toEqual({});
+    expect(armadiettoPublicStorageHeaders("https://showday.example")).toEqual({
+      "X-Forwarded-Proto": "https",
     });
     expect(armadiettoStorageHeaders("t", "https://showday.example")).toEqual({
       Authorization: "Bearer t",
       "X-Forwarded-Proto": "https",
+    });
+    expect(armadiettoStorageHeaders("t", DEFAULT_APP_ORIGIN)).toEqual({
+      Authorization: "Bearer t",
     });
   } finally {
     server.stop(true);

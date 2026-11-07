@@ -4,15 +4,23 @@ const HTTPS_SCHEME = "https://";
 const FORWARDED_PROTO_HEADER = "X-Forwarded-Proto";
 const FORWARDED_PROTO_HTTPS = "https";
 
+/** Headers for unauthenticated Armadietto reads; https.force rejects even public documents without X-Forwarded-Proto. */
+export function armadiettoPublicStorageHeaders(appOrigin = resolveAppOrigin()) {
+  const headers: Record<string, string> = {};
+  if (appOrigin.startsWith(HTTPS_SCHEME))
+    headers[FORWARDED_PROTO_HEADER] = FORWARDED_PROTO_HTTPS;
+  return headers;
+}
+
 /** Headers for Armadietto behind TLS termination (https.force reads X-Forwarded-Proto). */
 export function armadiettoStorageHeaders(
   token: string,
   appOrigin = resolveAppOrigin(),
-) {
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (appOrigin.startsWith(HTTPS_SCHEME))
-    headers[FORWARDED_PROTO_HEADER] = FORWARDED_PROTO_HTTPS;
-  return headers;
+): Record<string, string> {
+  return {
+    ...armadiettoPublicStorageHeaders(appOrigin),
+    Authorization: `Bearer ${token}`,
+  };
 }
 
 /** Minimal remoteStorage HTTP client for one account, used for server-side message writes. */

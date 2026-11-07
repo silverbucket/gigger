@@ -336,6 +336,107 @@ test("cleanPage drops anything that is not an allowed public field", () => {
   );
 });
 
+test("public page and banner are served from an Armadietto that forces HTTPS", async () => {
+  const bandToken = "secret-token";
+  const appOrigin = "https://showday.example";
+  const seen: { path: string; proto: string | null }[] = [];
+  const storage = Bun.serve({
+    port: 0,
+    fetch(req) {
+      const path = new URL(req.url).pathname;
+      if (path === "/public-gigs")
+        return Response.json({
+          gigs: { g1: { date: "2999-06-20", venue: "Club" } },
+        });
+      const proto = req.headers.get("x-forwarded-proto");
+      seen.push({ path, proto });
+      // Armadietto with https.force: checkToken runs before the public-read shortcut.
+      if (proto !== "https")
+        return Response.json(
+          { error: "invalid_request", error_description: "HTTPS required" },
+          { status: 400 },
+        );
+      if (path === "/storage/storage/sam/public/showday/the-band/page")
+        return Response.json({
+          name: "The Band",
+          banner: "banner",
+          bannerType: "image/png",
+        });
+      if (path === "/storage/storage/sam/public/showday/the-band/banner")
+        return new Response(new Uint8Array([137, 80, 78, 71]), {
+          headers: { "Content-Type": "image/png" },
+        });
+      if (path === "/storage/storage/sam/showday/bands/band1/band")
+        return req.headers.get("authorization") === `Bearer ${bandToken}`
+          ? Response.json({ id: "band1", name: "The Band" })
+          : new Response("", { status: 401 });
+      return new Response("", { status: 404 });
+    },
+  });
+  const db = openDatabase(":memory:");
+  const request = handler(
+    db,
+    undefined,
+    publicHandler(db, storage.url.origin, appOrigin, storage.url.origin),
+  );
+  const get = (path: string) =>
+    request(new Request(`http://localhost:8080${path}`));
+  try {
+    const claimed = await request(
+      new Request("http://localhost:8080/public/pages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${bandToken}`,
+          Origin: appOrigin,
+        },
+        body: JSON.stringify({
+          username: "sam",
+          bandId: "band1",
+          slug: "the-band",
+        }),
+      }),
+    );
+    expect(claimed.status).toBe(200);
+
+    const page = await get("/b/the-band");
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain("The Band");
+    expect(html).toContain('src="/b/the-band/banner"');
+
+    const json = await get("/b/the-band/gigs.json");
+    expect(json.status).toBe(200);
+    expect((await json.json()).gigs).toEqual([
+      { id: "g1", date: "2999-06-20", venue: "Club" },
+    ]);
+
+    const banner = await get("/b/the-band/banner");
+    expect(banner.status).toBe(200);
+    expect(banner.headers.get("content-type")).toBe("image/png");
+    expect([...new Uint8Array(await banner.arrayBuffer())]).toEqual([
+      137, 80, 78, 71,
+    ]);
+
+    const zipped = await get("/b/the-band/export.zip");
+    expect(zipped.status).toBe(200);
+    expect(new TextDecoder().decode(await zipped.arrayBuffer())).toContain(
+      "banner",
+    );
+
+    const publicReads = seen.filter((call) =>
+      call.path.startsWith("/storage/storage/sam/public/showday/the-band/"),
+    );
+    expect(publicReads.map((call) => call.path.split("/").pop())).toEqual(
+      expect.arrayContaining(["page", "banner"]),
+    );
+    expect(publicReads.every((call) => call.proto === "https")).toBe(true);
+  } finally {
+    storage.stop(true);
+    db.close();
+  }
+});
+
 test("public page translates labels and shows years on upcoming cards when needed", () => {
   const gigs = {
     current: {
