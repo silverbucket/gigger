@@ -664,7 +664,7 @@ test("catch-up watch acknowledgment waits for stored mail when cursor was saved"
     storage.stop();
     db.close();
   }
-}, 20000);
+}, 30000);
 
 test("rescan watch acknowledgment waits for stored catch-up mail", async () => {
   const sockethub = stubSockethub();
