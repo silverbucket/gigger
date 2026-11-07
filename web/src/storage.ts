@@ -26,6 +26,9 @@ let sessionReady = false;
 let failingSince: number | undefined;
 let lastFailure = 0;
 let syncTrouble = false;
+/** Server rejected the storage token; the user can log in again without clearing the cache. */
+let tokenRejected = false;
+let preserveCacheMarks = false;
 const cacheAccountKey = "showday:account";
 const cacheClearingKey = "showday:clearing";
 const cacheMarksHere = new Map<string, string>();
@@ -44,11 +47,19 @@ storage.on("ready", () => {
 });
 storage.on("connected", () => {
   clearSyncTrouble();
+  tokenRejected = false;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("token-rejected", { detail: false }),
+  );
   setCacheMark(cacheAccountKey, storage.remote.userAddress);
   installSyncScopeGuard();
 });
 // Only once the library has deleted the cache.
 storage.on("disconnected", () => {
+  if (preserveCacheMarks) {
+    preserveCacheMarks = false;
+    return;
+  }
   setCacheMark(cacheAccountKey, undefined);
   setCacheMark(cacheClearingKey, undefined);
 });
@@ -59,11 +70,15 @@ storage.on("error", (error) => {
   };
   // Stay signed in unless the user clicks Log out; auth-shaped failures retry quietly.
   if (name === OUT_OF_SCOPE_STORAGE) return;
-  if (
-    name === "Unauthorized" ||
-    name === "SyncError" ||
-    /^HTTP response code/.test(`${message}`)
-  )
+  if (name === "Unauthorized") {
+    tokenRejected = true;
+    sessionEvents.dispatchEvent(
+      new CustomEvent("token-rejected", { detail: true }),
+    );
+    syncFailed();
+    return;
+  }
+  if (name === "SyncError" || /^HTTP response code/.test(`${message}`))
     syncFailed();
 });
 storage.on("sync-done", (event) => {
@@ -87,6 +102,14 @@ export function onSyncTrouble(callback: (trouble: boolean) => void) {
     callback((event as CustomEvent<boolean>).detail);
   sessionEvents.addEventListener("sync-trouble", listener);
   return () => sessionEvents.removeEventListener("sync-trouble", listener);
+}
+/** Called when sync was rejected with 401; reconnecting can refresh the token without clearing cache. */
+export function onTokenRejected(callback: (rejected: boolean) => void) {
+  callback(tokenRejected);
+  const listener = (event: Event) =>
+    callback((event as CustomEvent<boolean>).detail);
+  sessionEvents.addEventListener("token-rejected", listener);
+  return () => sessionEvents.removeEventListener("token-rejected", listener);
 }
 
 /**
@@ -159,6 +182,44 @@ export function connectSession(username: string, token: unknown) {
     throw new Error("Could not open your account. Please log in again.");
   const address = `${encodeURIComponent(username)}@${location.host}`;
   return whenSessionReadyFor(address).then(() => connect(address, token));
+}
+/**
+ * Fetches a new token for an account on this site and reconnects storage,
+ * keeping unsynced local changes when the username matches the cached account.
+ */
+export async function reconnectSession(fields: {
+  username: string;
+  password: string;
+}) {
+  await whenSessionReady();
+  const username = fields.username.trim();
+  const address = `${encodeURIComponent(username)}@${location.host}`;
+  const held = cacheAccount() ?? storage.remote.userAddress;
+  if (held && held !== address)
+    throw new Error("Log in as the same account to keep unsynced changes.");
+  const fallback = "Could not log in. Please retry.";
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password: fields.password }),
+  }).catch(() => {
+    throw new Error(fallback);
+  });
+  const session = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(session.error ?? fallback);
+  clearSyncTrouble();
+  tokenRejected = false;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("token-rejected", { detail: false }),
+  );
+  preserveCacheMarks = true;
+  try {
+    if (storage.remote.connected) storage.stopSync();
+    await connect(address, session.token);
+    if (storage.sync) void storage.startSync();
+  } finally {
+    preserveCacheMarks = false;
+  }
 }
 function connect(address: string, token: string) {
   const resuming = cacheAccount() === address;

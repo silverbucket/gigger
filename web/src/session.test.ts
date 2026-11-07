@@ -12,6 +12,7 @@ import {
   connectSession,
   logout,
   onSessionLogout,
+  reconnectSession,
   slowStartMessage,
   startProviderSession,
   startSession,
@@ -582,7 +583,7 @@ test("changes that had not synced when the token was rejected go up after loggin
     expect(await cachedDraft()).toBe("Set list v2");
 
     const pushed = server.nextPush();
-    await connectSession("leader", "fresh-token");
+    await reconnectSession({ username: "leader", password: "secret" });
     await pushed;
     expect(server.pushes.at(-1)).toEqual({
       path: "/showday/draft.txt",

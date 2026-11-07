@@ -23,11 +23,21 @@ import Contacts from "./screens/Contacts.svelte";
 import OtherBands from "./screens/OtherBands.svelte";
 import Settings from "./screens/Settings.svelte";
 import Venues from "./screens/Venues.svelte";
-import { bands, logout, storage } from "./storage";
+import {
+  bands,
+  logout,
+  onTokenRejected,
+  reconnectSession,
+  storage,
+} from "./storage";
 
 let signedIn = $state(false);
 let loading = $state(true);
 let userAddress = $state("");
+let tokenRejected = $state(false);
+let reconnectPassword = $state("");
+let reconnectBusy = $state(false);
+let reconnectError = $state("");
 
 const toSort = $derived(
   inboxItems(
@@ -88,6 +98,13 @@ function resetSession() {
   router.read();
 }
 onMount(() => {
+  const unwatchToken = onTokenRejected((rejected) => {
+    tokenRejected = rejected;
+    if (!rejected) {
+      reconnectPassword = "";
+      reconnectError = "";
+    }
+  });
   const unwatchSession = watchSession(resetSession);
   storage.on("ready", () => {
     loading = false;
@@ -121,11 +138,34 @@ onMount(() => {
     }
   });
   return () => {
+    unwatchToken();
     unwatchSession();
     storage.removeEventListener("disconnected", resetSession);
     storage.stopSync();
   };
 });
+
+async function submitReconnect(event: SubmitEvent) {
+  event.preventDefault();
+  if (!userAddress.endsWith(`@${location.host}`)) return;
+  const username = decodeURIComponent(
+    userAddress.slice(0, userAddress.lastIndexOf("@")),
+  );
+  reconnectBusy = true;
+  reconnectError = "";
+  try {
+    await reconnectSession({ username, password: reconnectPassword });
+    reconnectPassword = "";
+    await load();
+  } catch (cause) {
+    reconnectError =
+      cause instanceof Error
+        ? cause.message
+        : "Could not log in. Please retry.";
+  } finally {
+    reconnectBusy = false;
+  }
+}
 
 // One stream per account; it only says "sync now". Reopened whenever the band it is checked against changes.
 $effect(() => {
@@ -267,6 +307,34 @@ function choose(bandId: string) {
         </button>
       </p>
     {/if}
+    {#if tokenRejected}
+      <form class="notice reconnect no-print" onsubmit={submitReconnect}>
+        <p role="status">
+          Your session ended. Log in again to sync — unsynced changes on this
+          device are kept until then.
+        </p>
+        <label class="sr-only" for="reconnect-password">Password</label>
+        <input
+          id="reconnect-password"
+          class="input"
+          type="password"
+          autocomplete="current-password"
+          bind:value={reconnectPassword}
+          required
+          disabled={reconnectBusy}
+        >
+        <button
+          type="submit"
+          class="btn btn-secondary"
+          disabled={reconnectBusy || !reconnectPassword}
+        >
+          Log in again
+        </button>
+        {#if reconnectError}
+          <p class="error" role="alert">{reconnectError}</p>
+        {/if}
+      </form>
+    {/if}
     {#if ui.syncTrouble}
       <p class="notice no-print" role="status">{syncTroubleMessage}</p>
     {/if}
@@ -404,6 +472,14 @@ main {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+.reconnect {
+  padding: 12px 28px;
+  border-bottom: var(--rule-2);
+  align-items: flex-end;
+}
+.reconnect .input {
+  min-width: 12rem;
 }
 .dismiss {
   margin-left: auto;

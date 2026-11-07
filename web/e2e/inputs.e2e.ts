@@ -73,6 +73,14 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   ).toHaveText("Second Band");
   await go(page, "settings");
   await expect(page.getByLabel(/^Band currency/)).toHaveValue("CZK");
+  const picker = page.getByLabel("View band");
+  await picker.selectOption({ label: "Touring Band" });
+  await expect(currency).toHaveValue("CZK");
+  await currency.fill("USD");
+  await picker.selectOption({ label: "Second Band" });
+  await expect(currency).toHaveValue("CZK");
+  await picker.selectOption({ label: "Touring Band" });
+  await expect(currency).toHaveValue("USD");
 });
 
 test("booking validation opens collapsed invalid fields and preserves the draft", async ({

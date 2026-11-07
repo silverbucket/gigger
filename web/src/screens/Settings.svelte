@@ -20,8 +20,9 @@ async function saveCurrency(event: SubmitEvent) {
   if (!band) return;
   const form = event.currentTarget as HTMLFormElement;
   const input = form.querySelector("#band-currency");
-  const text = input instanceof HTMLInputElement ? input.value : currencyText;
   const bandId = band.id;
+  if (currencyDraft && currencyDraft.bandId !== bandId) currencyDraft = null;
+  const text = input instanceof HTMLInputElement ? input.value : currencyText;
   currencyDraft = { bandId, text };
   const value = {
     ...$state.snapshot(band),
