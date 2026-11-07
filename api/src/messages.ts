@@ -12,6 +12,7 @@ import {
   replyBlocked,
   withMessage,
 } from "@showday/schemas";
+import { resolveAppOrigin } from "./app-origin";
 import { emailAccounts, sendCredentials } from "./email";
 import { friendlyMailError } from "./mailbox";
 import { graphVersion } from "./meta";
@@ -37,7 +38,7 @@ export function messageHandler(
   db: Database,
   senders: Record<Channel, Sender>,
   armadiettoUrl = process.env.ARMADIETTO_URL ?? "http://armadietto:8000",
-  appOrigin = process.env.APP_ORIGIN ?? "http://localhost:8080",
+  appOrigin = resolveAppOrigin(),
   env = process.env,
 ) {
   const mail = emailAccounts(db, env);
@@ -95,7 +96,7 @@ export function messageHandler(
       !token
     )
       return null;
-    const store = remoteStore(armadiettoUrl, username, token);
+    const store = remoteStore(armadiettoUrl, username, token, appOrigin);
     try {
       const band = await store.get(`bands/${bandId}/band`);
       if (!band.value) return null;

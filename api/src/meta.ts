@@ -7,6 +7,7 @@ import {
   type Message,
   STORAGE_MODULE_SLUG,
 } from "@showday/schemas";
+import { resolveAppOrigin } from "./app-origin";
 import type { Messages } from "./messages";
 import { seal, unseal, validKey } from "./secrets";
 import { remoteStore } from "./storage";
@@ -120,6 +121,7 @@ export function metaHandler(
   internalUrl = env.ARMADIETTO_AUTH_URL ?? "http://armadietto:8001",
   graphUrl = graph,
 ) {
+  const appOrigin = resolveAppOrigin(env);
   const opened = (row: PageRow | null) =>
     row && {
       ...row,
@@ -202,7 +204,12 @@ export function metaHandler(
     return next;
   }
   async function store(row: PageRow, message: Message) {
-    const rs = remoteStore(armadiettoUrl, row.username, row.storage_token);
+    const rs = remoteStore(
+      armadiettoUrl,
+      row.username,
+      row.storage_token,
+      appOrigin,
+    );
     const copies: Attachment[] = [];
     for (const [n, attachment] of (message.object.attachment ?? []).entries()) {
       let file: Response | undefined;
@@ -473,7 +480,7 @@ export function metaHandler(
         return Response.json(
           deletion
             ? {
-                url: `${env.APP_ORIGIN ?? "http://localhost:8080"}/api/meta/deletion-status?code=${code}`,
+                url: `${appOrigin}/api/meta/deletion-status?code=${code}`,
                 confirmation_code: code,
               }
             : { ok: true },

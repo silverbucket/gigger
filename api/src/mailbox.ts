@@ -1,5 +1,6 @@
 import { conversationId, type Message } from "@showday/schemas";
 import SockethubClient from "@sockethub/client";
+import { resolveAppOrigin } from "./app-origin";
 import {
   type EmailAccount,
   type EmailAccounts,
@@ -158,6 +159,7 @@ export function mailboxWatchers(
         armadiettoUrl,
         account.username,
         account.storageToken,
+        resolveAppOrigin(),
       );
       let ended!: (reason: Error) => void;
       const ending = new Promise<Error>((resolve) => {

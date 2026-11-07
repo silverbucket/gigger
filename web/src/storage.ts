@@ -46,6 +46,7 @@ storage.on("ready", () => {
 storage.on("connected", () => {
   clearSyncTrouble();
   setCacheMark(cacheAccountKey, storage.remote.userAddress);
+  installSyncScopeGuard();
 });
 // Only once the library has deleted the cache.
 storage.on("disconnected", () => {
@@ -57,8 +58,9 @@ storage.on("error", (error) => {
     name?: string;
     message?: string;
   };
-  // 401/403: the token was revoked, or doesn't cover this app's scope.
+  // 401: the token was revoked. 403 on another module's tree is not a dead session.
   if (name === "Unauthorized") expireSession();
+  else if (name === OUT_OF_SCOPE_STORAGE) return;
   else if (name === "SyncError" || /^HTTP response code/.test(`${message}`))
     syncFailed();
 });
@@ -186,6 +188,61 @@ export function logout(broadcast = true) {
   leave(false);
   clearCache(broadcast);
   revoke(userAddress, token);
+}
+
+/** Error name for a 403 on storage outside Showday's scope (not sync trouble). */
+const OUT_OF_SCOPE_STORAGE = "OutOfScopeStorage";
+
+class OutOfScopeStorageError extends Error {
+  constructor() {
+    super("Storage path is outside Showday scope.");
+    this.name = OUT_OF_SCOPE_STORAGE;
+  }
+}
+
+/** Paths the Showday token is supposed to touch; other folders may return 403. */
+function isAppStoragePath(path: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return (
+    normalized === "/showday" ||
+    normalized.startsWith("/showday/") ||
+    normalized === "/public/showday" ||
+    normalized.startsWith("/public/showday/")
+  );
+}
+
+type SyncLike = {
+  interpretStatus: (status: number | string) => { unAuth?: boolean };
+  dealWithFailure: (path: string) => Promise<void>;
+  handleResponse: (
+    path: string,
+    action: string,
+    response: { statusCode: number | string },
+  ) => Promise<boolean>;
+};
+
+/** Stops remotestorage.js treating out-of-app 403 responses like a revoked token. */
+function installSyncScopeGuard() {
+  const sync = storage.sync as
+    | (SyncLike & { __showdayScopeGuard?: boolean })
+    | undefined;
+  if (!sync || sync.__showdayScopeGuard) return;
+  const handleResponse = sync.handleResponse.bind(sync);
+  sync.handleResponse = async (path, action, response) => {
+    const status = sync.interpretStatus(response.statusCode);
+    if (
+      status.unAuth &&
+      response.statusCode === 403 &&
+      !isAppStoragePath(path)
+    ) {
+      await sync.dealWithFailure(path);
+      const error = new OutOfScopeStorageError();
+      storage._emit("error", error);
+      throw error;
+    }
+    return handleResponse(path, action, response);
+  };
+  sync.__showdayScopeGuard = true;
 }
 
 function expireSession() {
