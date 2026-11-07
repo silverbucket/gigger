@@ -28,6 +28,7 @@ import { initials, normalize, plural } from "../lib/format";
 import {
   isPublicPageLive,
   publicPageCouldNotPublish,
+  publicPageCouldNotUnpublish,
   publishUntilLive,
 } from "../lib/public-page";
 import { router } from "../lib/router.svelte";
@@ -313,18 +314,36 @@ function buildPublicProfile() {
   return Object.keys(next).length ? next : undefined;
 }
 const publicDraft = $derived(slugDirty || profileDraft !== null);
+let publicPageError = $state("");
+let publicPageAction = $state<
+  "idle" | "publishing" | "saving" | "unpublishing"
+>("idle");
+const publicPageBusy = $derived(publicPageAction !== "idle");
+const primaryPageAction = $derived(
+  publicPageAction === "publishing"
+    ? "Publishing…"
+    : publicPageAction === "saving"
+      ? "Saving…"
+      : pageLive
+        ? "Save"
+        : "Publish",
+);
 function cancelPublicDraft() {
   slugDirty = false;
   profileDraft = null;
+  publicPageError = "";
   if (band) slugValue = band.slug ?? slugify(band.name ?? "");
 }
-function savePublicPage(event: SubmitEvent) {
+async function savePublicPage(event: SubmitEvent) {
   event.preventDefault();
-  if (!band) return;
+  if (!band || publicPageAction !== "idle") return;
   const previous = $state.snapshot(band);
   const slug = slugValue.trim();
   slugValue = slug;
-  void run(async () => {
+  publicPageAction = pageLive ? "saving" : "publishing";
+  publicPageError = "";
+  ui.busy = true;
+  try {
     const { publicProfile: _, ...bandCore } = previous;
     const locale = /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$/.test(navigator.language)
       ? navigator.language
@@ -351,23 +370,46 @@ function savePublicPage(event: SubmitEvent) {
     pageLive = true;
     slugDirty = false;
     profileDraft = null;
-  }, publicPageCouldNotPublish);
+    await data.load();
+  } catch (cause) {
+    publicPageError =
+      cause instanceof Error && cause.message
+        ? cause.message
+        : publicPageCouldNotPublish;
+  } finally {
+    publicPageAction = "idle";
+    ui.busy = false;
+  }
 }
-function unpublishPage() {
-  if (!band?.slug || !confirm("Take this public page down?")) return;
+async function unpublishPage() {
+  if (!pageLive || !band?.slug || !confirm("Take this public page down?"))
+    return;
+  if (publicPageAction !== "idle") return;
   const previous = $state.snapshot(band);
-  void run(async () => {
+  publicPageAction = "unpublishing";
+  publicPageError = "";
+  ui.busy = true;
+  try {
     await bands.unpublishBand(previous.id);
     await api(
       "/api/public/pages",
       { method: "DELETE", body: { bandId: previous.id } },
-      "Could not unpublish the page. Please retry.",
+      publicPageCouldNotUnpublish,
     );
     pageLive = false;
     slugDirty = false;
     profileDraft = null;
     slugValue = slugify(previous.name ?? "");
-  }, "Could not unpublish the page. Please retry.");
+    await data.load();
+  } catch (cause) {
+    publicPageError =
+      cause instanceof Error && cause.message
+        ? cause.message
+        : publicPageCouldNotUnpublish;
+  } finally {
+    publicPageAction = "idle";
+    ui.busy = false;
+  }
 }
 
 // New band.
@@ -530,11 +572,11 @@ function createBand(event: SubmitEvent) {
       <h3 class="label">Public page</h3>
       <div class="pub-head">
         <strong class="big">{pageLive ? "Published" : "Not published"}</strong>
-        {#if pageLive}
+        {#if pageLive && listed > 0}
           <Tag kind="accent">{plural(listed, "gig")} listed</Tag>
         {/if}
       </div>
-      <form class="form" onsubmit={savePublicPage}>
+      <form class="form" id="band-public-page" onsubmit={savePublicPage}>
         <div class="field">
           <label for="page-address">Page address</label>
           <div class="prefix">
@@ -734,38 +776,44 @@ function createBand(event: SubmitEvent) {
             </div>
           {/if}
         </section>
-        <section class="pub-actions" aria-label="Public page actions">
-          <button
-            type="submit"
-            class="btn btn-primary"
-            disabled={!data.loaded || ui.busy}
-          >
-            {pageLive ? "Save" : "Publish"}
-          </button>
-          {#if band.slug}
-            <button
-              type="button"
-              class="btn btn-ghost"
-              disabled={!data.loaded || ui.busy}
-              onclick={unpublishPage}
-            >
-              Unpublish
-            </button>
-          {/if}
-          {#if publicDraft}
-            <button
-              type="button"
-              class="btn btn-ghost"
-              disabled={ui.busy}
-              onclick={cancelPublicDraft}
-            >
-              Cancel
-            </button>
-          {/if}
-        </section>
       </form>
+    </section>
+    <section class="block pub-page-actions">
+      <div class="pub-actions">
+        <button
+          type="submit"
+          form="band-public-page"
+          class="btn btn-primary"
+          disabled={!data.loaded || publicPageBusy}
+        >
+          {primaryPageAction}
+        </button>
+        {#if pageLive}
+          <button
+            type="button"
+            class="btn btn-ghost"
+            disabled={!data.loaded || publicPageBusy}
+            onclick={unpublishPage}
+          >
+            Unpublish
+          </button>
+        {/if}
+        {#if publicDraft}
+          <button
+            type="button"
+            class="btn btn-ghost"
+            disabled={publicPageBusy}
+            onclick={cancelPublicDraft}
+          >
+            Cancel
+          </button>
+        {/if}
+      </div>
+      {#if publicPageError}
+        <p class="pub-error" role="alert">{publicPageError}</p>
+      {/if}
       {#if pageLive && band.slug}
-        <section class="pub-links" aria-label="Public page links">
+        <div class="pub-links">
           <a
             class="btn btn-secondary"
             href={pageUrl}
@@ -779,7 +827,7 @@ function createBand(event: SubmitEvent) {
             download
             >Export static page (.zip)</a
           >
-        </section>
+        </div>
       {/if}
     </section>
   {/if}
@@ -1205,18 +1253,28 @@ textarea.input {
   min-height: 6rem;
   resize: vertical;
 }
+.pub-page-actions {
+  padding-top: 18px;
+  padding-bottom: 20px;
+}
 .pub-actions,
 .pub-links {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 12px;
-  border-top: var(--rule);
-  margin-top: 12px;
+  align-items: stretch;
+}
+.pub-actions :global(.btn),
+.pub-links :global(.btn) {
+  min-height: 2.75rem;
 }
 .pub-links {
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 12px;
+}
+.pub-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--color-accent-700);
 }
 .bands li {
   display: flex;

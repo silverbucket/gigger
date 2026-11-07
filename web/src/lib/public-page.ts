@@ -1,6 +1,8 @@
 /** Shown when automatic publish retries exhaust; no jargon. */
 export const publicPageCouldNotPublish =
-  "The public page could not be published. Please try again.";
+  "The public page could not be published. Try again.";
+export const publicPageCouldNotUnpublish =
+  "The public page could not be taken down. Try again.";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
