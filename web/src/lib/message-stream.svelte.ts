@@ -18,7 +18,6 @@ export function connectMessageStream(options: {
   let events: EventSource | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   const reopen = () => {
-    messageStream.retrying = true;
     if (!aborted()) retry = setTimeout(() => open().catch(reopen), 5000);
   };
 
