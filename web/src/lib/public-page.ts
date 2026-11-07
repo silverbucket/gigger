@@ -1,6 +1,7 @@
+import { publicPageCouldNotPublish as publishFailure } from "@showday/schemas";
+
 /** Shown when automatic publish retries exhaust; no jargon. */
-export const publicPageCouldNotPublish =
-  "The public page could not be published. Try again.";
+export const publicPageCouldNotPublish = publishFailure;
 export const publicPageCouldNotUnpublish =
   "The public page could not be taken down. Try again.";
 
@@ -32,7 +33,13 @@ export async function publishUntilLive(
   const deadline = Date.now() + (options.timeoutMs ?? 120_000);
   let delay = 500;
   while (Date.now() < deadline) {
-    await write();
+    try {
+      await write();
+    } catch (error) {
+      throw error instanceof Error
+        ? error
+        : new Error(publicPageCouldNotPublish);
+    }
     if (await isPublicPageLive(slug)) return;
     await sleep(delay);
     delay = Math.min(Math.round(delay * 1.3), 2500);

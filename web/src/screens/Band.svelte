@@ -31,6 +31,7 @@ import {
   publicPageCouldNotUnpublish,
   publishUntilLive,
 } from "../lib/public-page";
+import { storage } from "../storage";
 import { router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
 import { bands } from "../storage";
@@ -385,6 +386,22 @@ async function savePublicPage(event: SubmitEvent) {
       );
       await bands.save("band", previous.id, nextBand);
       await bands.publishBand(previous.id, previous.slug, nextBand);
+      if (storage.remote.connected && storage.sync) {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error(publicPageCouldNotPublish)),
+            30_000,
+          );
+          const onDone = (event: unknown) => {
+            clearTimeout(timeout);
+            storage.removeEventListener("sync-done", onDone);
+            if ((event as { completed?: boolean }).completed) resolve();
+            else reject(new Error(publicPageCouldNotPublish));
+          };
+          storage.on("sync-done", onDone);
+          void storage.startSync();
+        });
+      }
     });
     pageLive = true;
     slugDirty = false;

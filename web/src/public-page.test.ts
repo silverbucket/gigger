@@ -66,6 +66,25 @@ test("publishUntilLive retries the write until both public routes work", async (
   }
 });
 
+test("publishUntilLive stops immediately when the write step throws", async () => {
+  const restore = mockFetch(() => new Response("", { status: 404 }));
+  const started = Date.now();
+  try {
+    await expect(
+      publishUntilLive(
+        "x",
+        async () => {
+          throw new Error(publicPageCouldNotPublish);
+        },
+        { timeoutMs: 10_000 },
+      ),
+    ).rejects.toThrow(publicPageCouldNotPublish);
+    expect(Date.now() - started).toBeLessThan(500);
+  } finally {
+    restore();
+  }
+});
+
 test("publishUntilLive fails with a plain message when the page never goes live", async () => {
   const restore = mockFetch(() => new Response("", { status: 404 }));
   try {
