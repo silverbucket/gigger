@@ -1,8 +1,23 @@
-export interface PublicPageTheme {
-  background?: string;
-  text?: string;
-  accent?: string;
-}
+export type {
+  PublicPageTheme,
+  PublicSocialLink,
+  SocialPlatform,
+  ThemePreset,
+} from "./public-profile";
+export {
+  defaultNewPageTheme,
+  legacyLivePageTheme,
+  migrateLegacyInstagram,
+  normalizePublicWebsite,
+  normalizeSocialUrl,
+  PAGE_THEME_PRESETS,
+  socialPlatforms,
+  themePresets,
+} from "./public-profile";
+
+import type { PublicPageTheme, PublicSocialLink } from "./public-profile";
+import { normalizePublicWebsite, normalizeSocialUrl } from "./public-profile";
+
 export interface PublicPageContact {
   email?: string;
   phone?: string;
@@ -11,10 +26,12 @@ export interface PublicPageContact {
 /** Public-facing band profile edited with the public page; stored on the band record. */
 export interface BandPublicProfile {
   bio?: string;
+  city?: string;
   /** Empty string removes the banner; undefined leaves the live banner unchanged on publish. */
   bannerDataUrl?: string;
   theme?: PublicPageTheme;
   contact?: PublicPageContact;
+  socials?: PublicSocialLink[];
 }
 export interface Band {
   id: string;
@@ -104,12 +121,14 @@ export interface PublicGig {
 export interface PublicPage {
   name: string;
   locale?: string;
+  city?: string;
   bio?: string;
   /** Storage object name under `/public/showday/<slug>/`; served as `/b/<slug>/banner`. */
   banner?: string;
   bannerType?: string;
   theme?: PublicPageTheme;
   contact?: PublicPageContact;
+  socials?: PublicSocialLink[];
   gigs: Record<string, PublicGig>;
 }
 export const publicStatuses: readonly GigStatus[] = ["confirmed", "played"];
@@ -531,38 +550,77 @@ const money = { type: "number", minimum: 0 };
 const currency = { type: "string", pattern: "^[A-Z]{3}$" };
 const ticketUrl = { type: "string", pattern: "^https?://[^\\s/]+[^\\s]*$" };
 const hexColor = { type: "string", pattern: "^#[0-9A-Fa-f]{6}$" };
+const themePresetEnum = {
+  enum: ["night", "paper", "gold", "red", "custom"],
+};
+const publicThemeSchema = {
+  type: "object",
+  properties: {
+    preset: themePresetEnum,
+    background: hexColor,
+    text: hexColor,
+    accent: hexColor,
+  },
+  required: ["background", "text", "accent"],
+  additionalProperties: false,
+};
+const publicSocialSchema = {
+  type: "object",
+  properties: {
+    platform: {
+      enum: [
+        "instagram",
+        "facebook",
+        "youtube",
+        "spotify",
+        "bandcamp",
+        "tiktok",
+        "soundcloud",
+        "x",
+      ],
+    },
+    url: ticketUrl,
+  },
+  required: ["platform", "url"],
+  additionalProperties: false,
+};
 const publicProfileSchema = {
   type: "object",
   properties: {
     bio: { type: "string", maxLength: 5000 },
-    bannerDataUrl: { type: "string", maxLength: 2_200_000 },
-    theme: {
-      type: "object",
-      properties: {
-        background: hexColor,
-        text: hexColor,
-        accent: hexColor,
-      },
-      additionalProperties: false,
-    },
+    city: { type: "string", maxLength: 200 },
+    bannerDataUrl: { type: "string", maxLength: 7_500_000 },
+    theme: publicThemeSchema,
     contact: {
       type: "object",
       properties: {
         email,
-        phone: { type: "string" },
-        website: ticketUrl,
+        phone: { type: "string", maxLength: 200 },
+        website: { type: "string", maxLength: 500 },
       },
       additionalProperties: false,
+    },
+    socials: {
+      type: "array",
+      items: publicSocialSchema,
+      maxItems: 8,
     },
   },
   additionalProperties: false,
 };
 const publicPageExtras = {
-  bio: { type: "string" },
+  city: { type: "string", maxLength: 200 },
+  bio: { type: "string", maxLength: 5000 },
   banner: { const: "banner" },
   bannerType: { type: "string", pattern: "^image/" },
-  theme: publicProfileSchema.properties.theme,
+  theme: publicThemeSchema,
   contact: publicProfileSchema.properties.contact,
+  socials: {
+    type: "array",
+    items: publicSocialSchema,
+    maxItems: 8,
+  },
+  instagram: { type: "string" },
 };
 const publicGigSchema = {
   type: "object",
@@ -831,7 +889,7 @@ export interface Client {
 }
 const bannerDataRe =
   /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i;
-const maxBannerBytes = 1_500_000;
+const maxBannerBytes = 5_000_000;
 /** Writes an uploaded banner into the band's public folder; returns public page fields. */
 export async function publishPublicBanner(
   publicClient: Client,
@@ -856,22 +914,32 @@ function publicPageFields(
     gigs: {},
     ...(current.locale ? { locale: current.locale } : {}),
   };
+  const city = profile?.city?.trim();
+  if (city) page.city = city.slice(0, 200);
   const bio = profile?.bio?.trim();
   if (bio) page.bio = bio.slice(0, 5000);
-  if (profile?.theme && Object.keys(profile.theme).length)
+  if (profile?.theme?.background && profile.theme.text && profile.theme.accent)
     page.theme = profile.theme;
-  if (profile?.contact && Object.values(profile.contact).some(Boolean))
-    page.contact = {
-      ...(profile.contact.email?.trim()
-        ? { email: profile.contact.email.trim() }
+  const contact = profile?.contact;
+  if (contact) {
+    const next = {
+      ...(contact.email?.trim()
+        ? { email: contact.email.trim().toLowerCase() }
         : {}),
-      ...(profile.contact.phone?.trim()
-        ? { phone: profile.contact.phone.trim() }
-        : {}),
-      ...(profile.contact.website?.trim()
-        ? { website: profile.contact.website.trim() }
+      ...(contact.phone?.trim() ? { phone: contact.phone.trim() } : {}),
+      ...(normalizePublicWebsite(contact.website ?? "")
+        ? { website: normalizePublicWebsite(contact.website ?? "") }
         : {}),
     };
+    if (Object.keys(next).length) page.contact = next;
+  }
+  const socials = (profile?.socials ?? [])
+    .map((link) => {
+      const url = normalizeSocialUrl(link.platform, link.url);
+      return url ? { platform: link.platform, url } : null;
+    })
+    .filter((link): link is PublicSocialLink => link !== null);
+  if (socials.length) page.socials = socials;
   if (banner?.banner) {
     page.banner = banner.banner;
     if (banner.bannerType) page.bannerType = banner.bannerType;

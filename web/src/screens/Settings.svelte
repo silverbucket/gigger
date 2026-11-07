@@ -8,23 +8,33 @@ import Connections from "./Connections.svelte";
 const current = $derived(data.current);
 const band = $derived(current?.band);
 
-let currencyValue = $state("EUR");
-let currencyDirty = $state(false);
-$effect(() => {
-  if (band && !currencyDirty) currencyValue = band.currency ?? "EUR";
-});
+let currencyDraft = $state<{ bandId: string; text: string } | null>(null);
+const currencyText = $derived(
+  currencyDraft && currencyDraft.bandId === band?.id
+    ? currencyDraft.text
+    : (band?.currency ?? "EUR"),
+);
 
-function saveCurrency(event: SubmitEvent) {
+async function saveCurrency(event: SubmitEvent) {
   event.preventDefault();
   if (!band) return;
+  const form = event.currentTarget as HTMLFormElement;
+  const input = form.querySelector("#band-currency");
+  const text = input instanceof HTMLInputElement ? input.value : currencyText;
+  const bandId = band.id;
+  currencyDraft = { bandId, text };
   const value = {
     ...$state.snapshot(band),
-    currency: currencyValue.toUpperCase(),
+    currency: text.toUpperCase(),
   };
-  void run(async () => {
+  const saved = value.currency;
+  const ok = await run(async () => {
     await bands.save("band", value.id, value);
-    currencyDirty = false;
   });
+  if (!ok) return;
+  const synced = data.current?.band;
+  if (synced && (synced.currency ?? "EUR") === saved) currencyDraft = null;
+  else currencyDraft = { bandId, text: saved };
 }
 </script>
 
@@ -52,6 +62,17 @@ function saveCurrency(event: SubmitEvent) {
       </li>
     {/each}
   </ul>
+  {#if ui.phone}
+    <div class="block phone-logout">
+      <button
+        type="button"
+        class="btn btn-secondary btn-wide"
+        onclick={() => logout()}
+      >
+        Log out
+      </button>
+    </div>
+  {/if}
 {:else}
   <div class="settings">
     <div class="page-head">
@@ -75,8 +96,14 @@ function saveCurrency(event: SubmitEvent) {
             class="input"
             name="currency"
             disabled={ui.busy}
-            bind:value={currencyValue}
-            oninput={() => (currencyDirty = true)}
+            value={currencyText}
+            oninput={(event) => {
+              if (!band) return;
+              currencyDraft = {
+                bandId: band.id,
+                text: event.currentTarget.value,
+              };
+            }}
             pattern={"[A-Za-z]{3}"}
             maxlength="3"
             required
@@ -109,6 +136,9 @@ function saveCurrency(event: SubmitEvent) {
   padding: 18px 28px 20px;
   border-bottom: var(--rule-2);
 }
+.phone-logout {
+  padding-top: 0;
+}
 .inline {
   display: flex;
   flex-wrap: wrap;
@@ -137,6 +167,10 @@ function saveCurrency(event: SubmitEvent) {
   }
   .choose {
     padding-inline: 16px;
+  }
+  .phone-logout {
+    padding-inline: 16px;
+    padding-bottom: calc(var(--tabbar) + 16px);
   }
 }
 </style>

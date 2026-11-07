@@ -2,10 +2,18 @@
 import {
   type BandPublicProfile,
   currencyForLocale,
+  defaultNewPageTheme,
+  legacyLivePageTheme,
   type Member,
+  normalizeSocialUrl,
+  PAGE_THEME_PRESETS,
+  type PublicPageContact,
   publicStatuses,
+  type SocialPlatform,
   slugify,
   slugPattern,
+  socialPlatforms,
+  type ThemePreset,
 } from "@showday/schemas";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import ChannelGrid from "../components/ChannelGrid.svelte";
@@ -146,11 +154,11 @@ const pageUrl = $derived(band?.slug ? `${location.origin}/b/${band.slug}` : "");
 const listed = $derived(
   current?.gigs.filter((g) => publicStatuses.includes(g.status)).length ?? 0,
 );
-const defaultPageTheme = {
-  background: "#e7c244",
-  text: "#15120b",
-  accent: "#15120b",
-};
+const editorThemeDefault = $derived(
+  band?.slug && !band.publicProfile?.theme
+    ? legacyLivePageTheme
+    : defaultNewPageTheme,
+);
 let profileDraft = $state<{
   bandId: string;
   profile: BandPublicProfile;
@@ -162,7 +170,10 @@ const publicProfile = $derived.by((): BandPublicProfile => {
   return band?.publicProfile ?? {};
 });
 const profileContact = $derived(publicProfile.contact ?? {});
-const profileTheme = $derived({ ...defaultPageTheme, ...publicProfile.theme });
+const profileTheme = $derived({
+  ...editorThemeDefault,
+  ...publicProfile.theme,
+});
 const bannerPreview = $derived(
   publicProfile.bannerDataUrl
     ? publicProfile.bannerDataUrl === ""
@@ -187,17 +198,50 @@ function touchContact(
     contact: { ...profileContact, [field]: value },
   });
 }
-function touchTheme(field: keyof typeof defaultPageTheme, value: string) {
+function applyThemePreset(preset: Exclude<ThemePreset, "custom">) {
+  touchProfile({ theme: { ...PAGE_THEME_PRESETS[preset] } });
+}
+function touchTheme(field: "background" | "text" | "accent", value: string) {
   touchProfile({
-    theme: { ...profileTheme, [field]: value },
+    theme: {
+      ...profileTheme,
+      [field]: value,
+      preset: "custom",
+    },
+  });
+}
+const usedSocialPlatforms = $derived(
+  new Set((publicProfile.socials ?? []).map((row) => row.platform)),
+);
+const availableSocialPlatforms = $derived(
+  socialPlatforms.filter((platform) => !usedSocialPlatforms.has(platform)),
+);
+function addSocialLink(platform: SocialPlatform) {
+  if (usedSocialPlatforms.has(platform)) return;
+  touchProfile({
+    socials: [...(publicProfile.socials ?? []), { platform, url: "" }],
+  });
+}
+function updateSocialUrl(platform: SocialPlatform, url: string) {
+  touchProfile({
+    socials: (publicProfile.socials ?? []).map((row) =>
+      row.platform === platform ? { ...row, url } : row,
+    ),
+  });
+}
+function removeSocial(platform: SocialPlatform) {
+  touchProfile({
+    socials: (publicProfile.socials ?? []).filter(
+      (row) => row.platform !== platform,
+    ),
   });
 }
 async function onBannerFile(event: Event) {
   const file = (event.currentTarget as HTMLInputElement).files?.[0];
   (event.currentTarget as HTMLInputElement).value = "";
   if (!file) return;
-  if (file.size > 1_500_000) {
-    ui.error = "Keep the banner image under 1.5 MB.";
+  if (file.size > 5_000_000) {
+    ui.error = "Use a JPEG, PNG or WebP image under 5 MB.";
     return;
   }
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -210,7 +254,7 @@ async function onBannerFile(event: Event) {
 }
 function buildPublicProfile() {
   const profile = { ...publicProfile };
-  const contact = {
+  const contact: PublicPageContact = {
     ...(profileContact.email?.trim()
       ? { email: profileContact.email.trim() }
       : {}),
@@ -223,17 +267,27 @@ function buildPublicProfile() {
   };
   const hasContact = Object.keys(contact).length > 0;
   const theme = profileTheme;
+  const base = editorThemeDefault;
   const hasCustomTheme =
-    theme.background !== defaultPageTheme.background ||
-    theme.text !== defaultPageTheme.text ||
-    theme.accent !== defaultPageTheme.accent;
+    theme.background !== base.background ||
+    theme.text !== base.text ||
+    theme.accent !== base.accent ||
+    theme.preset !== base.preset;
+  const socials = (profile.socials ?? [])
+    .map((row) => {
+      const url = normalizeSocialUrl(row.platform, row.url);
+      return url ? { platform: row.platform, url } : null;
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
   const next: BandPublicProfile = {
     ...(profile.bio?.trim() ? { bio: profile.bio.trim() } : {}),
+    ...(profile.city?.trim() ? { city: profile.city.trim() } : {}),
     ...(profile.bannerDataUrl !== undefined
       ? { bannerDataUrl: profile.bannerDataUrl }
       : {}),
     ...(hasCustomTheme ? { theme } : {}),
     ...(hasContact ? { contact } : {}),
+    ...(socials.length ? { socials } : {}),
   };
   return Object.keys(next).length ? next : undefined;
 }
@@ -241,8 +295,19 @@ function publish(event: SubmitEvent) {
   event.preventDefault();
   if (!band) return;
   const previous = $state.snapshot(band);
-  const slug = slugValue.trim();
+  const input = (event.currentTarget as HTMLFormElement).querySelector(
+    "#page-address",
+  );
+  const slug = (
+    input instanceof HTMLInputElement ? input.value : slugValue
+  ).trim();
+  slugValue = slug;
+  slugDirty = true;
   void run(async () => {
+    const { publicProfile: _, ...bandCore } = previous;
+    const locale = /^[A-Za-z]{2,3}(-[A-Za-z0-9]+)*$/.test(navigator.language)
+      ? navigator.language
+      : undefined;
     await api(
       "/api/public/pages",
       { method: "POST", body: { bandId: previous.id, slug } },
@@ -250,14 +315,22 @@ function publish(event: SubmitEvent) {
     );
     if (previous.slug && previous.slug !== slug)
       await bands.queueOldSlugCleanup(previous.id, previous.slug);
-    const savedProfile = buildPublicProfile();
     await bands.save("band", previous.id, {
-      ...previous,
+      ...bandCore,
       slug,
-      locale: navigator.language,
-      publicProfile: savedProfile,
+      ...(locale ? { locale } : {}),
     });
     await bands.publishBand(previous.id, previous.slug || undefined);
+    const savedProfile = buildPublicProfile();
+    if (savedProfile) {
+      await bands.save("band", previous.id, {
+        ...bandCore,
+        slug,
+        ...(locale ? { locale } : {}),
+        publicProfile: savedProfile,
+      });
+      await bands.publishBand(previous.id, slug);
+    }
     slugDirty = false;
     profileDraft = null;
   }, "Could not publish the page. Please retry.");
@@ -446,7 +519,9 @@ function createBand(event: SubmitEvent) {
         </div>
         <p class="hint">
           Fans see confirmed and played gigs: date, start time, venue, city,
-          ticket link and description. Fees, notes and earnings stay private.
+          ticket link and description. They also see the bio, city, contact
+          details and social links you add below. Fees, member contacts, notes
+          and earnings stay private.
         </p>
         <div class="field">
           <label for="page-bio">Bio</label>
@@ -479,8 +554,38 @@ function createBand(event: SubmitEvent) {
             onchange={onBannerFile}
           >
         </div>
+        <div class="field">
+          <label for="page-city">City</label>
+          <input
+            id="page-city"
+            class="input"
+            value={publicProfile.city ?? ""}
+            maxlength="200"
+            oninput={(event) =>
+              touchProfile({ city: event.currentTarget.value })}
+          >
+        </div>
         <fieldset class="field colors">
-          <legend class="label">Colour scheme</legend>
+          <legend class="label">Color</legend>
+          <div class="theme-swatches">
+            {#each Object.entries(
+              PAGE_THEME_PRESETS,
+            ) as [preset, colors] (preset)}
+              <button
+                type="button"
+                class="swatch"
+                class:selected={profileTheme.preset === preset ||
+                  (profileTheme.background === colors.background &&
+                    profileTheme.text === colors.text &&
+                    profileTheme.accent === colors.accent)}
+                style={`background:${colors.background};color:${colors.text};border-color:${colors.accent}`}
+                onclick={() =>
+                  applyThemePreset(preset as Exclude<ThemePreset, "custom">)}
+              >
+                <span class="capitalize">{preset}</span>
+              </button>
+            {/each}
+          </div>
           <div class="field-row ports">
             <div class="field">
               <label for="page-bg">Background</label>
@@ -519,7 +624,7 @@ function createBand(event: SubmitEvent) {
         </fieldset>
         <div class="field-row">
           <div class="field">
-            <label for="page-contact-email">Contact email</label>
+            <label for="page-contact-email">Booking email</label>
             <input
               id="page-contact-email"
               class="input"
@@ -553,6 +658,46 @@ function createBand(event: SubmitEvent) {
               touchContact("website", event.currentTarget.value)}
           >
         </div>
+        <section class="field socials-block">
+          <h4 class="label">Social links</h4>
+          <p class="hint">
+            These show as icons on your page, in the colors you pick.
+          </p>
+          <ul class="social-editor">
+            {#each publicProfile.socials ?? [] as row (row.platform)}
+              <li>
+                <span class="platform">{row.platform}</span>
+                <input
+                  class="input"
+                  aria-label="{row.platform} link"
+                  value={row.url}
+                  oninput={(event) =>
+                    updateSocialUrl(row.platform, event.currentTarget.value)}
+                >
+                <button
+                  type="button"
+                  class="btn btn-ghost"
+                  onclick={() => removeSocial(row.platform)}
+                >
+                  Remove
+                </button>
+              </li>
+            {/each}
+          </ul>
+          {#if availableSocialPlatforms.length}
+            <div class="social-add">
+              {#each availableSocialPlatforms as platform (platform)}
+                <button
+                  type="button"
+                  class="btn btn-ghost"
+                  onclick={() => addSocialLink(platform)}
+                >
+                  Add {platform}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </section>
         <div class="actions">
           {#if pageUrl}
             <a
@@ -959,6 +1104,52 @@ function createBand(event: SubmitEvent) {
 }
 .colors legend {
   margin-bottom: 8px;
+}
+.theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.swatch {
+  flex: 1 1 4.5rem;
+  min-height: 2.75rem;
+  border: 2px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.swatch.selected {
+  outline: 2px solid var(--color-accent-700);
+  outline-offset: 2px;
+}
+.socials-block .hint {
+  margin-bottom: 8px;
+}
+.social-editor {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.social-editor li {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.social-editor .platform {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.social-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
 }
 textarea.input {
   min-height: 6rem;

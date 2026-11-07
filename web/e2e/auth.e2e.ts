@@ -30,17 +30,22 @@ test("a revoked server token keeps the app signed in and unsynced changes stay l
   expect(token).toBeTruthy();
 
   await go(page, "settings");
-  await page.getByLabel(/^Band currency/).fill("EUR");
+  const currency = page.getByLabel(/^Band currency/);
+  const saveCurrency = page.getByRole("button", {
+    name: "Save currency",
+    exact: true,
+  });
+  await currency.fill("EUR");
+  await expect(currency).toHaveValue("EUR");
   const storageRequests = "**/storage/storage/**";
   await page.route(storageRequests, (route) => route.fulfill({ status: 503 }));
   const pushed = page.waitForRequest(
     (sent) => sent.method() === "PUT" && sent.url().endsWith("/band"),
   );
-  await page
-    .getByRole("button", { name: "Save currency", exact: true })
-    .click();
+  await saveCurrency.click();
   await pushed;
-  await expect(page.getByLabel(/^Band currency/)).toHaveValue("EUR");
+  await expect(saveCurrency).toBeEnabled();
+  await expect(currency).toHaveValue("EUR");
   const revoked = await request.post("/api/auth/logout", {
     headers: { Authorization: `Bearer ${token}` },
     data: { username: account.username },

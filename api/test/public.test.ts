@@ -14,7 +14,7 @@ const leaked = {
   title: "Private title",
 };
 const privateText =
-  /5000|Dinner|4000|Promoter|contact-7f3a|side entrance|Can you play|rating|Low ceiling|Private title|fee|earnings|contact|notes|survey/i;
+  /5000|Dinner|4000|Promoter|contact-7f3a|side entrance|Can you play|rating|Low ceiling|Private title|\bfee\b|\bearnings\b|\bcontacts\b|contactIds|\bnotes\b|\bsurvey\b/i;
 
 test("public page, JSON, ICS and export carry only public fields and the claim is verified", async () => {
   const bandToken = "secret-token";
@@ -183,6 +183,28 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     storage.stop(true);
     db.close();
   }
+});
+
+test("contact section lists social icons after links and omits them from the header", () => {
+  const html = renderPage(
+    {
+      name: "The Low Hums",
+      gigs: {},
+      socials: [
+        { platform: "instagram", url: "https://instagram.com/x" },
+        { platform: "facebook", url: "https://www.facebook.com/x" },
+      ],
+    },
+    "/b/low/",
+    "2030-01-01",
+  );
+  expect(html).toContain('class="contact"');
+  expect(html).toContain('aria-label="Instagram"');
+  expect(html).toContain('href="https://www.facebook.com/x"');
+  expect(html.indexOf('class="bio"')).toBe(-1);
+  expect(html.indexOf('class="socials"')).toBeGreaterThan(
+    html.indexOf('id="contact"'),
+  );
 });
 
 test("cleanPage keeps public profile fields and drops private gig data", () => {

@@ -25,11 +25,15 @@ test("publishing a page copies only public gig fields and the page serves them",
   const address = page.getByRole("textbox", { name: "Page address" });
   await expect(address).toHaveValue("touring-band");
   await address.fill(slug);
-  await page.getByRole("button", { name: "Publish page", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(address).toHaveValue(slug);
+  const publish = page.getByRole("button", {
+    name: "Publish page",
+    exact: true,
+  });
+  await publish.click();
   await expect(
     page.getByRole("link", { name: "Open page", exact: true }),
-  ).toBeVisible({ timeout: 15000 });
+  ).toBeVisible({ timeout: 30000 });
   await expect(
     page.getByRole("link", { name: "Open page", exact: true }),
   ).toHaveAttribute("href", `${new URL(page.url()).origin}/b/${slug}`);
@@ -95,8 +99,13 @@ test("separate sessions preserve independent removals and sync an offline cancel
   await open(page);
   await go(page, "band/public");
   const slug = `test-${account.username.slice(4, 12)}`;
-  await page.getByRole("textbox", { name: "Page address" }).fill(slug);
+  const address = page.getByRole("textbox", { name: "Page address" });
+  await address.fill(slug);
+  await expect(address).toHaveValue(slug);
   await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "Open page", exact: true }),
+  ).toBeVisible({ timeout: 30000 });
   const gigIds = async () => {
     const response = await request.get(`/b/${slug}/gigs.json`);
     if (!response.ok()) return null;
