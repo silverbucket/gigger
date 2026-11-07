@@ -6,6 +6,8 @@ import { seal, unseal, validKey } from "./secrets";
 export interface EmailSettings {
   address: string;
   name?: string;
+  /** When set, only mail addressed to this alias is pulled from the shared inbox. */
+  inboxAddress?: string;
   /** Empty when the band only sends mail; then no mailbox is watched. */
   imapHost?: string;
   imapPort: number;
@@ -78,6 +80,12 @@ export function parseSettings(
   const address = str("address").toLowerCase();
   if (!emailRe.test(address) || address.length > 254)
     return "Enter the band's email address.";
+  const inboxAddress = str("inboxAddress").toLowerCase();
+  if (
+    inboxAddress &&
+    (!emailRe.test(inboxAddress) || inboxAddress.length > 254)
+  )
+    return "Enter a valid address to pull mail for, or leave it empty.";
   const name = str("name");
   if (name.length > 200 || /[\r\n]/.test(name))
     return "Keep the display name under 200 characters.";
@@ -102,6 +110,7 @@ export function parseSettings(
   return {
     address,
     ...(name ? { name } : {}),
+    ...(inboxAddress ? { inboxAddress } : {}),
     ...(imapHost ? { imapHost } : {}),
     imapPort,
     smtpHost,
@@ -216,7 +225,7 @@ export function emailHandler(
       const username = q.get("username");
       const bandId = q.get("bandId");
       if (!(await messages.verified(req, username, bandId)))
-        return fail("Log in again.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       const account = accounts.get(username as string, bandId as string);
       return Response.json(account ? publicSettings(account) : null, {
         headers: noStore,
@@ -228,7 +237,7 @@ export function emailHandler(
       if (!input) return fail("Invalid request.", 400);
       const { username, bandId } = input;
       if (!(await messages.verified(req, username, bandId, true)))
-        return fail("Log in again to change email settings.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       if (!validKey(env))
         return fail("Email is not configured on this server.", 503);
       const existing = accounts.get(username as string, bandId as string);
@@ -262,7 +271,7 @@ export function emailHandler(
       if (!input) return fail("Invalid request.", 400);
       const { username, bandId } = input;
       if (!(await messages.verified(req, username, bandId, true)))
-        return fail("Log in again to change email settings.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       const account = accounts.get(username as string, bandId as string);
       if (account) {
         watchers.stop(account.username, account.bandId);

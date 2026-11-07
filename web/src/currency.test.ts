@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { compile } from "svelte/compiler";
 
 for (const [file, count] of [
-  ["screens/Band.svelte", 2],
+  ["screens/Settings.svelte", 1],
   ["screens/PlayedForm.svelte", 1],
 ] as const) {
   test(`${file} compiles currency patterns that accept CZK and EUR`, async () => {

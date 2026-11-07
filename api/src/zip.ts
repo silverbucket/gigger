@@ -9,14 +9,14 @@ function crc32(bytes: Uint8Array) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 /** Stored (uncompressed) ZIP archive of UTF-8 text files; the entries are small web pages. */
-export function zip(files: Record<string, string>) {
+export function zip(files: Record<string, string | Uint8Array>) {
   const encoder = new TextEncoder();
-  const parts: Uint8Array<ArrayBuffer>[] = [];
-  const central: Uint8Array<ArrayBuffer>[] = [];
+  const parts: Uint8Array[] = [];
+  const central: Uint8Array[] = [];
   let offset = 0;
   for (const [name, text] of Object.entries(files)) {
     const nameBytes = encoder.encode(name);
-    const data = encoder.encode(text);
+    const data = typeof text === "string" ? encoder.encode(text) : text;
     const crc = crc32(data);
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
@@ -47,7 +47,8 @@ export function zip(files: Record<string, string>) {
   end.setUint16(10, central.length / 2, true);
   end.setUint32(12, centralSize, true);
   end.setUint32(16, offset, true);
-  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], {
-    type: "application/zip",
-  });
+  return new Blob(
+    [...parts, ...central, new Uint8Array(end.buffer)] as BlobPart[],
+    { type: "application/zip" },
+  );
 }

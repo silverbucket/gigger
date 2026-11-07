@@ -33,7 +33,7 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   page,
   account,
 }) => {
-  await go(page, "band/settings");
+  await go(page, "settings");
   const currency = page.getByLabel(/^Band currency/);
   const save = page.getByRole("button", { name: "Save currency", exact: true });
   for (const value of ["CZ", "123", "C3"]) {
@@ -60,6 +60,7 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   await expect
     .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
     .toBe("CZK");
+  await go(page, "band");
   await page.getByRole("button", { name: "New band", exact: true }).click();
   const create = page.locator("#new-band");
   await create.getByLabel("Band name", { exact: true }).fill("Second Band");
@@ -70,7 +71,16 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   await expect(
     page.getByLabel("View band").locator("option:checked"),
   ).toHaveText("Second Band");
+  await go(page, "settings");
   await expect(page.getByLabel(/^Band currency/)).toHaveValue("CZK");
+  const picker = page.getByLabel("View band");
+  await picker.selectOption({ label: "Touring Band" });
+  await expect(currency).toHaveValue("CZK");
+  await currency.fill("USD");
+  await picker.selectOption({ label: "Second Band" });
+  await expect(currency).toHaveValue("CZK");
+  await picker.selectOption({ label: "Touring Band" });
+  await expect(currency).toHaveValue("USD");
 });
 
 test("booking validation opens collapsed invalid fields and preserves the draft", async ({

@@ -12,6 +12,7 @@ import {
   connectSession,
   logout,
   onSessionLogout,
+  reconnectSession,
   slowStartMessage,
   startProviderSession,
   startSession,
@@ -25,8 +26,9 @@ import {
 const globals = globalThis as Record<string, unknown>;
 globals.$state = (value: unknown) => value;
 globals.$derived = (value: unknown) => value;
-const { loginAgainMessage, run, syncTroubleMessage, ui, watchSession } =
-  await import("./lib/ui.svelte");
+const { run, syncTroubleMessage, ui, watchSession } = await import(
+  "./lib/ui.svelte"
+);
 const { data } = await import("./lib/data.svelte");
 afterAll(() => {
   delete globals.$state;
@@ -87,6 +89,7 @@ function signIn(username = "leader", token = "session-token") {
     storageApi: "draft-dejong-remotestorage-10",
   });
   storage.stopSync();
+  storage._emit("connected");
 }
 function signOutQuietly() {
   storage.remote.configure({
@@ -311,7 +314,7 @@ test("a logout leaves the cache marked as its account's until the cleanup has de
   }
 });
 
-test("a revoked token sends the user to log in again, not to check their connection", async () => {
+test("a revoked token keeps the session open until the user logs out", async () => {
   await whenSessionReady();
   const page = browser(async () => new Response(null));
   let resets = 0;
@@ -323,39 +326,115 @@ test("a revoked token sends the user to log in again, not to check their connect
     ui.error = "";
     ui.notice = "";
     signIn();
-    // A 401 is reported by both the wire client and sync.
     storage._emit("error", new RemoteStorage.Unauthorized());
     storage._emit("error", new RemoteStorage.Unauthorized());
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(ui.error).toBe("");
-    expect(ui.notice).toBe(loginAgainMessage);
-    expect(loginAgainMessage).toBe("Please log in again.");
-    expect(resets).toBe(1);
-    expect(page.path).toBe("/login");
-    expect(storage.remote.connected).toBe(false);
-    expect(storage.remote.token).toBeFalsy();
-    expect(storage.remote.userAddress).toBe("leader@localhost:8080");
-    // The dead token is revoked as on logout, but the cache stays open.
-    expect(page.requests.map((request) => request.url)).toEqual([
-      "/api/auth/logout",
-    ]);
-    expect(page.requests[0]?.init.headers).toMatchObject({
-      Authorization: "Bearer session-token",
-    });
+    expect(ui.notice).toBe("");
+    expect(resets).toBe(0);
+    expect(page.path).not.toBe("/login");
+    expect(storage.remote.connected).toBe(true);
+    expect(storage.remote.token).toBe("session-token");
     expect(disconnect).not.toHaveBeenCalled();
-    expect(await settles(whenSessionReady())).toBe(true);
-
-    // Late failures from the ended session change nothing.
-    storage._emit("error", new RemoteStorage.Unauthorized());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(resets).toBe(1);
-    expect(page.requests).toHaveLength(1);
+    expect(page.requests).toHaveLength(0);
   } finally {
     unwatch();
     disconnect.mockRestore();
     signOutQuietly();
-    ui.notice = "";
+    page.restore();
+  }
+});
+
+test("only an explicit logout leaves the login screen and revokes the token", async () => {
+  await whenSessionReady();
+  const page = browser(async () => new Response(null));
+  let resets = 0;
+  const unwatch = watchSession(() => {
+    resets++;
+  });
+  try {
+    signIn();
+    logout();
+    await settles(whenSessionReady());
+    expect(resets).toBe(1);
+    expect(page.path).toBe("/login");
+    expect(page.requests.map((request) => request.url)).toEqual([
+      "/api/auth/logout",
+    ]);
+  } finally {
+    unwatch();
+    page.restore();
+  }
+});
+
+test("repeated out-of-scope 403 responses do not show sync trouble", async () => {
+  await whenSessionReady();
+  const page = browser();
+  const unwatch = watchSession(() => {});
+  const start = Date.now();
+  try {
+    signIn();
+    const sync = storage.sync as {
+      handleResponse: (
+        path: string,
+        action: string,
+        response: { statusCode: number },
+      ) => Promise<boolean>;
+    };
+    for (
+      let seconds = 0;
+      seconds <= syncTroubleAfter / 1000 + 30;
+      seconds += 5
+    ) {
+      setSystemTime(start + seconds * 1000);
+      await sync
+        .handleResponse("/gigger/", "get", { statusCode: 403 })
+        .catch(() => {});
+    }
+    expect(ui.syncTrouble).toBe(false);
+  } finally {
+    setSystemTime();
+    unwatch();
+    signOutQuietly();
+    page.restore();
+  }
+});
+
+test("a 403 on another module's folder does not end the session", async () => {
+  await whenSessionReady();
+  const page = browser();
+  let resets = 0;
+  const unwatch = watchSession(() => {
+    resets++;
+  });
+  const disconnect = spyOn(storage, "disconnect");
+  try {
+    signIn();
+    const sync = storage.sync as {
+      handleResponse: (
+        path: string,
+        action: string,
+        response: { statusCode: number },
+      ) => Promise<boolean>;
+    };
+    expect(sync).toBeDefined();
+    await expect(
+      sync.handleResponse("/gigger/", "get", { statusCode: 403 }),
+    ).rejects.toThrow("Storage path is outside Showday scope.");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ui.notice).toBe("");
+    expect(ui.syncTrouble).toBe(false);
+    expect(resets).toBe(0);
+    expect(page.path).not.toBe("/login");
+    expect(storage.remote.connected).toBe(true);
+    expect(storage.remote.token).toBe("session-token");
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(page.requests).toHaveLength(0);
+  } finally {
+    unwatch();
+    disconnect.mockRestore();
+    signOutQuietly();
     page.restore();
   }
 });
@@ -439,7 +518,7 @@ test("a 403 on another module's folder does not end the session", async () => {
  * back every push behind it.
  */
 async function storageServer(rejected: string) {
-  logout();
+  signOutQuietly();
   await whenSessionReady();
   const pushes: { path: string; body: unknown; token: unknown }[] = [];
   let pushed = () => {};
@@ -468,15 +547,6 @@ async function storageServer(rejected: string) {
     },
   };
 }
-/** Resolves with `expired` the next time the session ends. */
-function sessionEnds() {
-  return new Promise<boolean>((resolve) => {
-    const stop = onSessionLogout((expired) => {
-      stop();
-      resolve(expired);
-    });
-  });
-}
 const draft = () => storage.scope("/showday/");
 async function cachedDraft() {
   const file = (await draft().getFile("draft.txt", false)) as {
@@ -495,15 +565,16 @@ test("changes that had not synced when the token was rejected go up after loggin
   const connect = spyOn(storage, "connect").mockImplementation(
     (address, token) => {
       signIn(address.slice(0, address.indexOf("@")), token);
+      storage._emit("connected");
     },
   );
   const server = await storageServer("rejected-token");
   const disconnect = spyOn(storage, "disconnect");
   try {
     signIn("leader", "rejected-token");
-    const ended = sessionEnds();
     await draft().storeFile("text/plain", "draft.txt", "Set list v2");
-    expect(await ended).toBe(true);
+    storage._emit("error", new RemoteStorage.Unauthorized());
+    expect(storage.remote.connected).toBe(true);
     expect(server.pushes[0]).toMatchObject({
       path: "/showday/draft.txt",
       token: "rejected-token",
@@ -512,7 +583,7 @@ test("changes that had not synced when the token was rejected go up after loggin
     expect(await cachedDraft()).toBe("Set list v2");
 
     const pushed = server.nextPush();
-    await startSession("login", { username: "leader", password: "secret" });
+    await reconnectSession({ username: "leader", password: "secret" });
     await pushed;
     expect(server.pushes.at(-1)).toEqual({
       path: "/showday/draft.txt",
@@ -541,16 +612,18 @@ test("logging in as someone else after the token was rejected starts from a clea
   const connect = spyOn(storage, "connect").mockImplementation(
     (address, token) => {
       signIn(address.slice(0, address.indexOf("@")), token);
+      storage._emit("connected");
     },
   );
   const server = await storageServer("rejected-token");
   try {
     signIn("leader", "rejected-token");
-    const ended = sessionEnds();
     await draft().storeFile("text/plain", "draft.txt", "Set list v2");
-    expect(await ended).toBe(true);
+    storage._emit("error", new RemoteStorage.Unauthorized());
     expect(await cachedDraft()).toBe("Set list v2");
 
+    logout();
+    await whenSessionReady();
     await startSession("login", { username: "deputy", password: "secret" });
     expect(connect).toHaveBeenCalledWith(
       "deputy@localhost:8080",
@@ -577,14 +650,14 @@ test("a user@host login for another account asks first, and saying no keeps the 
   const connect = spyOn(storage, "connect").mockImplementation(
     (address, token) => {
       signIn(address.slice(0, address.indexOf("@")), token);
+      storage._emit("connected");
     },
   );
   const server = await storageServer("rejected-token");
   try {
     signIn("leader", "rejected-token");
-    const ended = sessionEnds();
     await draft().storeFile("text/plain", "draft.txt", "Set list v2");
-    expect(await ended).toBe(true);
+    storage._emit("error", new RemoteStorage.Unauthorized());
 
     // A mistyped address, say.
     const asked: string[] = [];
@@ -601,7 +674,7 @@ test("a user@host login for another account asks first, and saying no keeps the 
     expect(await cachedDraft()).toBe("Set list v2");
 
     const pushed = server.nextPush();
-    await startSession("login", { username: "leader", password: "secret" });
+    await connectSession("leader", "fresh-token");
     await pushed;
     expect(server.pushes.at(-1)).toMatchObject({
       path: "/showday/draft.txt",
@@ -625,13 +698,13 @@ test("a user@host login for the same account keeps the cache, and one for anothe
     // The library names the account before leaving for its provider.
     storage.remote.configure({ userAddress: address });
     cacheAtConnect.push(cachedDraft());
+    storage._emit("connected");
   });
   const server = await storageServer("rejected-token");
   try {
     signIn("leader", "rejected-token");
-    const ended = sessionEnds();
     await draft().storeFile("text/plain", "draft.txt", "Set list v2");
-    expect(await ended).toBe(true);
+    storage._emit("error", new RemoteStorage.Unauthorized());
 
     const unasked = () => {
       throw new Error("Asked to discard the cache");
@@ -647,10 +720,10 @@ test("a user@host login for the same account keeps the cache, and one for anothe
     expect(connect).toHaveBeenLastCalledWith("someone@elsewhere.example");
     expect(await cacheAtConnect[1]).toBeUndefined();
 
-    // That login never came back, so the address it left behind holds nothing.
-    expect(await startProviderSession("other@elsewhere.example", unasked)).toBe(
-      true,
-    );
+    // The first account's cache is still here until the user agrees to clear it.
+    expect(
+      await startProviderSession("other@elsewhere.example", () => true),
+    ).toBe(true);
   } finally {
     connect.mockRestore();
     server.restore();

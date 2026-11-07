@@ -325,7 +325,7 @@ export function metaHandler(
       const username = q.get("username");
       const bandId = q.get("bandId");
       if (!(await messages.verified(req, username, bandId)))
-        return fail("Log in again.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       const row = byBand(username as string, bandId as string);
       return Response.json(
         row ? { pageId: row.page_id, instagram: !!row.ig_id } : null,
@@ -344,7 +344,7 @@ export function metaHandler(
       if (typeof accessToken !== "string" || !accessToken)
         return fail("Invalid request.", 400);
       if (!(await messages.verified(req, username, bandId, true)))
-        return fail("Log in again to connect a page.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       if (!env.META_APP_ID || !env.META_APP_SECRET || !validKey(env))
         return fail("Facebook is not configured on this server.", 503);
       return serial(async () => {
@@ -444,7 +444,7 @@ export function metaHandler(
       }
       const { username, bandId } = input ?? {};
       if (!(await messages.verified(req, username, bandId, true)))
-        return fail("Log in again.", 401);
+        return fail("Could not verify access to this band. Please retry.", 403);
       return serial(async () => {
         const row = byBand(username as string, bandId as string);
         if (row)

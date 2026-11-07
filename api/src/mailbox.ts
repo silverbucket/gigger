@@ -15,6 +15,8 @@ interface MailPost {
   type?: string;
   error?: string;
   actor?: { id?: string; name?: string };
+  to?: unknown;
+  cc?: unknown;
   object?: {
     type?: string;
     id?: string;
@@ -28,7 +30,33 @@ interface MailPost {
     bodyOmitted?: boolean;
     attachments?: unknown[];
     cursor?: { uidValidity: string; uid: number };
+    to?: unknown;
+    cc?: unknown;
   };
+}
+/** Normalised recipient addresses from a Sockethub mail activity. */
+export function mailRecipients(item: MailPost): string[] {
+  const found: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value === "string") {
+      const email = value.trim().toLowerCase();
+      if (email.includes("@")) found.push(email);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) add(entry);
+      return;
+    }
+    if (value && typeof value === "object") {
+      const id = (value as { id?: string }).id;
+      if (typeof id === "string") add(id);
+    }
+  };
+  add(item.to);
+  add(item.cc);
+  add(item.object?.to);
+  add(item.object?.cc);
+  return found;
 }
 const mailIdRe = /^[^\r\n]{1,998}$/;
 const mailId = (value: unknown) =>
@@ -58,6 +86,11 @@ export function fromMail(
   const object = item.object;
   if (!from?.includes("@") || !object?.id) return null;
   if (from === account.settings.address) return null;
+  const pullAddress = account.settings.inboxAddress?.trim().toLowerCase();
+  if (pullAddress) {
+    const recipients = mailRecipients(item);
+    if (!recipients.includes(pullAddress)) return null;
+  }
   const body =
     object.content?.trim() ||
     (object.html ? textFromHtml(object.html) : "") ||

@@ -14,7 +14,7 @@ const leaked = {
   title: "Private title",
 };
 const privateText =
-  /5000|Dinner|4000|Promoter|contact-7f3a|side entrance|Can you play|rating|Low ceiling|Private title|fee|earnings|contact|notes|survey/i;
+  /5000|Dinner|4000|Promoter|contact-7f3a|side entrance|Can you play|rating|Low ceiling|Private title|\bfee\b|\bearnings\b|\bcontacts\b|contactIds|\bnotes\b|\bsurvey\b/i;
 
 test("public page, JSON, ICS and export carry only public fields and the claim is verified", async () => {
   const bandToken = "secret-token";
@@ -98,7 +98,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
   try {
     expect((await get("/b/the-band")).status).toBe(404);
     const good = { username: "sam", bandId: "band1", slug: "the-band" };
-    expect((await claim(good, "wrong")).status).toBe(401);
+    expect((await claim(good, "wrong")).status).toBe(403);
     expect((await claim({ ...good, slug: "The Band" })).status).toBe(400);
     expect((await claim({ ...good, username: "../x" })).status).toBe(400);
     expect((await claim(good)).status).toBe(200);
@@ -106,7 +106,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     expect(
       (await claim({ ...good, username: "other", bandId: "band1" }, "x"))
         .status,
-    ).toBe(401);
+    ).toBe(403);
     db.query("INSERT INTO public_pages VALUES ('taken', 'other', 'b2')").run();
     expect((await claim({ ...good, slug: "taken" })).status).toBe(409);
     expect((await claim(good)).status).toBe(200);
@@ -185,6 +185,111 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
   }
 });
 
+test("follow section lists social icons and stays separate from contact", () => {
+  const html = renderPage(
+    {
+      name: "The Low Hums",
+      gigs: {},
+      contact: { email: "book@example.com" },
+      socials: [
+        { platform: "instagram", url: "https://instagram.com/x" },
+        { platform: "facebook", url: "https://www.facebook.com/x" },
+      ],
+    },
+    "/b/low/",
+    "2030-01-01",
+  );
+  expect(html).toContain('class="contact"');
+  expect(html).toContain('class="follow"');
+  expect(html).toContain('id="follow"');
+  expect(html).toMatch(/class="socials"/);
+  expect(html).toContain('aria-label="Instagram"');
+  expect(html).toContain('href="https://www.facebook.com/x"');
+  expect(html.indexOf('class="bio"')).toBe(-1);
+  expect(html.indexOf('id="follow"')).toBeGreaterThan(
+    html.indexOf('id="contact"'),
+  );
+  expect(html.indexOf('class="socials"')).toBeGreaterThan(
+    html.indexOf('id="follow"'),
+  );
+});
+
+test("socials alone render follow without contact", () => {
+  const html = renderPage(
+    {
+      name: "Solo",
+      gigs: {},
+      socials: [{ platform: "instagram", url: "https://instagram.com/x" }],
+    },
+    "",
+    "2030-01-01",
+  );
+  expect(html).not.toContain('id="contact"');
+  expect(html).toContain('id="follow"');
+});
+
+test("past gigs use an upcoming/past toggle instead of stacked sections", () => {
+  const html = renderPage(
+    {
+      name: "Band",
+      gigs: {
+        future: { date: "2030-06-01", venue: "Club" },
+        old: { date: "2020-01-01", venue: "Hall" },
+      },
+    },
+    "",
+    "2030-01-01",
+  );
+  expect(html).toContain('id="gigs-upcoming-tab"');
+  expect(html).toContain("Upcoming");
+  expect(html).toContain("Past");
+  expect(html).not.toContain('id="gigs-label"');
+  expect(html).not.toContain('id="past"');
+  expect(html).toContain('id="gigs-past-panel"');
+  expect(html).toMatch(/gigs-past-panel"[^>]*hidden/);
+});
+
+test("cleanPage migrates legacy instagram into socials", () => {
+  const page = cleanPage({
+    name: "B",
+    gigs: {},
+    instagram: "@theband",
+    socials: [{ platform: "facebook", url: "https://www.facebook.com/x" }],
+  });
+  expect(page?.socials).toEqual([
+    { platform: "facebook", url: "https://www.facebook.com/x" },
+    { platform: "instagram", url: "https://instagram.com/theband" },
+  ]);
+});
+
+test("cleanPage keeps public profile fields and drops private gig data", () => {
+  const page = cleanPage({
+    name: "B",
+    bio: "  About the band  ",
+    banner: "banner",
+    bannerType: "image/png",
+    theme: { background: "#112233", text: "#ffffff", accent: "#445566" },
+    contact: {
+      email: "hello@example.com",
+      phone: "+1 555",
+      website: "https://example.com",
+    },
+    gigs: {},
+  });
+  expect(page).toMatchObject({
+    name: "B",
+    bio: "About the band",
+    banner: "banner",
+    bannerType: "image/png",
+    theme: { background: "#112233", text: "#ffffff", accent: "#445566" },
+    contact: {
+      email: "hello@example.com",
+      phone: "+1 555",
+      website: "https://example.com",
+    },
+  });
+});
+
 test("cleanPage drops anything that is not an allowed public field", () => {
   expect(
     cleanPage({ name: "B", gigs: { g: { date: "2030-01-01", fee: 1 } } }),
@@ -226,13 +331,14 @@ test("public page translates labels and shows years on upcoming cards when neede
     "2030-01-01",
   );
   for (const label of [
-    "Nadcházející koncerty",
-    "Minulé koncerty",
+    "Nadcházející",
+    "Minulé",
     "Vstupenky",
     "Přidat koncerty do kalendáře",
     "Data koncertů ve formátu JSON",
   ])
     expect(czech).toContain(label);
+  expect(czech).not.toContain("Nadcházející koncerty");
   expect(czech).toContain('<span class="year">2031</span>');
   expect(czech).not.toContain('<span class="year">2030</span>');
   const english = renderPage(
