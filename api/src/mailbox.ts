@@ -315,11 +315,7 @@ export function mailboxWatchers(
         });
         if (rescanned.object?.cursor) scheduleCursor(rescanned.object.cursor);
       } else if (watched.object?.cursor) {
-        accounts.cursor(
-          account.username,
-          account.bandId,
-          watched.object.cursor,
-        );
+        scheduleCursor(watched.object.cursor);
       }
       accounts.error(account.username, account.bandId, null);
       setPhase(`${account.username}/${account.bandId}`, "watching");
