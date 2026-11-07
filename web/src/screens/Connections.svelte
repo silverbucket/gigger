@@ -2,6 +2,7 @@
 import type { Band } from "@showday/schemas";
 import Tag from "../components/Tag.svelte";
 import { api, meta } from "../lib/account.svelte";
+import { emailSettingsStatusLine } from "../lib/inbox-watch";
 import { ui } from "../lib/ui.svelte";
 
 /** Where enquiries arrive from: the band's Facebook Page (Messenger, Instagram) and mailbox. */
@@ -198,13 +199,7 @@ function checkMailNow() {
     if (band.id === bandId) mailAccount = next;
   }, "Could not check the mailbox now.");
 }
-function mailStatusLine(account: MailAccount) {
-  if (!account.imapHost) return "Send only";
-  if (account.error) return "Mailbox error";
-  if (account.inboxPhase === "retrying") return "Reconnecting";
-  if (account.inboxPhase === "connecting") return "Connecting";
-  return account.watching ? "Watching inbox" : "Inbox idle";
-}
+const mailStatusLine = (account: MailAccount) => emailSettingsStatusLine(account);
 function removeMail() {
   if (
     !confirm(

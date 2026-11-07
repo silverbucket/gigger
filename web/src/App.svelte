@@ -7,6 +7,7 @@ import TopBar from "./components/TopBar.svelte";
 import { meta } from "./lib/account.svelte";
 import { data } from "./lib/data.svelte";
 import { inboxItems } from "./lib/inbox";
+import { connectMessageStream } from "./lib/message-stream.svelte";
 import { threads } from "./lib/messages.svelte";
 import { router } from "./lib/router.svelte";
 import {
@@ -172,44 +173,20 @@ $effect(() => {
   const streamBand = data.bandId || data.all[0]?.band.id;
   if (!signedIn || !streamBand) return;
   const { userAddress, token } = storage.remote;
-  if (!userAddress.endsWith(`@${location.host}`)) return;
+  if (!userAddress.endsWith(`@${location.host}`) || !token) return;
   const username = decodeURIComponent(
     userAddress.slice(0, userAddress.lastIndexOf("@")),
   );
-  let events: EventSource | undefined;
-  let retry: ReturnType<typeof setTimeout> | undefined;
-  let closed = false;
-  // The stream is opened with a single-use ticket, so a dropped connection needs a new ticket, not a browser retry.
-  const reopen = () => {
-    if (!closed) retry = setTimeout(() => open().catch(reopen), 5000);
-  };
-  async function open() {
-    const response = await fetch("/api/messages/ticket", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ username, bandId: streamBand }),
-    });
-    if (!response.ok) throw new Error("No ticket");
-    const { ticket } = await response.json();
-    if (closed) return;
-    events = new EventSource(
-      `/api/messages/events?${new URLSearchParams({ ticket })}`,
-    );
-    events.onmessage = () => void storage.startSync();
-    // The ticket is spent, so the browser's own retry would only earn a 401; reopen with a new one instead.
-    events.onerror = () => {
-      events?.close();
-      reopen();
-    };
-  }
-  open().catch(reopen);
+  let alive = true;
+  const stop = connectMessageStream({
+    username,
+    bandId: streamBand,
+    token,
+    aborted: () => !alive,
+  });
   return () => {
-    closed = true;
-    clearTimeout(retry);
-    events?.close();
+    alive = false;
+    stop();
   };
 });
 function choose(bandId: string) {
