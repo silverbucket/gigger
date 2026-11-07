@@ -9,9 +9,11 @@ import {
 import RemoteStorage from "remotestoragejs";
 import { createLogoutSync } from "./logout-sync";
 import {
+  bands,
   connectSession,
   logout,
   onSessionLogout,
+  onTokenRejected,
   reconnectSession,
   slowStartMessage,
   startProviderSession,
@@ -439,104 +441,22 @@ test("a 403 on another module's folder does not end the session", async () => {
   }
 });
 
-test("repeated out-of-scope 403 responses do not show sync trouble", async () => {
-  await whenSessionReady();
-  const page = browser();
-  const unwatch = watchSession(() => {});
-  const start = Date.now();
-  try {
-    signIn();
-    const sync = storage.sync as {
-      handleResponse: (
-        path: string,
-        action: string,
-        response: { statusCode: number },
-      ) => Promise<boolean>;
-    };
-    for (
-      let seconds = 0;
-      seconds <= syncTroubleAfter / 1000 + 30;
-      seconds += 5
-    ) {
-      setSystemTime(start + seconds * 1000);
-      await sync
-        .handleResponse("/gigger/", "get", { statusCode: 403 })
-        .catch(() => {});
-    }
-    expect(ui.syncTrouble).toBe(false);
-  } finally {
-    setSystemTime();
-    unwatch();
-    signOutQuietly();
-    page.restore();
-  }
-});
-
-test("a 403 on another module's folder does not end the session", async () => {
-  await whenSessionReady();
-  const page = browser();
-  let resets = 0;
-  const unwatch = watchSession(() => {
-    resets++;
-  });
-  const disconnect = spyOn(storage, "disconnect");
-  try {
-    signIn();
-    const sync = storage.sync as {
-      handleResponse: (
-        path: string,
-        action: string,
-        response: { statusCode: number },
-      ) => Promise<boolean>;
-    };
-    expect(sync).toBeDefined();
-    await expect(
-      sync.handleResponse("/gigger/", "get", { statusCode: 403 }),
-    ).rejects.toThrow("Storage path is outside Showday scope.");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(ui.notice).toBe("");
-    expect(ui.syncTrouble).toBe(false);
-    expect(resets).toBe(0);
-    expect(page.path).not.toBe("/login");
-    expect(storage.remote.connected).toBe(true);
-    expect(storage.remote.token).toBe("session-token");
-    expect(disconnect).not.toHaveBeenCalled();
-    expect(page.requests).toHaveLength(0);
-  } finally {
-    unwatch();
-    disconnect.mockRestore();
-    signOutQuietly();
-    page.restore();
-  }
-});
-
 /**
  * Opens a fresh cache with a stand-in storage server: an empty account where
- * pushes made with `rejected` get a 401. Sync handles finished requests in
- * order, so a request left hanging, here or by an earlier test, would hold
- * back every push behind it.
+ * pushes made with `rejected` get a 401, every request gets `down` while that
+ * is set, and pushes are answered only once `held` settles. Sync handles
+ * finished requests in order, so a request left hanging, here or by an
+ * earlier test, would hold back every push behind it.
  */
-async function storageServer(rejected: string) {
+async function storageServer(rejected = "") {
   signOutQuietly();
   await whenSessionReady();
   const pushes: { path: string; body: unknown; token: unknown }[] = [];
   let pushed = () => {};
-  const get = spyOn(storage.remote, "get").mockResolvedValue({
-    statusCode: 404,
-  });
-  const put = spyOn(storage.remote, "put").mockImplementation(
-    async (path, body) => {
-      const { token } = storage.remote;
-      pushes.push({ path, body, token });
-      pushed();
-      return token === rejected
-        ? { statusCode: 401 }
-        : { statusCode: 201, revision: `${pushes.length}` };
-    },
-  );
-  return {
+  const server = {
     pushes,
+    down: undefined as number | undefined,
+    held: Promise.resolve(),
     nextPush: () =>
       new Promise<void>((resolve) => {
         pushed = resolve;
@@ -546,6 +466,33 @@ async function storageServer(rejected: string) {
       put.mockRestore();
     },
   };
+  const get = spyOn(storage.remote, "get").mockImplementation(async () => ({
+    statusCode: server.down ?? 404,
+  }));
+  const put = spyOn(storage.remote, "put").mockImplementation(
+    async (path, body) => {
+      const { token } = storage.remote;
+      pushes.push({ path, body, token });
+      pushed();
+      await server.held;
+      if (server.down) return { statusCode: server.down };
+      return token === rejected
+        ? { statusCode: 401 }
+        : { statusCode: 201, revision: `${pushes.length}` };
+    },
+  );
+  return server;
+}
+/** Resolves once a sync gets through everything it had to do. */
+function syncCompletes() {
+  return new Promise<void>((resolve) => {
+    const done = (event: unknown) => {
+      if (!(event as { completed?: boolean }).completed) return;
+      storage.removeEventListener("sync-done", done);
+      resolve();
+    };
+    storage.on("sync-done", done);
+  });
 }
 const draft = () => storage.scope("/showday/");
 async function cachedDraft() {
@@ -555,6 +502,53 @@ async function cachedDraft() {
   return file.data;
 }
 
+test("a change the server keeps refusing is kept on this device without holding up the app", async () => {
+  await whenSessionReady();
+  const page = browser(async () => new Response(null));
+  const marks = showdayStorage();
+  const unwatch = watchSession(() => {});
+  const server = await storageServer();
+  try {
+    ui.error = "";
+    signIn();
+    const band = { id: "band", name: "Band", currency: "CZK" };
+    await bands.save("band", band.id, band);
+    server.down = 503;
+
+    const saving = run(() =>
+      bands.save("band", band.id, { ...band, currency: "EUR" }),
+    );
+    expect(ui.busy).toBe(true);
+    expect(await saving).toBe(true);
+    expect(ui.busy).toBe(false);
+    expect(ui.error).toBe("");
+    expect(data.band(band.id)?.band.currency).toBe("EUR");
+    // The reload asked the server, which refused the change.
+    expect(server.pushes.map((push) => push.path)).toContain(
+      "/showday/bands/band/band",
+    );
+    expect(page.path).not.toBe("/login");
+    expect(storage.remote.connected).toBe(true);
+
+    server.down = undefined;
+    const pushed = server.nextPush();
+    void storage.startSync();
+    await pushed;
+    const sent = server.pushes.at(-1);
+    expect(sent?.path).toBe("/showday/bands/band/band");
+    expect(JSON.parse(String(sent?.body))).toMatchObject({ currency: "EUR" });
+  } finally {
+    unwatch();
+    server.restore();
+    const stalled = stallCleanup();
+    logout();
+    await finishCleanup(stalled);
+    data.reset();
+    marks.restore();
+    page.restore();
+  }
+});
+
 test("changes that had not synced when the token was rejected go up after logging in again", async () => {
   await whenSessionReady();
   const page = browser(async (url, init) => {
@@ -562,18 +556,22 @@ test("changes that had not synced when the token was rejected go up after loggin
     const { username } = JSON.parse(String(init.body));
     return Response.json({ username, token: "fresh-token" });
   });
-  const connect = spyOn(storage, "connect").mockImplementation(
-    (address, token) => {
-      signIn(address.slice(0, address.indexOf("@")), token);
-      storage._emit("connected");
-    },
-  );
   const server = await storageServer("rejected-token");
   const disconnect = spyOn(storage, "disconnect");
+  let rejected = false;
+  const unwatchToken = onTokenRejected((value) => {
+    rejected = value;
+  });
   try {
+    // The push made with the rejected token is only answered after logging in again.
+    let answer = () => {};
+    server.held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
     signIn("leader", "rejected-token");
     await draft().storeFile("text/plain", "draft.txt", "Set list v2");
     storage._emit("error", new RemoteStorage.Unauthorized());
+    expect(rejected).toBe(true);
     expect(storage.remote.connected).toBe(true);
     expect(server.pushes[0]).toMatchObject({
       path: "/showday/draft.txt",
@@ -584,15 +582,22 @@ test("changes that had not synced when the token was rejected go up after loggin
 
     const pushed = server.nextPush();
     await reconnectSession({ username: "leader", password: "secret" });
+    expect(rejected).toBe(false);
+    expect(storage.remote.token).toBe("fresh-token");
+
+    const synced = syncCompletes();
+    answer();
     await pushed;
     expect(server.pushes.at(-1)).toEqual({
       path: "/showday/draft.txt",
       body: "Set list v2",
       token: "fresh-token",
     });
+    await synced;
+    expect(rejected).toBe(false);
     expect(disconnect).not.toHaveBeenCalled();
   } finally {
-    connect.mockRestore();
+    unwatchToken();
     disconnect.mockRestore();
     server.restore();
     const stalled = stallCleanup();
