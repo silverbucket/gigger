@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   type Gig,
+  PAGE_THEME_PRESETS,
   publicGig,
   Showday,
   type ShowdayStore,
@@ -125,6 +126,45 @@ test("confirmed gigs publish only public fields and unpublish when cancelled or 
     await expect(
       store.save("band", "a", { id: "a", name: "Bad", slug: "Not A Slug" }),
     ).rejects.toBeDefined();
+  } finally {
+    storage.stopSync();
+  }
+});
+
+test("unpublish clears the slug and public copy but keeps the private profile", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  storage.caching.enable("/public/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  const privateClient = storage.scope("/showday/");
+  const publicClient = storage.scope("/public/showday/");
+  const { createShowday } = await import("@showday/schemas");
+  const store = createShowday(privateClient, publicClient);
+  try {
+    const profile = {
+      bio: "We play loud",
+      city: "Prague",
+      theme: { ...PAGE_THEME_PRESETS.night },
+    };
+    await store.save("band", "a", {
+      id: "a",
+      name: "Band",
+      slug: "band",
+      publicProfile: profile,
+    });
+    await store.publishBand("a");
+    expect(await publicClient.getObject("band/page")).toBeTruthy();
+    await store.unpublishBand("a");
+    expect(await publicClient.getObject("band/page")).toBeFalsy();
+    const band = await privateClient.getObject("bands/a/band");
+    expect(band).toMatchObject({
+      id: "a",
+      name: "Band",
+      publicProfile: profile,
+    });
+    expect(band).not.toHaveProperty("slug");
   } finally {
     storage.stopSync();
   }

@@ -1254,7 +1254,7 @@ export function createShowday(client: Client, publicClient?: Client) {
         const current = await publicBand(bandId);
         if (!current?.slug) return;
         await removePublic(current.slug);
-        const { slug: _, publicProfile: __, ...rest } = current;
+        const { slug: _, ...rest } = current;
         await client.storeObject("band", recordPath("band", bandId), {
           ...rest,
           id: bandId,
@@ -1487,6 +1487,7 @@ export function createShowday(client: Client, publicClient?: Client) {
     /** Deletes discarded conversations older than 30 days; reviewed threads are left alone. */
     async purgeExpiredDiscarded(now = Date.now()) {
       const cutoff = new Date(now - 30 * day).toISOString();
+      const index = await this.conversations();
       const folders = await client.getListing("bands/");
       for (const key of Object.keys(folders ?? {}).filter((k) =>
         k.endsWith("/"),
@@ -1496,6 +1497,8 @@ export function createShowday(client: Client, publicClient?: Client) {
         for (const mark of await list("triage", bandId)) {
           if (mark.status !== "discarded" || mark.at >= cutoff) continue;
           if (gigs.some((gig) => gig.conversationId === mark.id)) continue;
+          const lastIn = index[mark.id]?.lastIn;
+          if (lastIn && lastIn > mark.at) continue;
           await this.dropConversationMessages(mark.id);
           await this.dropConversation(mark.id);
           await client.remove(recordPath("triage", bandId, mark.id));

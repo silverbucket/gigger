@@ -50,6 +50,70 @@ test("discarded and reviewed inbox states are distinct from to sort", () => {
   });
 });
 
+test("discarded threads with a newer lastIn are not purged and show as to sort", async () => {
+  const storage = new RemoteStorage();
+  storage.addModule(Showday);
+  storage.access.claim("showday", "rw");
+  storage.caching.enable("/showday/");
+  const store = (storage as RemoteStorage & { showday: ShowdayStore }).showday;
+  const client = storage.scope("/showday/");
+  await new Promise<void>((resolve) => storage.on("ready", () => resolve()));
+  try {
+    await store.save("band", "a", { id: "a", name: "Band" });
+    const convo = conversationId("email", "a", "returned@example.com");
+    const first: Message = {
+      id: "old",
+      channel: "email",
+      direction: "in",
+      conversation: convo,
+      bandId: "a",
+      actor: { id: "returned@example.com" },
+      target: { id: "band@example.com" },
+      object: { type: "Note", content: "Spam" },
+      published: "2030-01-01T10:00:00.000Z",
+    };
+    await client.storeObject("message", messagePath(first), first);
+    await client.storeObject("conversations", "conversations/index", {
+      [convo]: {
+        bandId: "a",
+        channel: "email",
+        peer: first.actor,
+        lastIn: first.published,
+        preview: "Spam",
+      },
+    });
+    await store.discardConversation("a", convo, "2030-01-02T10:00:00.000Z");
+    const followUp: Message = {
+      ...first,
+      id: "new",
+      object: { type: "Note", content: "Real enquiry" },
+      published: "2030-02-15T10:00:00.000Z",
+    };
+    await client.storeObject("message", messagePath(followUp), followUp);
+    await client.storeObject("conversations", "conversations/index", {
+      [convo]: {
+        bandId: "a",
+        channel: "email",
+        peer: first.actor,
+        lastIn: followUp.published,
+        preview: "Real enquiry",
+      },
+    });
+    await store.purgeExpiredDiscarded(Date.parse("2030-03-10T10:00:00.000Z"));
+    expect((await store.conversations())[convo]?.preview).toBe("Real enquiry");
+    expect((await store.messages(convo)).map((m) => m.id).sort()).toEqual([
+      "new",
+      "old",
+    ]);
+    expect(
+      inboxItems(await store.conversations(), ["a"], [], await store.list("triage", "a"))[0]
+        ?.state,
+    ).toBe("toSort");
+  } finally {
+    storage.disconnect();
+  }
+});
+
 test("only discarded threads older than 30 days are purged", async () => {
   const storage = new RemoteStorage();
   storage.addModule(Showday);
