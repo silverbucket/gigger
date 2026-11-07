@@ -206,8 +206,12 @@ test("follow section lists social icons and stays separate from contact", () => 
   expect(html).toContain('aria-label="Instagram"');
   expect(html).toContain('href="https://www.facebook.com/x"');
   expect(html.indexOf('class="bio"')).toBe(-1);
-  expect(html.indexOf('id="follow"')).toBeGreaterThan(html.indexOf('id="contact"'));
-  expect(html.indexOf('class="socials"')).toBeGreaterThan(html.indexOf('id="follow"'));
+  expect(html.indexOf('id="follow"')).toBeGreaterThan(
+    html.indexOf('id="contact"'),
+  );
+  expect(html.indexOf('class="socials"')).toBeGreaterThan(
+    html.indexOf('id="follow"'),
+  );
 });
 
 test("socials alone render follow without contact", () => {
@@ -239,8 +243,23 @@ test("past gigs use an upcoming/past toggle instead of stacked sections", () => 
   expect(html).toContain('id="gigs-upcoming-tab"');
   expect(html).toContain("Upcoming");
   expect(html).toContain("Past");
-  expect(html).not.toContain("Upcoming gigs");
-  expect(html).toContain('id="gigs-past-panel" hidden');
+  expect(html).not.toContain('id="gigs-label"');
+  expect(html).not.toContain('id="past"');
+  expect(html).toContain('id="gigs-past-panel"');
+  expect(html).toMatch(/gigs-past-panel"[^>]*hidden/);
+});
+
+test("cleanPage migrates legacy instagram into socials", () => {
+  const page = cleanPage({
+    name: "B",
+    gigs: {},
+    instagram: "@theband",
+    socials: [{ platform: "facebook", url: "https://www.facebook.com/x" }],
+  });
+  expect(page?.socials).toEqual([
+    { platform: "facebook", url: "https://www.facebook.com/x" },
+    { platform: "instagram", url: "https://instagram.com/theband" },
+  ]);
 });
 
 test("cleanPage keeps public profile fields and drops private gig data", () => {

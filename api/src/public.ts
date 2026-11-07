@@ -378,6 +378,7 @@ function gigsSection(
   fmt: ReturnType<typeof formatter>,
   lang: string,
   today: string,
+  cs: boolean,
 ) {
   const upcomingHtml = upcomingBlock(
     upcoming,
@@ -396,7 +397,7 @@ ${upcomingHtml}
   }
   return `<section class="gigs-area">
 <div class="gigs-head">
-<div class="gigs-toggle" role="tablist" aria-label="${esc(labels.upcomingHeading)}">
+<div class="gigs-toggle" role="tablist" aria-label="${cs ? "Koncerty" : "Gigs"}">
 <button type="button" role="tab" id="gigs-upcoming-tab" aria-selected="true" aria-controls="gigs-upcoming-panel">${esc(labels.toggleUpcoming)}</button>
 <button type="button" role="tab" id="gigs-past-tab" aria-selected="false" aria-controls="gigs-past-panel">${esc(labels.togglePast)}</button>
 </div>
@@ -491,7 +492,7 @@ ${page.banner ? `<figure class="banner"><img src="${esc(base)}banner" alt=""></f
 ${page.bio ? `<p class="bio">${esc(page.bio)}</p>` : ""}
 </header>
 <main>
-${gigsSection(upcoming, past, labels, fmt, lang, today)}
+${gigsSection(upcoming, past, labels, fmt, lang, today, cs)}
 ${contactSection(page, cs)}
 ${followSection(page, cs)}
 </main>
