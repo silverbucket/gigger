@@ -140,17 +140,27 @@ export function fromMail(
     ...(references.length ? { references: references.slice(-50) } : {}),
   };
 }
-const emit = (sc: SockethubClient, event: string, payload: unknown) =>
-  new Promise<MailPost>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("email:sockethub-timeout")),
-      30000,
-    );
-    sc.socket.emit(event, payload, (result: MailPost | undefined) => {
-      clearTimeout(timer);
-      result?.error ? reject(new Error(result.error)) : resolve(result ?? {});
-    });
-  });
+/** Socket.IO drops pending acks on disconnect, so every wait also races the session's end. */
+const emit = (
+  sc: SockethubClient,
+  event: string,
+  payload: unknown,
+  aborted: Promise<never>,
+) =>
+  Promise.race([
+    aborted,
+    new Promise<MailPost>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("email:sockethub-timeout")),
+        30000,
+      );
+      aborted.catch(() => clearTimeout(timer));
+      sc.socket.emit(event, payload, (result: MailPost | undefined) => {
+        clearTimeout(timer);
+        result?.error ? reject(new Error(result.error)) : resolve(result ?? {});
+      });
+    }),
+  ]);
 
 /** One long-lived Sockethub session per band mailbox: IMAP IDLE through `watch`, stored messages, a saved cursor, reconnects with backoff. */
 export function mailboxWatchers(
@@ -181,7 +191,8 @@ export function mailboxWatchers(
   type Run = {
     stopped: boolean;
     wake?: () => void;
-    client?: SockethubClient;
+    /** Ends the current session, whether it is still connecting or already watching. */
+    end?: () => void;
     done: Promise<void>;
     phase: InboxWatchStatus["phase"];
     catchUp?: boolean;
@@ -201,12 +212,20 @@ export function mailboxWatchers(
     const sessionId = crypto.randomUUID();
     run.activeSession = sessionId;
     setPhase(`${account.username}/${account.bandId}`, "connecting");
-    const sc = await SockethubClient.connect(sockethubUrl, {
+    let ended!: (reason: Error) => void;
+    const ending = new Promise<Error>((resolve) => {
+      ended = resolve;
+    });
+    const aborted = ending.then((reason) => Promise.reject(reason));
+    aborted.catch(() => {});
+    const end = () => ended(new Error("Sockethub disconnected"));
+    run.end = end;
+    const connecting = SockethubClient.connect(sockethubUrl, {
       initTimeoutMs: 10000,
     });
-    run.client = sc;
     try {
-      await sc.ready(15000);
+      const sc = await Promise.race([aborted, connecting]);
+      await Promise.race([aborted, sc.ready(15000)]);
       if (!sc.getRegisteredPlatforms().some((p) => p.id === "email"))
         throw new Error("Email isn't set up on this server yet.");
       const actor = {
@@ -221,10 +240,6 @@ export function mailboxWatchers(
         account.storageToken,
         resolveAppOrigin(),
       );
-      let ended!: (reason: Error) => void;
-      const ending = new Promise<Error>((resolve) => {
-        ended = resolve;
-      });
       // Posts are stored in arrival order; a failed write holds the cursor back so the catch-up refetches it.
       let chain = Promise.resolve();
       let unstored = false;
@@ -273,33 +288,42 @@ export function mailboxWatchers(
         if (activity.type === "disconnect")
           ended(new Error(activity.error ?? "email:connection-closed"));
       });
-      sc.socket.on("disconnect", () =>
-        ended(new Error("Sockethub disconnected")),
-      );
-      await emit(sc, "credentials", {
-        "@context": context,
-        type: "credentials",
-        actor,
-        object: {
+      sc.socket.on("disconnect", end);
+      await emit(
+        sc,
+        "credentials",
+        {
+          "@context": context,
           type: "credentials",
-          ...receiveCredentials(account.settings),
+          actor,
+          object: {
+            type: "credentials",
+            ...receiveCredentials(account.settings),
+          },
         },
-      });
-      await emit(sc, "message", {
-        "@context": context,
-        type: "connect",
-        actor,
-      });
+        aborted,
+      );
+      await emit(
+        sc,
+        "message",
+        { "@context": context, type: "connect", actor },
+        aborted,
+      );
       const fresh = accounts.get(account.username, account.bandId) ?? account;
-      const watched = await emit(sc, "message", {
-        "@context": context,
-        type: "watch",
-        actor,
-        object: {
-          folder: "INBOX",
-          ...(fresh.cursor ? { cursor: fresh.cursor } : {}),
+      const watched = await emit(
+        sc,
+        "message",
+        {
+          "@context": context,
+          type: "watch",
+          actor,
+          object: {
+            folder: "INBOX",
+            ...(fresh.cursor ? { cursor: fresh.cursor } : {}),
+          },
         },
-      });
+        aborted,
+      );
       if (run.rescanWithoutCursor && watched.object?.cursor) {
         const fromStart = {
           uidValidity: watched.object.cursor.uidValidity,
@@ -307,12 +331,17 @@ export function mailboxWatchers(
         };
         accounts.cursor(account.username, account.bandId, fromStart);
         run.rescanWithoutCursor = false;
-        const rescanned = await emit(sc, "message", {
-          "@context": context,
-          type: "watch",
-          actor,
-          object: { folder: "INBOX", cursor: fromStart },
-        });
+        const rescanned = await emit(
+          sc,
+          "message",
+          {
+            "@context": context,
+            type: "watch",
+            actor,
+            object: { folder: "INBOX", cursor: fromStart },
+          },
+          aborted,
+        );
         if (rescanned.object?.cursor) scheduleCursor(rescanned.object.cursor);
       } else if (watched.object?.cursor) {
         scheduleCursor(watched.object.cursor);
@@ -322,8 +351,11 @@ export function mailboxWatchers(
       return await ending;
     } finally {
       if (run.activeSession === sessionId) run.activeSession = undefined;
-      run.client = undefined;
-      sc.socket.disconnect();
+      if (run.end === end) run.end = undefined;
+      connecting.then(
+        (sc) => sc.socket.disconnect(),
+        () => {},
+      );
     }
   }
   async function loop(id: string, run: Run) {
@@ -386,7 +418,7 @@ export function mailboxWatchers(
     if (!run) return;
     runs.delete(id);
     run.stopped = true;
-    run.client?.socket.disconnect();
+    run.end?.();
     run.wake?.();
     await run.done;
   }
@@ -428,8 +460,11 @@ export function mailboxWatchers(
         return;
       }
       if (rescanWithoutCursor) run.rescanWithoutCursor = true;
-      run.catchUp = true;
-      run.client?.socket.disconnect();
+      // Only a live session's end is intentional; a flag left set while waiting would hide the next real failure.
+      if (run.end) {
+        run.catchUp = true;
+        run.end();
+      }
       run.wake?.();
     },
     status(username: string, bandId: string): InboxWatchStatus {
