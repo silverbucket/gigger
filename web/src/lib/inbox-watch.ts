@@ -100,3 +100,25 @@ export function showToSortSection(
 ): boolean {
   return hasIncoming || hasListedMessages;
 }
+
+/** Applies one mailbox status refresh without dropping entries when a fetch fails. */
+export function mergeMailByBandRefresh(
+  previous: Record<string, MailWatchAccount>,
+  bandIds: string[],
+  updates: {
+    bandId: string;
+    ok: boolean;
+    account?: Omit<MailWatchAccount, "bandId"> | null;
+  }[],
+): Record<string, MailWatchAccount> {
+  const next = { ...previous };
+  for (const id of Object.keys(next)) {
+    if (!bandIds.includes(id)) delete next[id];
+  }
+  for (const { bandId, ok, account } of updates) {
+    if (!ok) continue;
+    if (!account?.imapHost) delete next[bandId];
+    else next[bandId] = { bandId, ...account };
+  }
+  return next;
+}

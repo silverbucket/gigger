@@ -4,8 +4,10 @@ import {
   bandBookingsInboxStatus,
   bookingsInboxLabel,
   hasIncomingMailbox,
+  mergeMailByBandRefresh,
   showToSortSection,
 } from "./lib/inbox-watch";
+import { connectMessageStream } from "./lib/message-stream-connect";
 
 const band = (
   id: string,
@@ -62,6 +64,51 @@ test("a retrying list stream downgrades watching to Reconnecting", () => {
 
 test("mailbox error label matches Settings email tag copy", () => {
   expect(bookingsInboxLabel("error")).toBe("Mailbox error");
+});
+
+test("mergeMailByBandRefresh keeps the previous status when a band fetch fails", () => {
+  const previous = {
+    a: band("a", { error: "problem" }),
+    b: band("b"),
+  };
+  const merged = mergeMailByBandRefresh(
+    previous,
+    ["a", "b"],
+    [
+      { bandId: "a", ok: false },
+      {
+        bandId: "b",
+        ok: true,
+        account: {
+          imapHost: "imap.example.com",
+          watching: false,
+          inboxPhase: "connecting",
+        },
+      },
+    ],
+  );
+  expect(merged.a).toEqual(previous.a);
+  expect(merged.b?.inboxPhase).toBe("connecting");
+});
+
+test("failed ticket request sets the list stream retrying state", async () => {
+  let retrying = false;
+  const stop = connectMessageStream(
+    {
+      username: "sam",
+      bandId: "band1",
+      token: "token",
+      aborted: () => false,
+      onRetrying: (value) => {
+        retrying = value;
+      },
+    },
+    async () => new Response("", { status: 503 }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(retrying).toBeTrue();
+  stop();
+  expect(retrying).toBeFalse();
 });
 
 test("the mailbox error alert copy warns without technical detail", () => {

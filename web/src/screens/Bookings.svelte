@@ -42,6 +42,7 @@ import {
   bookingsInboxTagKind,
   hasIncomingMailbox,
   type MailWatchAccount,
+  mergeMailByBandRefresh,
   showToSortSection,
 } from "../lib/inbox-watch";
 import { messageStream } from "../lib/message-stream.svelte";
@@ -121,22 +122,21 @@ $effect(() => {
   if (router.screen !== "bookings" || bandIds.length === 0) return;
   let cancelled = false;
   const refresh = async () => {
-    const next: Record<string, MailWatchAccount> = {};
-    await Promise.all(
+    const updates = await Promise.all(
       bandIds.map(async (bandId) => {
         try {
           const account = await api<Omit<MailWatchAccount, "bandId"> | null>(
             "/api/email/account",
             { query: { bandId } },
           );
-          if (!account?.imapHost) return;
-          next[bandId] = { bandId, ...account };
+          return { bandId, ok: true as const, account };
         } catch {
-          // Bookings keeps the last known status when a refresh fails.
+          return { bandId, ok: false as const };
         }
       }),
     );
-    if (!cancelled) mailByBand = next;
+    if (!cancelled)
+      mailByBand = mergeMailByBandRefresh(mailByBand, bandIds, updates);
   };
   void refresh();
   const timer = setInterval(refresh, 5000);
