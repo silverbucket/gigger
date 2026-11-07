@@ -60,6 +60,7 @@ storage.on("error", (error) => {
   };
   // 401: the token was revoked. 403 on another module's tree is not a dead session.
   if (name === "Unauthorized") expireSession();
+  else if (name === OUT_OF_SCOPE_STORAGE) return;
   else if (name === "SyncError" || /^HTTP response code/.test(`${message}`))
     syncFailed();
 });
@@ -189,6 +190,16 @@ export function logout(broadcast = true) {
   revoke(userAddress, token);
 }
 
+/** Error name for a 403 on storage outside Showday's scope (not sync trouble). */
+const OUT_OF_SCOPE_STORAGE = "OutOfScopeStorage";
+
+class OutOfScopeStorageError extends Error {
+  constructor() {
+    super("Storage path is outside Showday scope.");
+    this.name = OUT_OF_SCOPE_STORAGE;
+  }
+}
+
 /** Paths the Showday token is supposed to touch; other folders may return 403. */
 function isAppStoragePath(path: string) {
   const normalized = path.startsWith("/") ? path : `/${path}`;
@@ -225,8 +236,9 @@ function installSyncScopeGuard() {
       !isAppStoragePath(path)
     ) {
       await sync.dealWithFailure(path);
-      storage._emit("error", new Error("HTTP response code 403 received."));
-      throw new Error("HTTP response code 403 received.");
+      const error = new OutOfScopeStorageError();
+      storage._emit("error", error);
+      throw error;
     }
     return handleResponse(path, action, response);
   };
