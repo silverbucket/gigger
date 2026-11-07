@@ -185,6 +185,9 @@ export function mailboxWatchers(
     done: Promise<void>;
     phase: InboxWatchStatus["phase"];
     catchUp?: boolean;
+    /** After check inbox now without a saved cursor: learn uidValidity, then watch from uid 0. */
+    rescanWithoutCursor?: boolean;
+    activeSession?: string;
   };
   const runs = new Map<string, Run>();
   const key = (username: string, bandId: string) => `${username}/${bandId}`;
@@ -195,6 +198,8 @@ export function mailboxWatchers(
 
   /** Connects, watches and stores mail until the session ends; resolves with the failure reason. */
   async function session(run: Run, account: EmailAccount) {
+    const sessionId = crypto.randomUUID();
+    run.activeSession = sessionId;
     setPhase(`${account.username}/${account.bandId}`, "connecting");
     const sc = await SockethubClient.connect(sockethubUrl, {
       initTimeoutMs: 10000,
@@ -224,6 +229,7 @@ export function mailboxWatchers(
       let chain = Promise.resolve();
       let unstored = false;
       sc.socket.on("message", (activity: MailPost) => {
+        if (run.activeSession !== sessionId) return;
         if (
           !activity?.["@context"]?.some((c) => c.includes("/platform/email/"))
         )
@@ -276,21 +282,42 @@ export function mailboxWatchers(
         type: "connect",
         actor,
       });
+      const fresh = accounts.get(account.username, account.bandId) ?? account;
       const watched = await emit(sc, "message", {
         "@context": context,
         type: "watch",
         actor,
         object: {
           folder: "INBOX",
-          ...(account.cursor ? { cursor: account.cursor } : {}),
+          ...(fresh.cursor ? { cursor: fresh.cursor } : {}),
         },
       });
-      if (watched.object?.cursor)
+      if (run.rescanWithoutCursor && watched.object?.cursor) {
+        const fromStart = {
+          uidValidity: watched.object.cursor.uidValidity,
+          uid: 0,
+        };
+        accounts.cursor(account.username, account.bandId, fromStart);
+        run.rescanWithoutCursor = false;
+        const rescanned = await emit(sc, "message", {
+          "@context": context,
+          type: "watch",
+          actor,
+          object: { folder: "INBOX", cursor: fromStart },
+        });
+        if (rescanned.object?.cursor)
+          accounts.cursor(
+            account.username,
+            account.bandId,
+            rescanned.object.cursor,
+          );
+      } else if (watched.object?.cursor) {
         accounts.cursor(
           account.username,
           account.bandId,
           watched.object.cursor,
         );
+      }
       accounts.error(account.username, account.bandId, null);
       setPhase(`${account.username}/${account.bandId}`, "watching");
       return await ending;
@@ -375,17 +402,27 @@ export function mailboxWatchers(
     checkNow(username: string, bandId: string) {
       const id = key(username, bandId);
       const account = accounts.get(username, bandId);
+      const rescanWithoutCursor = !account?.cursor?.uidValidity;
       if (account?.cursor?.uidValidity) {
         accounts.cursor(username, bandId, {
           uidValidity: account.cursor.uidValidity,
           uid: 0,
         });
+      } else if (account) {
+        accounts.cursor(username, bandId, undefined);
       }
       const run = runs.get(id);
       if (!run) {
-        start(username, bandId);
+        const pending = {
+          stopped: false,
+          phase: "connecting",
+          ...(rescanWithoutCursor ? { rescanWithoutCursor: true } : {}),
+        } as Run;
+        pending.done = loop(id, pending);
+        runs.set(id, pending);
         return;
       }
+      if (rescanWithoutCursor) run.rescanWithoutCursor = true;
       run.catchUp = true;
       run.client?.socket.disconnect();
       run.wake?.();

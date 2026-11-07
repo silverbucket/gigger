@@ -158,6 +158,7 @@ $effect(() => {
 });
 const pageUrl = $derived(band?.slug ? `${location.origin}/b/${band.slug}` : "");
 let pageLive = $state(false);
+let bandPageLive = $state<Record<string, boolean>>({});
 $effect(() => {
   const slug = band?.slug;
   const onPublic = tab === "public";
@@ -169,6 +170,23 @@ $effect(() => {
   void isPublicPageLive(slug).then((live) => {
     if (!cancelled && band?.slug === slug) pageLive = live;
   });
+  return () => {
+    cancelled = true;
+  };
+});
+$effect(() => {
+  const items = data.all;
+  let cancelled = false;
+  void (async () => {
+    const next: Record<string, boolean> = {};
+    await Promise.all(
+      items.map(async (item) => {
+        const slug = item.band.slug;
+        next[item.band.id] = slug ? await isPublicPageLive(slug) : false;
+      }),
+    );
+    if (!cancelled) bandPageLive = next;
+  })();
   return () => {
     cancelled = true;
   };
@@ -342,6 +360,7 @@ async function savePublicPage(event: SubmitEvent) {
   slugValue = slug;
   publicPageAction = pageLive ? "saving" : "publishing";
   publicPageError = "";
+  ui.error = "";
   ui.busy = true;
   try {
     const { publicProfile: _, ...bandCore } = previous;
@@ -372,6 +391,7 @@ async function savePublicPage(event: SubmitEvent) {
     profileDraft = null;
     await data.load();
   } catch (cause) {
+    ui.error = "";
     publicPageError =
       cause instanceof Error && cause.message
         ? cause.message
@@ -388,6 +408,7 @@ async function unpublishPage() {
   const previous = $state.snapshot(band);
   publicPageAction = "unpublishing";
   publicPageError = "";
+  ui.error = "";
   ui.busy = true;
   try {
     await bands.unpublishBand(previous.id);
@@ -402,6 +423,7 @@ async function unpublishPage() {
     slugValue = slugify(previous.name ?? "");
     await data.load();
   } catch (cause) {
+    ui.error = "";
     publicPageError =
       cause instanceof Error && cause.message
         ? cause.message
@@ -495,7 +517,7 @@ function createBand(event: SubmitEvent) {
           <span class="sub">
             {plural(item.members.length, "member")}
             · {item.band.currency ?? "EUR"} ·
-            {item.band.slug ? "public page live" : "not published"}
+            {bandPageLive[item.band.id] ? "public page live" : "not published"}
           </span>
         </span>
         {#if viewing}
