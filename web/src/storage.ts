@@ -39,7 +39,6 @@ let lastFailure = 0;
 let syncTrouble = false;
 /** Server rejected the storage token; the user can log in again without clearing the cache. */
 let tokenRejected = false;
-let preserveCacheMarks = false;
 const cacheAccountKey = "showday:account";
 const cacheClearingKey = "showday:clearing";
 const cacheMarksHere = new Map<string, string>();
@@ -58,19 +57,12 @@ storage.on("ready", () => {
 });
 storage.on("connected", () => {
   clearSyncTrouble();
-  tokenRejected = false;
-  sessionEvents.dispatchEvent(
-    new CustomEvent("token-rejected", { detail: false }),
-  );
+  setTokenRejected(false);
   setCacheMark(cacheAccountKey, storage.remote.userAddress);
   installSyncGuards();
 });
 // Only once the library has deleted the cache.
 storage.on("disconnected", () => {
-  if (preserveCacheMarks) {
-    preserveCacheMarks = false;
-    return;
-  }
   setCacheMark(cacheAccountKey, undefined);
   setCacheMark(cacheClearingKey, undefined);
 });
@@ -82,10 +74,7 @@ storage.on("error", (error) => {
   // Stay signed in unless the user clicks Log out; auth-shaped failures retry quietly.
   if (name === OUT_OF_SCOPE_STORAGE) return;
   if (name === "Unauthorized") {
-    tokenRejected = true;
-    sessionEvents.dispatchEvent(
-      new CustomEvent("token-rejected", { detail: true }),
-    );
+    setTokenRejected(true);
     syncFailed();
     return;
   }
@@ -93,7 +82,10 @@ storage.on("error", (error) => {
     syncFailed();
 });
 storage.on("sync-done", (event) => {
-  if ((event as { completed?: boolean }).completed) clearSyncTrouble();
+  if (!(event as { completed?: boolean }).completed) return;
+  clearSyncTrouble();
+  // A running sync completes only once nothing is left to retry.
+  setTokenRejected(false);
 });
 const logoutSync =
   typeof window !== "undefined" && typeof BroadcastChannel !== "undefined"
@@ -218,19 +210,21 @@ export async function reconnectSession(fields: {
   });
   const session = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(session.error ?? fallback);
-  clearSyncTrouble();
-  tokenRejected = false;
-  sessionEvents.dispatchEvent(
-    new CustomEvent("token-rejected", { detail: false }),
-  );
-  preserveCacheMarks = true;
-  try {
-    if (storage.remote.connected) storage.stopSync();
-    await connect(address, session.token);
-    if (storage.sync) void storage.startSync();
-  } finally {
-    preserveCacheMarks = false;
-  }
+  if (!storage.remote.connected || storage.remote.userAddress !== address)
+    return connectSession(username, session.token);
+  if (typeof session.token !== "string" || !session.token)
+    throw new Error(fallback);
+  // storage.connect() keeps the old token while the remote is connected.
+  storage.remote.configure({ token: session.token });
+  if (!storage.sync) return;
+  // Requests still out with the old token fail this sync; retry them now
+  // rather than at the next scheduled one.
+  const retry = (event: unknown) => {
+    storage.removeEventListener("sync-done", retry);
+    if (!(event as { completed?: boolean }).completed) void storage.startSync();
+  };
+  storage.on("sync-done", retry);
+  void storage.startSync();
 }
 function connect(address: string, token: string) {
   const resuming = cacheAccount() === address;
@@ -430,6 +424,13 @@ function syncFailed() {
   syncTrouble = true;
   sessionEvents.dispatchEvent(
     new CustomEvent("sync-trouble", { detail: true }),
+  );
+}
+function setTokenRejected(rejected: boolean) {
+  if (tokenRejected === rejected) return;
+  tokenRejected = rejected;
+  sessionEvents.dispatchEvent(
+    new CustomEvent("token-rejected", { detail: rejected }),
   );
 }
 function clearSyncTrouble() {

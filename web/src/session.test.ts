@@ -13,6 +13,7 @@ import {
   connectSession,
   logout,
   onSessionLogout,
+  onTokenRejected,
   reconnectSession,
   slowStartMessage,
   startProviderSession,
@@ -514,9 +515,10 @@ test("a 403 on another module's folder does not end the session", async () => {
 
 /**
  * Opens a fresh cache with a stand-in storage server: an empty account where
- * pushes made with `rejected` get a 401, and every request gets `down` while
- * that is set. Sync handles finished requests in order, so a request left
- * hanging, here or by an earlier test, would hold back every push behind it.
+ * pushes made with `rejected` get a 401, every request gets `down` while that
+ * is set, and pushes are answered only once `held` settles. Sync handles
+ * finished requests in order, so a request left hanging, here or by an
+ * earlier test, would hold back every push behind it.
  */
 async function storageServer(rejected = "") {
   signOutQuietly();
@@ -526,6 +528,7 @@ async function storageServer(rejected = "") {
   const server = {
     pushes,
     down: undefined as number | undefined,
+    held: Promise.resolve(),
     nextPush: () =>
       new Promise<void>((resolve) => {
         pushed = resolve;
@@ -543,6 +546,7 @@ async function storageServer(rejected = "") {
       const { token } = storage.remote;
       pushes.push({ path, body, token });
       pushed();
+      await server.held;
       if (server.down) return { statusCode: server.down };
       return token === rejected
         ? { statusCode: 401 }
@@ -550,6 +554,17 @@ async function storageServer(rejected = "") {
     },
   );
   return server;
+}
+/** Resolves once a sync gets through everything it had to do. */
+function syncCompletes() {
+  return new Promise<void>((resolve) => {
+    const done = (event: unknown) => {
+      if (!(event as { completed?: boolean }).completed) return;
+      storage.removeEventListener("sync-done", done);
+      resolve();
+    };
+    storage.on("sync-done", done);
+  });
 }
 const draft = () => storage.scope("/showday/");
 async function cachedDraft() {
@@ -613,18 +628,22 @@ test("changes that had not synced when the token was rejected go up after loggin
     const { username } = JSON.parse(String(init.body));
     return Response.json({ username, token: "fresh-token" });
   });
-  const connect = spyOn(storage, "connect").mockImplementation(
-    (address, token) => {
-      signIn(address.slice(0, address.indexOf("@")), token);
-      storage._emit("connected");
-    },
-  );
   const server = await storageServer("rejected-token");
   const disconnect = spyOn(storage, "disconnect");
+  let rejected = false;
+  const unwatchToken = onTokenRejected((value) => {
+    rejected = value;
+  });
   try {
+    // The push made with the rejected token is only answered after logging in again.
+    let answer = () => {};
+    server.held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
     signIn("leader", "rejected-token");
     await draft().storeFile("text/plain", "draft.txt", "Set list v2");
     storage._emit("error", new RemoteStorage.Unauthorized());
+    expect(rejected).toBe(true);
     expect(storage.remote.connected).toBe(true);
     expect(server.pushes[0]).toMatchObject({
       path: "/showday/draft.txt",
@@ -635,15 +654,22 @@ test("changes that had not synced when the token was rejected go up after loggin
 
     const pushed = server.nextPush();
     await reconnectSession({ username: "leader", password: "secret" });
+    expect(rejected).toBe(false);
+    expect(storage.remote.token).toBe("fresh-token");
+
+    const synced = syncCompletes();
+    answer();
     await pushed;
     expect(server.pushes.at(-1)).toEqual({
       path: "/showday/draft.txt",
       body: "Set list v2",
       token: "fresh-token",
     });
+    await synced;
+    expect(rejected).toBe(false);
     expect(disconnect).not.toHaveBeenCalled();
   } finally {
-    connect.mockRestore();
+    unwatchToken();
     disconnect.mockRestore();
     server.restore();
     const stalled = stallCleanup();
