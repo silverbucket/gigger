@@ -310,16 +310,12 @@ function savePublicPage(event: SubmitEvent) {
       ? navigator.language
       : undefined;
     const savedProfile = buildPublicProfile();
-    const claim = async () => {
-      await api(
-        "/api/public/pages",
-        { method: "POST", body: { bandId: previous.id, slug } },
-        "Could not publish the page. Please retry.",
-      );
-    };
-    if (!previous.slug) await claim();
-    else if (previous.slug !== slug) {
-      await claim();
+    await api(
+      "/api/public/pages",
+      { method: "POST", body: { bandId: previous.id, slug } },
+      "Could not publish the page. Please retry.",
+    );
+    if (previous.slug && previous.slug !== slug) {
       await bands.queueOldSlugCleanup(previous.id, previous.slug);
     }
     const nextBand = {

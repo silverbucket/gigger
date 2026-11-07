@@ -338,3 +338,91 @@ test("the mailbox watcher connects with the saved cursor, stores posted mail, ke
     db.close();
   }
 }, 20000);
+
+test("check inbox now rescans from the beginning without waiting for backoff", async () => {
+  const sockethub = stubSockethub();
+  const storage = fakeStorage();
+  const db = openDatabase(":memory:");
+  const accounts = emailAccounts(db);
+  const account: EmailAccount = {
+    username: "sam",
+    bandId: "band1",
+    settings: {
+      address: "band@example.com",
+      imapHost: "imap.example.com",
+      imapPort: 993,
+      smtpHost: "smtp.example.com",
+      smtpPort: 587,
+      login: "band@example.com",
+      password: "mail-secret",
+    },
+    storageToken: "server-token",
+    cursor: { uidValidity: "1", uid: 10 },
+  };
+  accounts.put(account);
+  const messages = messageHandler(
+    db,
+    {
+      email: { send: async () => {} },
+      messenger: { send: async () => {} },
+      instagram: { send: async () => {} },
+    },
+    storage.server.url.origin,
+  );
+  const watchers = mailboxWatchers(accounts, messages, {
+    armadiettoUrl: storage.server.url.origin,
+    sockethubUrl: await sockethub.start(),
+    minDelayMs: 50,
+    maxDelayMs: 200,
+  });
+  try {
+    watchers.startAll();
+    await until(() => sockethub.received.length >= 3, "first session");
+    accounts.cursor("sam", "band1", { uidValidity: "1", uid: 10 });
+    const before = sockethub.received.length;
+    watchers.checkNow("sam", "band1");
+    await until(
+      () => sockethub.received.length > before + 2,
+      "catch-up reconnect",
+    );
+    const lastWatch = [...sockethub.received]
+      .reverse()
+      .find((r) => r.payload.type === "watch");
+    expect(lastWatch?.payload.object).toEqual({
+      folder: "INBOX",
+      cursor: { uidValidity: "1", uid: 0 },
+    });
+    const conversation = conversationId("email", "band1", "jo@example.com");
+    sockethub.push({
+      type: "post",
+      actor: { id: "jo@example.com", type: "person" },
+      object: {
+        type: "message",
+        id: "email:band%40example.com:INBOX:1:11",
+        content: "Again?",
+        published: "2025-03-01T10:00:00.000Z",
+      },
+    });
+    sockethub.push({
+      type: "post",
+      actor: { id: "jo@example.com", type: "person" },
+      object: {
+        type: "message",
+        id: "email:band%40example.com:INBOX:1:11",
+        content: "Again?",
+        published: "2025-03-01T10:00:00.000Z",
+      },
+    });
+    await Bun.sleep(50);
+    expect(
+      storage.json(
+        `conversations/${conversation}/2025-03/email_band_40example_com_INBOX_1_11`,
+      ),
+    ).toMatchObject({ object: { content: "Again?" } });
+  } finally {
+    await watchers.stopAll();
+    sockethub.stop();
+    storage.stop();
+    db.close();
+  }
+});

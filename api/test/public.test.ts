@@ -130,6 +130,11 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     ).toEqual([]);
     expect((await claim(good)).status).toBe(200);
 
+    db.query("DELETE FROM public_pages WHERE slug = 'the-band'").run();
+    expect((await get("/b/the-band/gigs.json")).status).toBe(404);
+    expect((await claim(good)).status).toBe(200);
+    expect((await get("/b/the-band/gigs.json")).ok).toBeTrue();
+
     const html = await (await get("/b/the-band")).text();
     expect(html).toContain("&lt;script&gt;");
     expect(html).toContain('<html lang="cs">');

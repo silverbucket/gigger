@@ -35,13 +35,26 @@ interface MailPost {
     cc?: unknown;
   };
 }
+/** Pulls a normalised address out of mailto ids, `Name <email>` strings, or plain emails. */
+export function normalizeMailAddress(value: string): string | undefined {
+  let email = value.trim();
+  if (!email) return undefined;
+  if (/^mailto:/i.test(email)) email = email.slice(7).trim();
+  const angle = /<([^>]+@[^>]+)>/.exec(email);
+  if (angle) email = angle[1].trim();
+  email = email
+    .replace(/^["']|["']$/g, "")
+    .trim()
+    .toLowerCase();
+  return email.includes("@") ? email : undefined;
+}
 /** Normalised recipient addresses from a Sockethub mail activity. */
 export function mailRecipients(item: MailPost): string[] {
-  const found: string[] = [];
+  const found = new Set<string>();
   const add = (value: unknown) => {
     if (typeof value === "string") {
-      const email = value.trim().toLowerCase();
-      if (email.includes("@")) found.push(email);
+      const email = normalizeMailAddress(value);
+      if (email) found.add(email);
       return;
     }
     if (Array.isArray(value)) {
@@ -49,15 +62,16 @@ export function mailRecipients(item: MailPost): string[] {
       return;
     }
     if (value && typeof value === "object") {
-      const id = (value as { id?: string }).id;
-      if (typeof id === "string") add(id);
+      const entry = value as { id?: string; address?: string };
+      if (typeof entry.address === "string") add(entry.address);
+      else if (typeof entry.id === "string") add(entry.id);
     }
   };
   add(item.to);
   add(item.cc);
   add(item.object?.to);
   add(item.object?.cc);
-  return found;
+  return [...found];
 }
 const mailIdRe = /^[^\r\n]{1,998}$/;
 const mailId = (value: unknown) =>
@@ -170,6 +184,7 @@ export function mailboxWatchers(
     client?: SockethubClient;
     done: Promise<void>;
     phase: InboxWatchStatus["phase"];
+    catchUp?: boolean;
   };
   const runs = new Map<string, Run>();
   const key = (username: string, bandId: string) => `${username}/${bandId}`;
@@ -306,6 +321,11 @@ export function mailboxWatchers(
           } catch {}
         log(`Mailbox watch for ${id} ended: ${error}`);
       }
+      if (run.catchUp) {
+        run.catchUp = false;
+        attempt = 0;
+        continue;
+      }
       // A session that held for a while earns a fresh backoff; quick failures back off further each time.
       attempt = Date.now() - started > 60000 ? 0 : attempt + 1;
       setPhase(id, "retrying");
@@ -354,7 +374,21 @@ export function mailboxWatchers(
       runs.has(key(username, bandId)),
     checkNow(username: string, bandId: string) {
       const id = key(username, bandId);
-      runs.get(id)?.wake?.();
+      const account = accounts.get(username, bandId);
+      if (account?.cursor?.uidValidity) {
+        accounts.cursor(username, bandId, {
+          uidValidity: account.cursor.uidValidity,
+          uid: 0,
+        });
+      }
+      const run = runs.get(id);
+      if (!run) {
+        start(username, bandId);
+        return;
+      }
+      run.catchUp = true;
+      run.client?.socket.disconnect();
+      run.wake?.();
     },
     status(username: string, bandId: string): InboxWatchStatus {
       const id = key(username, bandId);
