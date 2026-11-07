@@ -199,7 +199,8 @@ function checkMailNow() {
     if (band.id === bandId) mailAccount = next;
   }, "Could not check the mailbox now.");
 }
-const mailStatusLine = (account: MailAccount) => emailSettingsStatusLine(account);
+const mailStatusLine = (account: MailAccount) =>
+  emailSettingsStatusLine(account);
 function removeMail() {
   if (
     !confirm(
