@@ -246,6 +246,71 @@ test("waiting gives up with a calm retry message if the cache never clears", asy
   }
 });
 
+/**
+ * A localStorage holding only Showday's own keys. The library checks for one
+ * by writing a key of its own, which this refuses, so the library carries on
+ * without it.
+ */
+function showdayStorage(entries: Record<string, string> = {}) {
+  const items = new Map(Object.entries(entries));
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem(key: string, value: string) {
+        if (!key.startsWith("showday:")) throw new Error(`Refused ${key}`);
+        items.set(key, value);
+      },
+      removeItem(key: string) {
+        items.delete(key);
+      },
+    },
+  });
+  return {
+    items,
+    restore() {
+      if (original) Object.defineProperty(globalThis, "localStorage", original);
+      else Reflect.deleteProperty(globalThis, "localStorage");
+    },
+  };
+}
+
+test("a logout leaves the cache marked as its account's until the cleanup has deleted it", async () => {
+  await whenSessionReady();
+  const page = browser(async () => new Response(null));
+  const marks = showdayStorage();
+  const connect = spyOn(storage, "connect").mockImplementation(() => {});
+  const stalled = stallCleanup();
+  let cleared = false;
+  try {
+    signIn();
+    expect(marks.items.get("showday:account")).toBe("leader@localhost:8080");
+    logout();
+    // What a reload would find while another tab blocks the deletion.
+    expect(Object.fromEntries(marks.items)).toEqual({
+      "showday:account": "leader@localhost:8080",
+      "showday:clearing": "1",
+    });
+
+    // Data on its way out is nothing to ask about; the login just waits.
+    const leaving = startProviderSession("someone@elsewhere.example", () => {
+      throw new Error("Asked to discard the cache");
+    });
+    expect(await settles(leaving)).toBe(false);
+    await finishCleanup(stalled);
+    cleared = true;
+    expect(await leaving).toBe(true);
+    expect(connect).toHaveBeenCalledWith("someone@elsewhere.example");
+    expect(marks.items.size).toBe(0);
+  } finally {
+    connect.mockRestore();
+    if (!cleared) await finishCleanup(stalled);
+    marks.restore();
+    page.restore();
+  }
+});
+
 test("a revoked or out-of-scope token sends the user to log in again, not to check their connection", async () => {
   await whenSessionReady();
   const page = browser(async () => new Response(null));
@@ -686,5 +751,43 @@ test("logout messages reach other tabs without echoing or reacting to unrelated 
   } finally {
     first.close();
     second.close();
+  }
+});
+
+// Last, as it starts a second copy of the storage module.
+test("a cache cleanup that a reload cut short is finished before anyone can log in", async () => {
+  // Left by a logout whose deletion another tab was still blocking.
+  const marks = showdayStorage({
+    "showday:account": "leader@localhost:8080",
+    "showday:clearing": "1",
+  });
+  let started = () => {};
+  const cleanup = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const blocked = spyOn(
+    RemoteStorage.prototype,
+    "disconnect",
+  ).mockImplementation(() => started());
+  try {
+    const specifier = "./storage.ts?reloaded";
+    const reloaded = (await import(specifier)) as typeof import("./storage");
+    // A login tried as soon as the page is up.
+    const opening = reloaded.whenSessionReady();
+    await cleanup;
+    expect(await settles(opening)).toBe(false);
+    expect(Object.fromEntries(marks.items)).toEqual({
+      "showday:account": "leader@localhost:8080",
+      "showday:clearing": "1",
+    });
+    expect(blocked).toHaveBeenCalledTimes(1);
+
+    blocked.mockRestore();
+    reloaded.storage.disconnect();
+    await opening;
+    expect(marks.items.size).toBe(0);
+  } finally {
+    blocked.mockRestore();
+    marks.restore();
   }
 });

@@ -28,15 +28,29 @@ let failingSince: number | undefined;
 let lastFailure = 0;
 let syncTrouble = false;
 const cacheAccountKey = "showday:account";
-let cacheAccountHere: string | undefined;
+const cacheClearingKey = "showday:clearing";
+const cacheMarksHere = new Map<string, string>();
+/** Set when a reload or a closed tab cut the last cache cleanup short. */
+let recovering = cacheMark(cacheClearingKey) !== undefined;
 const sessionEvents = new EventTarget();
 storage.on("ready", () => {
+  if (recovering) {
+    recovering = false;
+    // Finished before anyone logs in, out of the library's ready dispatch.
+    setTimeout(() => clearCache(false));
+    return;
+  }
   sessionReady = true;
   sessionEvents.dispatchEvent(new Event("ready"));
 });
 storage.on("connected", () => {
   clearSyncTrouble();
-  setCacheAccount(storage.remote.userAddress);
+  setCacheMark(cacheAccountKey, storage.remote.userAddress);
+});
+// Only once the library has deleted the cache.
+storage.on("disconnected", () => {
+  setCacheMark(cacheAccountKey, undefined);
+  setCacheMark(cacheClearingKey, undefined);
 });
 storage.on("error", (error) => {
   const { name, message } = (error ?? {}) as {
@@ -71,7 +85,10 @@ export function onSyncTrouble(callback: (trouble: boolean) => void) {
   return () => sessionEvents.removeEventListener("sync-trouble", listener);
 }
 
-/** Resolves once the local cache has opened, or finished clearing the last session. */
+/**
+ * Resolves once the local cache has opened, or finished clearing the last
+ * session, including one a reload cut short.
+ */
 export function whenSessionReady(timeout = 30_000) {
   if (sessionReady) return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
@@ -200,28 +217,38 @@ function leave(expired: boolean) {
 }
 function clearCache(broadcast: boolean) {
   sessionReady = false;
-  setCacheAccount(undefined);
+  // The cache stays marked as its account's until the library has deleted it,
+  // so a reload before then (another tab blocking the deletion, say) finishes
+  // the cleanup instead of reopening the data for whoever logs in next.
+  setCacheMark(cacheClearingKey, "1");
   if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
 }
 /**
- * The account whose data the local cache holds, kept in localStorage for other
- * tabs and later visits. The remote's own address won't do: it names whoever
- * last tried to log in, verified or not.
+ * The account whose data the local cache holds, or none while it is being
+ * deleted. Kept in localStorage for other tabs and later visits; the remote's
+ * own address won't do, as it names whoever last tried to log in, verified or
+ * not.
  */
 function cacheAccount() {
+  return cacheMark(cacheClearingKey) === undefined
+    ? cacheMark(cacheAccountKey)
+    : undefined;
+}
+function cacheMark(key: string) {
   try {
-    return localStorage.getItem(cacheAccountKey) ?? undefined;
+    return localStorage.getItem(key) ?? undefined;
   } catch {
-    return cacheAccountHere;
+    return cacheMarksHere.get(key);
   }
 }
-function setCacheAccount(address: string | undefined) {
-  cacheAccountHere = address;
+function setCacheMark(key: string, value: string | undefined) {
+  if (value === undefined) cacheMarksHere.delete(key);
+  else cacheMarksHere.set(key, value);
   try {
-    if (address) localStorage.setItem(cacheAccountKey, address);
-    else localStorage.removeItem(cacheAccountKey);
+    if (value === undefined) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
   } catch {
     // Without localStorage, this tab's copy has to do.
   }
