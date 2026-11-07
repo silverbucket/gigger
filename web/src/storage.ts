@@ -27,12 +27,17 @@ let expiring = false;
 let failingSince: number | undefined;
 let lastFailure = 0;
 let syncTrouble = false;
+const cacheAccountKey = "showday:account";
+let cacheAccountHere: string | undefined;
 const sessionEvents = new EventTarget();
 storage.on("ready", () => {
   sessionReady = true;
   sessionEvents.dispatchEvent(new Event("ready"));
 });
-storage.on("connected", clearSyncTrouble);
+storage.on("connected", () => {
+  clearSyncTrouble();
+  setCacheAccount(storage.remote.userAddress);
+});
 storage.on("error", (error) => {
   const { name, message } = (error ?? {}) as {
     name?: string;
@@ -82,13 +87,14 @@ export function whenSessionReady(timeout = 30_000) {
   });
 }
 /**
- * Like whenSessionReady, before opening `address`. A session the server ended
- * leaves its cache for the same account to pick up; another account gets a
- * cleared one.
+ * Like whenSessionReady, before opening `address`, an account that has been
+ * verified or that the user chose over the cached one. A session the server
+ * ended leaves its cache for the same account to pick up; another account gets
+ * a cleared one.
  */
-export function whenSessionReadyFor(address: string) {
-  const previous = storage.remote.userAddress;
-  if (previous && previous !== address) clearCache(true);
+function whenSessionReadyFor(address: string) {
+  const held = cacheAccount();
+  if (held && held !== address) clearCache(true);
   return whenSessionReady();
 }
 
@@ -110,6 +116,22 @@ export async function startSession(
   if (!response.ok) throw new Error(session.error ?? fallback);
   await connectSession(session.username, session.token);
 }
+/**
+ * Sends the browser to `address`'s storage provider to log in. That account is
+ * only verified once the provider sends the user back, so the cache is cleared
+ * for it beforehand, losing changes another account has not synced yet, only
+ * if `discard` agrees. Resolves false, with nothing touched, if it doesn't.
+ */
+export async function startProviderSession(
+  address: string,
+  discard: (held: string) => boolean,
+) {
+  const held = cacheAccount();
+  if (held && held !== address && !discard(held)) return false;
+  await whenSessionReadyFor(address);
+  storage.connect(address);
+  return true;
+}
 
 export function connectSession(username: string, token: unknown) {
   if (typeof token !== "string" || !token)
@@ -118,7 +140,7 @@ export function connectSession(username: string, token: unknown) {
   return whenSessionReadyFor(address).then(() => connect(address, token));
 }
 function connect(address: string, token: string) {
-  const resuming = Boolean(storage.remote.userAddress);
+  const resuming = cacheAccount() === address;
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
       clearTimeout(timeout);
@@ -178,9 +200,31 @@ function leave(expired: boolean) {
 }
 function clearCache(broadcast: boolean) {
   sessionReady = false;
+  setCacheAccount(undefined);
   if (broadcast) logoutSync?.broadcast();
   storage.stopSync();
   storage.disconnect();
+}
+/**
+ * The account whose data the local cache holds, kept in localStorage for other
+ * tabs and later visits. The remote's own address won't do: it names whoever
+ * last tried to log in, verified or not.
+ */
+function cacheAccount() {
+  try {
+    return localStorage.getItem(cacheAccountKey) ?? undefined;
+  } catch {
+    return cacheAccountHere;
+  }
+}
+function setCacheAccount(address: string | undefined) {
+  cacheAccountHere = address;
+  try {
+    if (address) localStorage.setItem(cacheAccountKey, address);
+    else localStorage.removeItem(cacheAccountKey);
+  } catch {
+    // Without localStorage, this tab's copy has to do.
+  }
 }
 /** Revokes a token from this site's account service in the background. */
 function revoke(userAddress: string, token: string | false | undefined) {

@@ -56,6 +56,20 @@ test("a session revoked on the server asks to log in again and keeps changes tha
   await expect(page.getByText(/connection/i)).toHaveCount(0);
   expect((await account.read("band")).currency).toBe("CZK");
 
+  // Another storage provider's address, mistyped say, asks before the change
+  // is dropped, and saying no keeps it.
+  let question = "";
+  page.once("dialog", (dialog) => {
+    question = dialog.message();
+    return dialog.dismiss();
+  });
+  await page
+    .getByLabel("Username", { exact: true })
+    .fill("someone@elsewhere.invalid");
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect.poll(() => question).toContain(account.username);
+  await expect(page).toHaveURL(/\/login$/);
+
   await page.getByLabel("Username", { exact: true }).fill(account.username);
   await page.getByLabel("Password", { exact: true }).fill(account.password);
   await page.getByRole("button", { name: "Log in", exact: true }).click();

@@ -13,6 +13,7 @@ import {
   logout,
   onSessionLogout,
   slowStartMessage,
+  startProviderSession,
   startSession,
   storage,
   syncTroubleAfter,
@@ -419,6 +420,100 @@ test("logging in as someone else after the token was rejected starts from a clea
       "token-for-deputy",
     );
     expect(await cachedDraft()).toBeUndefined();
+  } finally {
+    connect.mockRestore();
+    server.restore();
+    const stalled = stallCleanup();
+    logout();
+    await finishCleanup(stalled);
+    page.restore();
+  }
+});
+
+test("a user@host login for another account asks first, and saying no keeps the changes that had not synced", async () => {
+  await whenSessionReady();
+  const page = browser(async (url, init) => {
+    if (url === "/api/auth/logout") return new Response(null);
+    const { username } = JSON.parse(String(init.body));
+    return Response.json({ username, token: "fresh-token" });
+  });
+  const connect = spyOn(storage, "connect").mockImplementation(
+    (address, token) => {
+      signIn(address.slice(0, address.indexOf("@")), token);
+    },
+  );
+  const server = await storageServer("rejected-token");
+  try {
+    signIn("leader", "rejected-token");
+    const ended = sessionEnds();
+    await draft().storeFile("text/plain", "draft.txt", "Set list v2");
+    expect(await ended).toBe(true);
+
+    // A mistyped address, say.
+    const asked: string[] = [];
+    const left = await startProviderSession(
+      "leadr@elsewhere.example",
+      (held) => {
+        asked.push(held);
+        return false;
+      },
+    );
+    expect(left).toBe(false);
+    expect(asked).toEqual(["leader@localhost:8080"]);
+    expect(connect).not.toHaveBeenCalled();
+    expect(await cachedDraft()).toBe("Set list v2");
+
+    const pushed = server.nextPush();
+    await startSession("login", { username: "leader", password: "secret" });
+    await pushed;
+    expect(server.pushes.at(-1)).toMatchObject({
+      path: "/showday/draft.txt",
+      token: "fresh-token",
+    });
+  } finally {
+    connect.mockRestore();
+    server.restore();
+    const stalled = stallCleanup();
+    logout();
+    await finishCleanup(stalled);
+    page.restore();
+  }
+});
+
+test("a user@host login for the same account keeps the cache, and one for another account clears it only once agreed", async () => {
+  await whenSessionReady();
+  const page = browser(async () => new Response(null));
+  const cacheAtConnect: Promise<unknown>[] = [];
+  const connect = spyOn(storage, "connect").mockImplementation((address) => {
+    // The library names the account before leaving for its provider.
+    storage.remote.configure({ userAddress: address });
+    cacheAtConnect.push(cachedDraft());
+  });
+  const server = await storageServer("rejected-token");
+  try {
+    signIn("leader", "rejected-token");
+    const ended = sessionEnds();
+    await draft().storeFile("text/plain", "draft.txt", "Set list v2");
+    expect(await ended).toBe(true);
+
+    const unasked = () => {
+      throw new Error("Asked to discard the cache");
+    };
+    expect(await startProviderSession("leader@localhost:8080", unasked)).toBe(
+      true,
+    );
+    expect(await cacheAtConnect[0]).toBe("Set list v2");
+
+    expect(
+      await startProviderSession("someone@elsewhere.example", () => true),
+    ).toBe(true);
+    expect(connect).toHaveBeenLastCalledWith("someone@elsewhere.example");
+    expect(await cacheAtConnect[1]).toBeUndefined();
+
+    // That login never came back, so the address it left behind holds nothing.
+    expect(await startProviderSession("other@elsewhere.example", unasked)).toBe(
+      true,
+    );
   } finally {
     connect.mockRestore();
     server.restore();
