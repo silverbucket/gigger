@@ -25,7 +25,11 @@ import Tag from "../components/Tag.svelte";
 import { api } from "../lib/account.svelte";
 import { data } from "../lib/data.svelte";
 import { initials, normalize, plural } from "../lib/format";
-import { isPublicPageLive, waitForLivePage } from "../lib/public-page";
+import {
+  isPublicPageLive,
+  publicPageCouldNotPublish,
+  publishUntilLive,
+} from "../lib/public-page";
 import { router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
 import { bands } from "../storage";
@@ -326,27 +330,28 @@ function savePublicPage(event: SubmitEvent) {
       ? navigator.language
       : undefined;
     const savedProfile = buildPublicProfile();
-    await api(
-      "/api/public/pages",
-      { method: "POST", body: { bandId: previous.id, slug } },
-      "Could not publish the page. Please retry.",
-    );
-    if (previous.slug && previous.slug !== slug) {
-      await bands.queueOldSlugCleanup(previous.id, previous.slug);
-    }
     const nextBand = {
       ...bandCore,
       slug,
       ...(locale ? { locale } : {}),
       ...(savedProfile ? { publicProfile: savedProfile } : {}),
     };
-    await bands.save("band", previous.id, nextBand);
-    await bands.publishBand(previous.id, previous.slug, nextBand);
-    await waitForLivePage(slug);
+    await publishUntilLive(slug, async () => {
+      await api(
+        "/api/public/pages",
+        { method: "POST", body: { bandId: previous.id, slug } },
+        publicPageCouldNotPublish,
+      );
+      await bands.save("band", previous.id, nextBand);
+      await bands.publishBand(previous.id, previous.slug, nextBand);
+    });
+    if (previous.slug && previous.slug !== slug) {
+      await bands.queueOldSlugCleanup(previous.id, previous.slug);
+    }
     pageLive = true;
     slugDirty = false;
     profileDraft = null;
-  }, "Could not save the public page. Please retry.");
+  }, publicPageCouldNotPublish);
 }
 function unpublishPage() {
   if (!band?.slug || !confirm("Take this public page down?")) return;

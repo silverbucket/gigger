@@ -1,29 +1,39 @@
-/** True when the server can serve the band's public gigs listing (claim and storage are in place). */
+/** Shown when automatic publish retries exhaust; no jargon. */
+export const publicPageCouldNotPublish =
+  "The public page could not be published. Please try again.";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** True when both the public page and its gigs listing are served. */
 export async function isPublicPageLive(slug: string): Promise<boolean> {
+  const base = `/b/${encodeURIComponent(slug)}`;
   try {
-    const response = await fetch(`/b/${encodeURIComponent(slug)}/gigs.json`, {
-      cache: "no-store",
-    });
-    return response.ok;
+    const [gigs, page] = await Promise.all([
+      fetch(`${base}/gigs.json`, { cache: "no-store" }),
+      fetch(base, { cache: "no-store" }),
+    ]);
+    return gigs.ok && page.ok;
   } catch {
     return false;
   }
 }
-/** Polls until the server's public route can load the band page (slug is claimed and storage has synced). */
-export async function waitForLivePage(
+
+/**
+ * Registers and writes the public copy, then rechecks the live URLs until they
+ * respond or the time limit is reached. Retries the write step between checks.
+ */
+export async function publishUntilLive(
   slug: string,
-  timeoutMs = 30_000,
+  write: () => Promise<void>,
+  options: { timeoutMs?: number } = {},
 ): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  const path = `/b/${encodeURIComponent(slug)}/gigs.json`;
+  const deadline = Date.now() + (options.timeoutMs ?? 120_000);
+  let delay = 500;
   while (Date.now() < deadline) {
-    try {
-      const response = await fetch(path, { cache: "no-store" });
-      if (response.ok) return;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await write();
+    if (await isPublicPageLive(slug)) return;
+    await sleep(delay);
+    delay = Math.min(Math.round(delay * 1.3), 2500);
   }
-  throw new Error(
-    "The public page is not live yet. Wait for sync to finish and try again.",
-  );
+  throw new Error(publicPageCouldNotPublish);
 }
