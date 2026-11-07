@@ -4,10 +4,12 @@ import {
   bandBookingsInboxStatus,
   bookingsInboxLabel,
   hasIncomingMailbox,
+  type MailWatchAccount,
   mergeMailByBandRefresh,
+  refreshBookingsMailByBand,
   showToSortSection,
 } from "./lib/inbox-watch";
-import { connectMessageStream } from "./lib/message-stream-connect";
+import { connectMessageStream } from "./lib/message-stream-open";
 
 const band = (
   id: string,
@@ -91,7 +93,10 @@ test("mergeMailByBandRefresh keeps the previous status when a band fetch fails",
   expect(merged.b?.inboxPhase).toBe("connecting");
 });
 
-test("failed ticket request sets the list stream retrying state", async () => {
+const ticketFailsFetch = (async (_input: RequestInfo | URL) =>
+  new Response("", { status: 503 })) as unknown as typeof fetch;
+
+test("failed ticket request before EventSource sets retrying", async () => {
   let retrying = false;
   const stop = connectMessageStream(
     {
@@ -103,13 +108,39 @@ test("failed ticket request sets the list stream retrying state", async () => {
         retrying = value;
       },
     },
-    (async (_input: RequestInfo | URL) =>
-      new Response("", { status: 503 })) as unknown as typeof fetch,
+    ticketFailsFetch,
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(retrying).toBeTrue();
+  expect(bandBookingsInboxStatus(band("band1"), retrying)).toBe("reconnecting");
   stop();
   expect(retrying).toBeFalse();
+});
+
+test("refreshBookingsMailByBand keeps mailbox error when refresh fails", async () => {
+  const previous = { a: band("a", { error: "Mailbox problem" }) };
+  const merged = await refreshBookingsMailByBand(previous, ["a"], async () => {
+    throw new Error("offline");
+  });
+  expect(merged).toEqual(previous);
+  expect(
+    aggregateBookingsInboxStatus(Object.values(merged), false),
+  ).toMatchObject({ status: "error", bandId: "a" });
+});
+
+test("assigning an empty refresh map would drop mailbox error (old Bookings bug)", () => {
+  const previous = { a: band("a", { error: "problem" }) };
+  const emptyRefresh: Record<string, MailWatchAccount> = {};
+  expect(Object.values(emptyRefresh)).toHaveLength(0);
+  const preserved = mergeMailByBandRefresh(
+    previous,
+    ["a"],
+    [{ bandId: "a", ok: false }],
+  );
+  expect(preserved.a).toEqual(previous.a);
+  expect(
+    aggregateBookingsInboxStatus(Object.values(preserved), false).status,
+  ).toBe("error");
 });
 
 test("the mailbox error alert copy warns without technical detail", () => {

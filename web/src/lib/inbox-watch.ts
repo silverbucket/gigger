@@ -122,3 +122,30 @@ export function mergeMailByBandRefresh(
   }
   return next;
 }
+
+type MailAccountFetchResult = {
+  bandId: string;
+  ok: boolean;
+  account?: Omit<MailWatchAccount, "bandId"> | null;
+};
+
+/** Bookings mailbox poll: keep prior status when a band refresh fails. */
+export async function refreshBookingsMailByBand(
+  previous: Record<string, MailWatchAccount>,
+  bandIds: string[],
+  fetchAccount: (
+    bandId: string,
+  ) => Promise<Omit<MailWatchAccount, "bandId"> | null>,
+): Promise<Record<string, MailWatchAccount>> {
+  const updates: MailAccountFetchResult[] = await Promise.all(
+    bandIds.map(async (bandId) => {
+      try {
+        const account = await fetchAccount(bandId);
+        return { bandId, ok: true as const, account };
+      } catch {
+        return { bandId, ok: false as const };
+      }
+    }),
+  );
+  return mergeMailByBandRefresh(previous, bandIds, updates);
+}

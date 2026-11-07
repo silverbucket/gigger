@@ -1,4 +1,4 @@
-import { connectMessageStream as connectCore } from "./message-stream-connect";
+import { connectMessageStream as connectCore } from "./message-stream-open";
 
 /** Whether the Bookings live update stream has failed and is retrying. */
 class MessageStream {
@@ -15,7 +15,7 @@ export function connectMessageStream(options: {
 }): () => void {
   return connectCore({
     ...options,
-    onRetrying: (retrying) => {
+    onRetrying(retrying) {
       messageStream.retrying = retrying;
     },
   });
