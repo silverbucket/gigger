@@ -125,7 +125,21 @@ export async function login(
   await expect(page.getByLabel("View band")).toBeVisible();
   await expect(page.getByText("Loading your bands…")).toHaveCount(0);
 }
-/** Goes to an app screen by its hash route, e.g. "band/settings". */
+/** Logs out via the screen-appropriate control (settings on phone, header on desktop). */
+export async function logoutFromApp(page: Page) {
+  const viewport = page.viewportSize();
+  const mobile = viewport != null && viewport.width < 900;
+  if (mobile) {
+    await go(page, "settings");
+    const button = page.getByRole("button", { name: "Log out", exact: true });
+    await button.scrollIntoViewIfNeeded();
+    await button.click();
+  } else {
+    await page.locator("a.logout").click();
+  }
+  await expect(page).toHaveURL(/\/login$/);
+}
+/** Goes to an app screen by its hash route, e.g. "settings". */
 export async function go(page: Page, route: string) {
   await page.evaluate((hash) => {
     location.hash = hash;

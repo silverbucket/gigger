@@ -60,6 +60,7 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   await expect
     .poll(async () => (await account.read("band")).currency, { timeout: 15000 })
     .toBe("CZK");
+  await go(page, "band");
   await page.getByRole("button", { name: "New band", exact: true }).click();
   const create = page.locator("#new-band");
   await create.getByLabel("Band name", { exact: true }).fill("Second Band");
@@ -70,6 +71,7 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   await expect(
     page.getByLabel("View band").locator("option:checked"),
   ).toHaveText("Second Band");
+  await go(page, "settings");
   await expect(page.getByLabel(/^Band currency/)).toHaveValue("CZK");
 });
 

@@ -26,6 +26,10 @@ test("publishing a page copies only public gig fields and the page serves them",
   await expect(address).toHaveValue("touring-band");
   await address.fill(slug);
   await page.getByRole("button", { name: "Publish page", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Open page", exact: true }),
+  ).toBeVisible({ timeout: 15000 });
   await expect(
     page.getByRole("link", { name: "Open page", exact: true }),
   ).toHaveAttribute("href", `${new URL(page.url()).origin}/b/${slug}`);

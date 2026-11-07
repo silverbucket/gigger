@@ -1,4 +1,4 @@
-import { expect, go, login, test } from "./fixtures";
+import { expect, go, login, logoutFromApp, test } from "./fixtures";
 
 test("local username login opens the app without an authorization prompt", async ({
   page,
@@ -40,6 +40,7 @@ test("a revoked server token keeps the app signed in and unsynced changes stay l
     .getByRole("button", { name: "Save currency", exact: true })
     .click();
   await pushed;
+  await expect(page.getByLabel(/^Band currency/)).toHaveValue("EUR");
   const revoked = await request.post("/api/auth/logout", {
     headers: { Authorization: `Bearer ${token}` },
     data: { username: account.username },
@@ -88,12 +89,7 @@ test("a reload while another tab blocks a logout's cleanup never opens the old c
         opening.onerror = () => reject(opening.error);
       }),
   );
-  await go(page, "settings");
-  await page
-    .getByRole("link", { name: "Log out", exact: true })
-    .or(page.getByRole("button", { name: "Log out", exact: true }))
-    .click();
-  await expect(page).toHaveURL(/\/login$/);
+  await logoutFromApp(page);
   await page.reload();
   await holder.close();
 

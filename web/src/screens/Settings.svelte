@@ -8,23 +8,22 @@ import Connections from "./Connections.svelte";
 const current = $derived(data.current);
 const band = $derived(current?.band);
 
-let currencyDraft = $state<{ bandId: string; text: string } | null>(null);
-const currencyText = $derived(
-  currencyDraft && currencyDraft.bandId === band?.id
-    ? currencyDraft.text
-    : (band?.currency ?? "EUR"),
-);
+let currencyValue = $state("EUR");
+let currencyDirty = $state(false);
+$effect(() => {
+  if (band && !currencyDirty) currencyValue = band.currency ?? "EUR";
+});
 
 function saveCurrency(event: SubmitEvent) {
   event.preventDefault();
   if (!band) return;
   const value = {
     ...$state.snapshot(band),
-    currency: currencyText.toUpperCase(),
+    currency: currencyValue.toUpperCase(),
   };
   void run(async () => {
     await bands.save("band", value.id, value);
-    currencyDraft = null;
+    currencyDirty = false;
   });
 }
 </script>
@@ -54,51 +53,54 @@ function saveCurrency(event: SubmitEvent) {
     {/each}
   </ul>
 {:else}
-  <div class="page-head">
-    <div>
-      <p class="kicker">Settings · {current.band.name}</p>
-      <h1>Band settings</h1>
-    </div>
-  </div>
-  <SectionLabel>
-    Currency and connections
-    {#snippet aside()}
-      These apply to the band shown in the picker above.
-    {/snippet}
-  </SectionLabel>
-  <form class="block currency" onsubmit={saveCurrency}>
-    <div class="field">
-      <label for="band-currency">Band currency · fees and earnings</label>
-      <div class="inline">
-        <input
-          id="band-currency"
-          class="input"
-          name="currency"
-          disabled={ui.busy}
-          value={currencyText}
-          oninput={(event) => {
-            currencyDraft = {
-              bandId: band?.id ?? "",
-              text: event.currentTarget.value,
-            };
-          }}
-          pattern={"[A-Za-z]{3}"}
-          maxlength="3"
-          required
-        >
-        <button type="submit" class="btn btn-secondary" disabled={ui.busy}>
-          Save<span class="sr-only"> currency</span>
-        </button>
+  <div class="settings">
+    <div class="page-head">
+      <div>
+        <p class="kicker">Settings · {current.band.name}</p>
+        <h1>Band settings</h1>
       </div>
     </div>
-  </form>
-  {#if band}
-    <Connections {band} />
-  {/if}
-  <div class="block">
-    <button type="button" class="btn btn-secondary" onclick={() => logout()}>
-      Log out
-    </button>
+    <SectionLabel>
+      Currency and connections
+      {#snippet aside()}
+        These apply to the band shown in the picker above.
+      {/snippet}
+    </SectionLabel>
+    <form class="block currency" onsubmit={saveCurrency}>
+      <div class="field">
+        <label for="band-currency">Band currency · fees and earnings</label>
+        <div class="inline">
+          <input
+            id="band-currency"
+            class="input"
+            name="currency"
+            disabled={ui.busy}
+            bind:value={currencyValue}
+            oninput={() => (currencyDirty = true)}
+            pattern={"[A-Za-z]{3}"}
+            maxlength="3"
+            required
+          >
+          <button type="submit" class="btn btn-secondary" disabled={ui.busy}>
+            Save<span class="sr-only"> currency</span>
+          </button>
+        </div>
+      </div>
+    </form>
+    {#if band}
+      <Connections {band} />
+    {/if}
+    {#if ui.phone}
+      <div class="block">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          onclick={() => logout()}
+        >
+          Log out
+        </button>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -127,6 +129,9 @@ function saveCurrency(event: SubmitEvent) {
   padding: 24px 0;
 }
 @media (max-width: 899px) {
+  .settings {
+    padding-bottom: calc(var(--tabbar) + 16px);
+  }
   .block {
     padding-inline: 16px;
   }

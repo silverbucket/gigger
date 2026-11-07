@@ -135,12 +135,13 @@ const memberChannels = (m: {
 ];
 
 // Public page drafts survive syncs until saved or another band is shown.
-let slugDraft = $state<{ bandId: string; text: string } | null>(null);
-const slugText = $derived(
-  slugDraft && slugDraft.bandId === band?.id
-    ? slugDraft.text
-    : (band?.slug ?? slugify(band?.name ?? "")),
-);
+let slugValue = $state("");
+let slugDirty = $state(false);
+$effect(() => {
+  if (band && !slugDirty) {
+    slugValue = band.slug ?? slugify(band.name ?? "");
+  }
+});
 const pageUrl = $derived(band?.slug ? `${location.origin}/b/${band.slug}` : "");
 const listed = $derived(
   current?.gigs.filter((g) => publicStatuses.includes(g.status)).length ?? 0,
@@ -240,7 +241,7 @@ function publish(event: SubmitEvent) {
   event.preventDefault();
   if (!band) return;
   const previous = $state.snapshot(band);
-  const slug = slugText.trim();
+  const slug = slugValue.trim();
   void run(async () => {
     await api(
       "/api/public/pages",
@@ -256,8 +257,8 @@ function publish(event: SubmitEvent) {
       locale: navigator.language,
       publicProfile: savedProfile,
     });
-    await bands.publishBand(previous.id, previous.slug);
-    slugDraft = null;
+    await bands.publishBand(previous.id, previous.slug || undefined);
+    slugDirty = false;
     profileDraft = null;
   }, "Could not publish the page. Please retry.");
 }
@@ -435,13 +436,8 @@ function createBand(event: SubmitEvent) {
               id="page-address"
               class="input"
               name="slug"
-              value={slugText}
-              oninput={(event) => {
-                slugDraft = {
-                  bandId: band.id,
-                  text: event.currentTarget.value,
-                };
-              }}
+              bind:value={slugValue}
+              oninput={() => (slugDirty = true)}
               pattern={slugPattern.slice(1, -1)}
               maxlength="60"
               required
@@ -550,7 +546,7 @@ function createBand(event: SubmitEvent) {
           <input
             id="page-contact-web"
             class="input"
-            type="url"
+            type="text"
             value={profileContact.website ?? ""}
             placeholder="https://"
             oninput={(event) =>
