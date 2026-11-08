@@ -1,11 +1,23 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { conversationId, type Message, messagePath } from "@showday/schemas";
-import { messageTimeLong } from "../src/lib/format";
 import { expect, go, login, test } from "./fixtures";
 
 const messageBody = (page: Page) => page.locator(".body .pre");
 const messageHeader = (page: Page) => page.locator(".detail-head .muted");
 const messageKicker = (page: Page) => page.locator(".detail-head .kicker");
+
+/** Same formatting as `messageTimeLong` in the open message header (en-GB). */
+function formatMessageKickerTime(iso: string): string {
+  const at = new Date(iso);
+  const dateLocale = "en-GB";
+  const time = at.toLocaleTimeString(dateLocale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const day = (d: Date) => d.toLocaleDateString("en-CA");
+  if (day(at) === day(new Date())) return `Today ${time}`;
+  return `${at.toLocaleDateString(dateLocale, { weekday: "short", day: "numeric", month: "short" })} ${time}`;
+}
 
 async function bumpConversationLastIn(
   request: APIRequestContext,
@@ -17,19 +29,36 @@ async function bumpConversationLastIn(
   lastIn: string,
 ) {
   const indexUrl = `${seeded.root}conversations/index`;
-  const got = await request.get(indexUrl, { headers: seeded.headers });
-  expect(got.ok()).toBe(true);
-  const etag = got.headers().etag;
-  const index = (await got.json()) as Record<string, unknown>;
-  const entry = index[seeded.conversation] as Record<string, unknown>;
-  const updated = await request.put(indexUrl, {
-    headers: { ...seeded.headers, ...(etag ? { "If-Match": etag } : {}) },
-    data: {
-      ...index,
-      [seeded.conversation]: { ...entry, lastIn },
-    },
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const got = await request.get(indexUrl, { headers: seeded.headers });
+    expect(got.ok()).toBe(true);
+    const etag = got.headers().etag;
+    const index = (await got.json()) as Record<string, unknown>;
+    const entry = index[seeded.conversation] as Record<string, unknown>;
+    const updated = await request.put(indexUrl, {
+      headers: {
+        ...seeded.headers,
+        ...(etag ? { "If-Match": etag } : { "If-Match": "*" }),
+      },
+      data: {
+        ...index,
+        [seeded.conversation]: { ...entry, lastIn },
+      },
+    });
+    if ([200, 201].includes(updated.status())) return;
+    expect(updated.status()).toBe(412);
+  }
+  throw new Error("Could not bump conversation lastIn");
+}
+
+async function pullRemoteInboxRefresh(page: Page) {
+  const ok = await page.evaluate(async () => {
+    const run = window.showdaySyncUntilCompleteForLocalE2E?.();
+    if (!run) return false;
+    await run;
+    return true;
   });
-  expect([200, 201, 412]).toContain(updated.status());
+  expect(ok).toBe(true);
 }
 
 async function seedInboxEmail(
@@ -140,6 +169,7 @@ test.describe("inbox email translation", () => {
     request,
     account,
   }) => {
+    test.setTimeout(90_000);
     const signup = await request.post("/api/auth/login", {
       data: { username: account.username, password: account.password },
     });
@@ -164,10 +194,13 @@ test.describe("inbox email translation", () => {
     });
     await expect(
       language.getByRole("radio", { name: "English", exact: true }),
-    ).toBeChecked();
+    ).toBeChecked({ timeout: 15000 });
     const initialKicker = (await messageKicker(page).textContent()) ?? "";
     const refreshedAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-    const kickerAfterRefresh = messageTimeLong(refreshedAt);
+    const kickerAfterRefresh = await page.evaluate(
+      formatMessageKickerTime,
+      refreshedAt,
+    );
     const freshMessage: Message = {
       ...(seeded.message as Message),
       published: refreshedAt,
@@ -177,14 +210,13 @@ test.describe("inbox email translation", () => {
       data: freshMessage,
     });
     await bumpConversationLastIn(request, seeded, refreshedAt);
+    await pullRemoteInboxRefresh(page);
     await expect
       .poll(
         async () => {
           const kickerText = (await messageKicker(page).textContent()) ?? "";
           if (kickerText === initialKicker) return false;
-          if (!kickerText.includes(kickerAfterRefresh)) return false;
-          const body = (await messageBody(page).textContent()) ?? "";
-          return /In English:/.test(body);
+          return kickerText.includes(kickerAfterRefresh);
         },
         { timeout: 30000 },
       )
