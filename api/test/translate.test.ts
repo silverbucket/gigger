@@ -24,6 +24,58 @@ test("libreTranslate returns translated text from a compatible server", async ()
   }
 });
 
+test("translate route returns 503 when LibreTranslate is not configured", async () => {
+  const handle = translateHandler(
+    "http://armadietto:8000",
+    "http://localhost:8080",
+    {},
+  );
+  const response = await handle(
+    new Request("http://localhost/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer token",
+      },
+      body: JSON.stringify({
+        username: "alice",
+        body: "Ahoj",
+        target: "en",
+      }),
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect((await response.json()).error).toBe(
+    "Translation is not available right now.",
+  );
+});
+
+test("translate route returns 503 when LIBRETRANSLATE_URL is empty", async () => {
+  const handle = translateHandler(
+    "http://armadietto:8000",
+    "http://localhost:8080",
+    { LIBRETRANSLATE_URL: "   " },
+  );
+  const response = await handle(
+    new Request("http://localhost/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer token",
+      },
+      body: JSON.stringify({
+        username: "alice",
+        body: "Ahoj",
+        target: "en",
+      }),
+    }),
+  );
+  expect(response.status).toBe(503);
+  expect((await response.json()).error).toBe(
+    "Translation is not available right now.",
+  );
+});
+
 test("translate route validates input and proxies both subject and body", async () => {
   let calls = 0;
   const lt = Bun.serve({

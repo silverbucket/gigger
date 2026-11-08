@@ -28,6 +28,7 @@ jobs:
           curl -fsS 'http://localhost:8080/sockethub/?EIO=4&transport=polling' | grep -q 'sid'
           curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/b/nobody | grep -q 404
       - run: AUTH_TEST_URL=http://localhost:8080/api bun test api/test/auth.integration.test.ts
+      - run: AUTH_TEST_URL=http://localhost:8080/api bun test api/test/translate.integration.test.ts
       - run: MAIL_TEST_URL=http://localhost:8080 MAILPIT_URL=http://localhost:8025 bun test api/test/messages.integration.test.ts
       - run: bunx playwright install --with-deps chromium webkit
       - run: bun run test:e2e
