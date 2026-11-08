@@ -9,6 +9,7 @@ import {
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import DetailSection from "../components/DetailSection.svelte";
 import Icon from "../components/Icon.svelte";
+import IncomingEmailText from "../components/IncomingEmailText.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
 import SectionLabel from "../components/SectionLabel.svelte";
 import type { BandData } from "../lib/data.svelte";
@@ -51,6 +52,13 @@ const blocked = $derived(replyBlocked(conversation, now, humanAgent));
 const tagged = $derived(
   humanAgent && !blocked && needsHumanAgentTag(conversation, now),
 );
+let headerSubject = $state<string | undefined>();
+let latestBody = $state("");
+let latestLang = $state<string | undefined>();
+$effect(() => {
+  item.id;
+  headerSubject = conversation.subject;
+});
 const address = $derived(
   conversation.channel === "instagram"
     ? `@${conversation.peer.id.replace(/^@/, "")}`
@@ -155,8 +163,8 @@ async function send(event: SubmitEvent) {
   <h2 class="sender">{senderName(conversation, data)}</h2>
   <p class="muted">
     {address}
-    {#if conversation.subject}
-      · {conversation.subject}
+    {#if headerSubject ?? conversation.subject}
+      · {headerSubject ?? conversation.subject}
     {/if}
   </p>
 </div>
@@ -181,13 +189,31 @@ async function send(event: SubmitEvent) {
 {/snippet}
 
 <div class="scroll">
-  <div class="body pre">
-    {#if latest}
-      {latest.object.content}
+  {#if latest && conversation.channel === "email"}
+    <div class="translate-slot">
+      <IncomingEmailText
+        messageId={latest.id}
+        subject={conversation.subject}
+        body={latest.object.content}
+        showSubject
+        separateControl
+        bind:displayBody={latestBody}
+        bind:contentLang={latestLang}
+        onSubject={(value) => {
+          headerSubject = value;
+        }}
+      />
+    </div>
+  {/if}
+  <div class="body">
+    {#if latest && conversation.channel === "email"}
+      <p class="pre" lang={latestLang}>{latestBody}</p>
+    {:else if latest}
+      <p class="pre">{latest.object.content}</p>
     {:else if loading}
-      <span class="muted">Loading…</span>
+      <p class="pre"><span class="muted">Loading…</span></p>
     {:else}
-      {conversation.preview}
+      <p class="pre">{conversation.preview}</p>
     {/if}
     {#if failed}
       <p class="alert-text" role="alert">{failed}</p>
@@ -291,7 +317,14 @@ async function send(event: SubmitEvent) {
               : "You"}
             · {messageTimeLong(message.published)}
           </p>
-          <p class="pre">{message.object.content}</p>
+          {#if message.direction === "in" && message.channel === "email"}
+            <IncomingEmailText
+              messageId={message.id}
+              body={message.object.content}
+            />
+          {:else}
+            <p class="pre">{message.object.content}</p>
+          {/if}
           {@render attachments(message.object.attachment)}
           {#if message.error}
             <p class="alert-text">Not delivered: {message.error}</p>
@@ -411,6 +444,14 @@ h2.sender {
   font-size: 17px;
   line-height: 1.5;
   border-bottom: var(--rule-2);
+}
+.translate-slot {
+  padding: 0 28px;
+}
+@media (max-width: 899px) {
+  .translate-slot {
+    padding-inline: 16px;
+  }
 }
 .body img,
 .thread img {

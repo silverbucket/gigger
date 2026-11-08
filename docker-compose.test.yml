@@ -1,6 +1,22 @@
 # Test additions to the stack: a Mailpit sink for outgoing email and a Sockethub
 # configuration that may talk to it. Use `make up-test`.
 services:
+  translate-stub:
+    image: oven/bun:1.4.4
+    command: ["bun", "/app/translate-stub.ts"]
+    volumes:
+      - ./test/translate-stub.ts:/app/translate-stub.ts:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://127.0.0.1:5000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
   mailpit:
     image: axllent/mailpit:v1.28
     ports:
@@ -29,3 +45,6 @@ services:
   api:
     environment:
       TOKEN_KEY: ${TOKEN_KEY:-5d41402abc4b2a76b9719d911017c592a3f0d6e1b8c47a2f9e0b1c3d5e7f9a1b}
+      LIBRETRANSLATE_URL: http://translate-stub:5000
+    depends_on:
+      translate-stub: { condition: service_healthy }
