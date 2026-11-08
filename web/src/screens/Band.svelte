@@ -848,19 +848,21 @@ function createBand(event: SubmitEvent) {
       {/if}
       {#if pageControls.openAndExport && band.slug}
         <div class="pub-links">
-          <a
-            class="btn btn-secondary"
-            href={pageUrl}
-            target="_blank"
-            rel="noreferrer"
-            >Open page <Icon name="arrow-up-right" /></a
-          >
-          <a
-            class="btn btn-secondary"
-            href={`/b/${band.slug}/export.zip`}
-            download
-            >Export static page (.zip)</a
-          >
+          <div class="pub-links-start">
+            <a
+              class="btn btn-secondary"
+              href={pageUrl}
+              target="_blank"
+              rel="noreferrer"
+              >Open page <Icon name="arrow-up-right" /></a
+            >
+            <a
+              class="btn btn-secondary"
+              href={`/b/${band.slug}/export.zip`}
+              download
+              >Export static page (.zip)</a
+            >
+          </div>
           {#if pageControls.unpublish}
             <button
               type="button"
@@ -1314,9 +1316,20 @@ textarea.input {
 }
 .pub-links {
   margin-top: 12px;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.pub-links-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 .pub-links .pub-unpublish {
-  margin-left: auto;
+  flex-shrink: 0;
 }
 .pub-error {
   margin: 10px 0 0;

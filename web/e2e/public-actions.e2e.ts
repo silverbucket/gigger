@@ -52,13 +52,15 @@ async function expectLiveActionLayout(page: Page) {
     name: "Export static page (.zip)",
     exact: true,
   });
+  const row = secondary;
   const openBox = await open.boundingBox();
   const exportBox = await exportLink.boundingBox();
   const unpublishBox = await unpublish.boundingBox();
-  if (!openBox || !exportBox || !unpublishBox) {
+  const rowBox = await row.boundingBox();
+  if (!openBox || !exportBox || !unpublishBox || !rowBox) {
     throw new Error("public page action buttons were not laid out");
   }
-  expect(Math.abs(openBox.y - unpublishBox.y)).toBeLessThan(8);
+  expect(Math.abs(rowBox.y - unpublishBox.y)).toBeLessThan(8);
   expect(unpublishBox.x).toBeGreaterThan(exportBox.x);
 }
 
