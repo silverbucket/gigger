@@ -115,7 +115,11 @@ test.describe("inbox email translation", () => {
     page,
     request,
     account,
-  }) => {
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "desktop-chromium",
+      "desktop layout and reload check",
+    );
     const signup = await request.post("/api/auth/login", {
       data: { username: account.username, password: account.password },
     });
