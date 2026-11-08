@@ -1,5 +1,8 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 # One run per ref at a time, so the shared main/pr-N tags of all three images come from one commit.
 concurrency:
   group: ci-${{ github.ref }}
