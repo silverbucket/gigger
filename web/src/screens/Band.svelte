@@ -940,6 +940,10 @@ function createBand(event: SubmitEvent) {
       />
     </div>
     {#if tab === "members"}
+      <p class="visibility-note phone-note">
+        <Icon name="lock" size={13} />Private. Member details are never
+        published.
+      </p>
       <ul class="phone-members">
         {#each current.members as member (member.id)}
           <li>
@@ -1062,7 +1066,7 @@ function createBand(event: SubmitEvent) {
                 </button>
                 <button
                   type="button"
-                  class="btn btn-ghost btn-icon btn-danger"
+                  class="btn btn-ghost btn-icon remove"
                   disabled={ui.busy}
                   title="Remove"
                   onclick={() => removeMember(member)}
@@ -1288,6 +1292,15 @@ function createBand(event: SubmitEvent) {
 }
 .three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.remove:hover,
+.remove:focus-visible {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+.phone-note {
+  margin: 0;
+  padding: 4px var(--pad) 8px;
 }
 .colors input[type="color"] {
   height: 40px;

@@ -215,8 +215,9 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           <p class="kicker">Venue</p>
           <h2>{id === "new" ? "New venue" : "Edit venue"}</h2>
           <p class="visibility-note">
-            <Icon name="globe" size={13} />Name and city show with confirmed
-            gigs on your public page. The address stays private.
+            <Icon name="globe" size={13} />Name and city are listed with
+            confirmed and played gigs on your public page. The address stays
+            private.
           </p>
         </div>
         <fieldset class="form block" disabled={ui.busy}>
@@ -304,7 +305,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             <dt><Tag kind="public">Public</Tag></dt>
             <dd>
               {venue.name}{venue.city ? `, ${venue.city}` : ""}
-              <span class="muted">· shown with confirmed gigs</span>
+              <span class="muted">· listed with confirmed and played gigs</span>
             </dd>
           </div>
           <div>
@@ -336,9 +337,9 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
                 note: "most often reported",
               },
               {
-                label: "Venue PA",
+                label: "PA provided",
                 value: `${averages.paProvided} of ${averages.count}`,
-                note: "times they had a PA",
+                note: "gigs",
               },
               {
                 label: "Play again",
@@ -432,11 +433,13 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           href={`#/bookings/new?venue=${encodeURIComponent(venue.id)}`}
           >New gig here <Icon name="arrow-right" stroke={2.5} /></a
         >
-        <a
-          class="btn btn-secondary"
-          href={`#/${path("venues", venue.id, "edit")}`}
-          >Edit</a
-        >
+        {#if !ui.phone}
+          <a
+            class="btn btn-secondary"
+            href={`#/${path("venues", venue.id, "edit")}`}
+            >Edit</a
+          >
+        {/if}
       </BottomActionBar>
     {:else if id}
       <p class="empty">This venue isn't here any more.</p>

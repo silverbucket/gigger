@@ -291,30 +291,31 @@ const note = $derived(
 .first-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 14px;
 }
 .pick {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
-  padding: 3px 10px;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
+  padding: 2px 0;
+  border: 0;
+  background: none;
   color: var(--muted);
   font: inherit;
   font-size: 12px;
   font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--color-border);
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 .pick:hover {
   color: var(--color-accent-700);
-  border-color: var(--color-accent-300);
+  text-decoration-color: currentColor;
 }
 @media (max-width: 899px) {
   .pick {
     min-height: 36px;
-    padding-inline: 12px;
   }
 }
 .pick:disabled {

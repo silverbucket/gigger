@@ -31,16 +31,24 @@ $effect(() => {
 });
 </script>
 
-<MessageTranslate
-  {messageId}
-  {subject}
-  {body}
-  {showSubject}
-  {conversationId}
-  bind:displaySubject
-  bind:displayBody
-  bind:contentLang
-/>
 {#if !separateControl}
   <p class="pre" lang={contentLang}>{displayBody}</p>
 {/if}
+<div class:after={!separateControl}>
+  <MessageTranslate
+    {messageId}
+    {subject}
+    {body}
+    {showSubject}
+    {conversationId}
+    bind:displaySubject
+    bind:displayBody
+    bind:contentLang
+  />
+</div>
+
+<style>
+.after {
+  margin: 8px 0 -4px;
+}
+</style>

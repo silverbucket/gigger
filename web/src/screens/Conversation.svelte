@@ -222,6 +222,11 @@ function keydown(event: KeyboardEvent) {
     (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit();
   }
 }
+const clock = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 const fullForm = $derived(
   `#/${path("bookings", "new")}?from=${encodeURIComponent(item.id)}`,
 );
@@ -604,6 +609,9 @@ const fullForm = $derived(
           >
             <div class="text">
               {#if isLatest && conversation.channel === "email" && shownLatest}
+                <p class="pre" lang={latestLang}>
+                  {latestBody || shownLatest.body}
+                </p>
                 <div class="translate-slot">
                   {#key shownLatest.id}
                     <IncomingEmailText
@@ -621,9 +629,6 @@ const fullForm = $derived(
                     />
                   {/key}
                 </div>
-                <p class="pre" lang={latestLang}>
-                  {latestBody || shownLatest.body}
-                </p>
               {:else if message.direction === "in" &&
                 message.channel === "email"}
                 <IncomingEmailText
@@ -636,7 +641,7 @@ const fullForm = $derived(
               {@render attachments(message.object.attachment)}
             </div>
             <p class="stamp">
-              {message.direction === "out" ? "You · " : ""}{messageTimeLong(
+              {message.direction === "out" ? "You · " : ""}{clock(
                 message.published,
               )}
             </p>
@@ -666,7 +671,7 @@ const fullForm = $derived(
           required
           placeholder={blocked
             ? "Replies are closed for this conversation"
-            : `Reply to ${name.split(" ")[0]} by ${channelName[conversation.channel].toLowerCase()}…`}
+            : `Reply to ${contact ? contact.name.split(" ")[0] : name} by ${channelName[conversation.channel].toLowerCase()}…`}
           disabled={ui.busy || !!blocked}
           onkeydown={keydown}
         ></textarea>
@@ -855,7 +860,7 @@ const fullForm = $derived(
   color: var(--faint);
 }
 .translate-slot {
-  margin: -2px 0 8px;
+  margin: 8px 0 -4px;
 }
 .load-failed {
   padding: 0 24px;
@@ -1064,7 +1069,7 @@ a.gig-title:hover {
   color: var(--color-accent-600);
 }
 .peek {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -1126,7 +1131,8 @@ a.gig-title:hover {
     position: sticky;
     top: 0;
     z-index: 5;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     padding: 8px var(--pad) 10px;
@@ -1144,6 +1150,12 @@ a.gig-title:hover {
   }
   .who h2 {
     font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta {
+    min-width: 0;
   }
   .who p.subject {
     display: none;

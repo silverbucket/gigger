@@ -154,8 +154,8 @@ function note(item: InboxItem) {
   return match.kind === "matched"
     ? { note: `From ${match.contact.name}`, noteKind: "muted" as const }
     : match.kind === "ambiguous"
-      ? { note: "Might be a contact you know", noteKind: "accent" as const }
-      : { note: "New sender", noteKind: "accent" as const };
+      ? { note: "Might be a contact you know", noteKind: "muted" as const }
+      : { note: "New sender", noteKind: "muted" as const };
 }
 const emptyText = $derived(
   needle
@@ -170,7 +170,7 @@ const emptyText = $derived(
 );
 </script>
 
-<ListDetailLayout inbox open={!!id} key={id}>
+<ListDetailLayout inbox fill open={!!id} key={id}>
   {#snippet list()}
     <div class="list">
       <div class="tools">
@@ -280,6 +280,7 @@ const emptyText = $derived(
 
 <style>
 .list {
+  max-width: 920px;
   padding-bottom: 24px;
 }
 .tools {

@@ -303,9 +303,9 @@ async function submit(event: SubmitEvent) {
     </p>
     <h2>{isEdit ? "Edit gig" : "New gig"}</h2>
     <p class="visibility-note">
-      <Icon name="globe" size={13} />Confirmed and played gigs go on your public
-      page with date, time, venue, city, tickets and description. Everything
-      else is private.
+      <Icon name="globe" size={13} />Once your public page is published, it
+      lists confirmed and played gigs with date, time, venue, city, tickets and
+      description. Everything else is private.
     </p>
     <button
       type="button"

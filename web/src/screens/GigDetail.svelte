@@ -188,11 +188,26 @@ async function sendSheet() {
     {#if contacts.length || gig.contacts?.length || others.length}
       <DetailSection label="Who">
         {#each contacts as contact (contact.id)}
-          <a class="main plain" href={`#/${path("contacts", contact.id)}`}
-            >{[contact.name, contact.phone, contact.email]
-              .filter(Boolean)
-              .join(" · ")}</a
-          >
+          <span class="person">
+            <a class="main plain" href={`#/${path("contacts", contact.id)}`}
+              >{contact.name}</a
+            >
+            {#if contact.phone || contact.email}
+              <span class="line reach">
+                {#if contact.phone}
+                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`}
+                    >{contact.phone}</a
+                  >
+                {/if}
+                {#if contact.phone && contact.email}
+                  <span aria-hidden="true"> · </span>
+                {/if}
+                {#if contact.email}
+                  <a href={`mailto:${contact.email}`}>{contact.email}</a>
+                {/if}
+              </span>
+            {/if}
+          </span>
         {/each}
         {#each gig.contacts ?? [] as contact, i (i)}
           <span class="main">{contact}</span>
@@ -261,7 +276,10 @@ async function sendSheet() {
     <DetailSection label="Public page">
       {#if publicStatuses.includes(gig.status)}
         <span class="main with-tag"
-          ><Tag kind="public">Public</Tag>Shown on your public page</span
+          ><Tag kind="public">Public</Tag>
+          {data.band.slug
+            ? "Listed on your public page"
+            : "Listed once you publish your page"}</span
         >
         <span class="line"
           >Fans see the date, start time, venue and city{gig.public?.ticketUrl
@@ -273,7 +291,10 @@ async function sendSheet() {
         <span class="main with-tag"
           ><Tag kind="private">Private</Tag>Not on your public page yet</span
         >
-        <span class="line">It appears there once the gig is confirmed.</span>
+        <span class="line"
+          >Confirmed and played gigs are listed there. The title, fee, notes and
+          contacts always stay private.</span
+        >
       {/if}
     </DetailSection>
     {#if gig.public?.description?.trim() || gig.public?.ticketUrl}
@@ -586,6 +607,19 @@ p.line.quote {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.person {
+  display: flex;
+  flex-direction: column;
+}
+.person + .person {
+  margin-top: 6px;
+}
+.reach a {
+  color: var(--muted);
+}
+.reach a:hover {
+  color: var(--color-accent-700);
 }
 .convo {
   align-self: flex-start;

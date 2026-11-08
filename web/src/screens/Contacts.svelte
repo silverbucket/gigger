@@ -404,12 +404,7 @@ async function remove(contact: Contact) {
             <span class="pre">{contact.notes}</span>
           </DetailSection>
         {/if}
-        <SectionLabel>
-          Gigs
-          {#snippet aside()}
-            {gigs.length}
-          {/snippet}
-        </SectionLabel>
+        <SectionLabel>Gigs · {gigs.length}</SectionLabel>
         <ul>
           {#each gigs as gig (gig.id)}
             <li>
