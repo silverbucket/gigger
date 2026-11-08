@@ -23,6 +23,7 @@ let {
   gig,
   venueName = "",
   currency,
+  used = [],
   busy,
   onsave,
   oncancel,
@@ -30,6 +31,8 @@ let {
   gig: Gig;
   venueName?: string;
   currency: string;
+  /** Currencies the band has used, suggested first. */
+  used?: string[];
   busy: boolean;
   onsave: (survey: SurveyInput, earnings: Earnings) => Promise<void>;
   oncancel: () => void;
@@ -433,7 +436,7 @@ const paLabels: Record<VenueSurvey["pa"], string> = {
       >
       <CurrencyOptions
         id="earn-currency-options"
-        first={[fee?.currency, currency]}
+        first={[fee?.currency, currency, ...used]}
       />
     </div>
   </fieldset>

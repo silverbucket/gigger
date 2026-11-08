@@ -186,6 +186,24 @@ test("survey choices are required, cancel leaves the gig unplayed", async ({
   expect(await account.exists("surveys/prague")).toBe(false);
 });
 
+test("earnings suggest currencies the band used on other gigs", async ({
+  page,
+  account,
+}) => {
+  await account.seedGig({
+    id: "bucharest",
+    title: "Bucharest show",
+    fee: { amount: 900, currency: "RON", extras: [] },
+  });
+  await page.reload();
+  await openGig(page, "Berlin show");
+  await page.getByRole("button", { name: "Mark played", exact: true }).click();
+  const options = page.locator("#earn-currency-options option");
+  await expect(options.nth(0)).toHaveAttribute("value", "CZK");
+  await expect(options.nth(1)).toHaveAttribute("value", "RON");
+  await expect(options.nth(1)).toHaveText("Romanian Leu");
+});
+
 test("earnings validate, recalculate, persist currencies per gig and stay out of venue data", async ({
   page,
   account,
