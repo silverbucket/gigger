@@ -16,6 +16,7 @@ import SectionLabel from "../components/SectionLabel.svelte";
 import type { BandData } from "../lib/data.svelte";
 import { longDate, messageTimeLong, money, shortDate } from "../lib/format";
 import { channelName, type InboxItem, matchSender } from "../lib/inbox";
+import { clearInboxLangSession } from "../lib/message-translate-ui-session";
 import {
   latestIncoming,
   prefillFrom,
@@ -59,7 +60,8 @@ let latestLang = $state<string | undefined>();
 /** Keeps the translate control mounted while thread data refreshes for this item. */
 let pinnedLatest = $state<{ id: string; body: string } | undefined>();
 $effect(() => {
-  item.id;
+  const id = item.id;
+  clearInboxLangSession(id);
   pinnedLatest = undefined;
   headerSubject = untrack(() => conversation.subject);
 });
@@ -202,6 +204,7 @@ async function send(event: SubmitEvent) {
     <div class="translate-slot">
       <IncomingEmailText
         messageId={pinnedLatest.id}
+        conversationId={item.id}
         subject={conversation.subject}
         body={pinnedLatest.body}
         showSubject
