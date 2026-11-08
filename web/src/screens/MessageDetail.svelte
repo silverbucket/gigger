@@ -207,7 +207,9 @@ async function send(event: SubmitEvent) {
   {/if}
   <div class="body">
     {#if latest && conversation.channel === "email"}
-      <p class="pre" lang={latestLang}>{latestBody}</p>
+      <p class="pre" lang={latestLang}>
+        {latestBody || latest.object.content}
+      </p>
     {:else if latest}
       <p class="pre">{latest.object.content}</p>
     {:else if loading}

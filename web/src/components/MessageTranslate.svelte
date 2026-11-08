@@ -105,7 +105,11 @@ async function runTranslate(target: TranslateTarget, force = false) {
   segmented = true;
   view = "original";
   const cached = readTranslationCache(messageId, target);
-  if (cached) return;
+  if (cached) {
+    view = target;
+    applyView();
+    return;
+  }
   busy = true;
   const id = ++requestId;
   const activeId = messageId;

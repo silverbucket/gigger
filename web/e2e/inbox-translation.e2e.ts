@@ -1,6 +1,6 @@
 import type { APIRequestContext } from "@playwright/test";
 import { conversationId, messagePath } from "@showday/schemas";
-import { expect, login, test } from "./fixtures";
+import { expect, go, login, test } from "./fixtures";
 
 async function seedInboxEmail(
   request: APIRequestContext,
@@ -102,6 +102,58 @@ test.describe("inbox email translation", () => {
       page.getByRole("button", { name: "Show in English" }),
     ).toBeVisible();
     await expect(page.getByText(czech)).toBeVisible();
+  });
+
+  test("reopening a message applies session cache on the first action", async ({
+    page,
+    request,
+    account,
+  }) => {
+    const signup = await request.post("/api/auth/login", {
+      data: { username: account.username, password: account.password },
+    });
+    const { token } = await signup.json();
+    const czech =
+      "Dobrý den, nabízíme koncert 12. června v Praze. Termín by nám vyhovoval.";
+    const { conversation } = await seedInboxEmail(
+      request,
+      account,
+      token,
+      czech,
+      "Nabídka koncertu",
+    );
+    await login(page, account);
+    await page.goto(`/#/bookings/message/${conversation}`);
+    await page.getByRole("button", { name: "Show in English" }).click();
+    await expect(page.getByText(/In English:/)).toBeVisible({
+      timeout: 15000,
+    });
+    const language = page.getByRole("radiogroup", {
+      name: "Message language",
+    });
+    await expect(
+      language.getByRole("radio", { name: "English", exact: true }),
+    ).toBeChecked();
+    await go(page, "bookings");
+    await expect(page).toHaveURL(/#\/bookings$/);
+    await page
+      .getByRole("link", { name: /Promoter/i })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Show in English" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Show in English" }).click();
+    const languageAgain = page.getByRole("radiogroup", {
+      name: "Message language",
+    });
+    await expect(
+      languageAgain.getByRole("radio", { name: "English", exact: true }),
+    ).toBeChecked({ timeout: 2000 });
+    await expect(page.getByText(/In English:/)).toBeVisible();
+    await expect(
+      page.locator(".body .pre").getByText(czech, { exact: true }),
+    ).not.toBeVisible();
   });
 
   test("phone full-screen message uses a full-width two-segment control", async ({
