@@ -966,21 +966,17 @@ function createBand(event: SubmitEvent) {
                 </span>
               </span>
             </a>
-            <ul class="reach">
-              {#each memberChannels(member) as channel (channel.label)}
-                <li>
-                  {#if channel.value && channel.href}
+            {#if memberChannels(member).some((c) => c.value && c.href)}
+              <ul class="reach">
+                {#each memberChannels(member).filter(
+                  (c) => c.value && c.href,
+                ) as channel (channel.label)}
+                  <li>
                     <a href={channel.href}>{channel.verb}</a>
-                  {:else}
-                    <span
-                      >—<span class="sr-only"
-                        >No {channel.label.toLowerCase()}</span
-                      ></span
-                    >
-                  {/if}
-                </li>
-              {/each}
-            </ul>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           </li>
         {:else}
           <li class="empty">
@@ -1428,7 +1424,7 @@ textarea.input {
     padding-bottom: calc(var(--tabbar) + 16px);
   }
   .phone-tabs {
-    padding: 0 var(--pad) 8px;
+    padding: 12px var(--pad) 8px;
   }
   .phone-members {
     display: flex;
@@ -1451,30 +1447,21 @@ textarea.input {
     text-decoration: none;
   }
   .reach {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: var(--rule);
-  }
-  .reach li {
-    border-right: var(--rule);
-  }
-  .reach li:last-child {
-    border-right: 0;
-  }
-  .reach a,
-  .reach span {
     display: flex;
+    gap: 8px;
+    padding: 0 16px 12px 64px;
+  }
+  .reach a {
+    display: inline-flex;
     align-items: center;
-    min-height: 44px;
-    padding: 0 16px;
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-100);
     font-size: 13px;
     font-weight: 600;
     color: var(--color-accent-700);
     text-decoration: none;
-  }
-  .reach span {
-    color: var(--color-neutral-500);
-    font-weight: 400;
   }
   .block,
   .bands li {
