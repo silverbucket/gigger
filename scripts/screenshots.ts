@@ -410,6 +410,8 @@ if (want("desktop"))
     viewport: { width: 1440, height: 900 },
   });
 if (want("phone")) await capture("phone", webkit, devices["iPhone 13"]);
+if (want("narrow"))
+  await capture("narrow", chromium, { viewport: { width: 1024, height: 768 } });
 if (want("dark"))
   await capture("dark", chromium, {
     viewport: { width: 1440, height: 900 },

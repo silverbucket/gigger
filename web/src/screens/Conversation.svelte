@@ -227,6 +227,8 @@ const clock = (iso: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+/** Below 1280px the context folds into the header and under the thread, as on a phone. */
+const compact = $derived(ui.phone || ui.narrow);
 const fullForm = $derived(
   `#/${path("bookings", "new")}?from=${encodeURIComponent(item.id)}`,
 );
@@ -562,7 +564,7 @@ const fullForm = $derived(
           >{messageTimeLong(conversation.lastIn ?? item.latest)}</span
         >
       </div>
-      {#if ui.phone && item.gig}
+      {#if compact && item.gig}
         <details class="peek">
           <summary>
             <span class="peek-icon"><Icon name="calendar" size={16} /></span>
@@ -654,7 +656,7 @@ const fullForm = $derived(
       {#if failed}
         <p class="alert-text load-failed" role="alert">{failed}</p>
       {/if}
-      {#if ui.phone && !item.gig}
+      {#if compact && !item.gig}
         <div class="phone-context">{@render context()}</div>
       {/if}
     </div>
@@ -696,7 +698,7 @@ const fullForm = $derived(
     </form>
   </div>
 
-  {#if !ui.phone}
+  {#if !compact}
     <aside class="context" aria-label="About this conversation">
       {@render context()}
     </aside>
@@ -1124,7 +1126,13 @@ a.gig-title:hover {
 }
 @media (max-width: 1279px) {
   .conv {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .conv-head {
+    flex-wrap: wrap;
+  }
+  .peek {
+    flex-basis: 100%;
   }
 }
 @media (max-width: 899px) {
@@ -1162,7 +1170,10 @@ a.gig-title:hover {
     min-width: 0;
   }
   .who p.subject {
-    display: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
   }
   .head-side .when {
     display: none;

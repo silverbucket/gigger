@@ -20,10 +20,18 @@ class Ui {
     typeof matchMedia !== "undefined" &&
       matchMedia("(max-width: 899px)").matches,
   );
+  /** Desktop too narrow for a side panel beside a reading pane. */
+  narrow = $state(
+    typeof matchMedia !== "undefined" &&
+      matchMedia("(max-width: 1279px)").matches,
+  );
   constructor() {
     if (typeof matchMedia === "undefined") return;
     matchMedia("(max-width: 899px)").addEventListener("change", (event) => {
       this.phone = event.matches;
+    });
+    matchMedia("(max-width: 1279px)").addEventListener("change", (event) => {
+      this.narrow = event.matches;
     });
   }
 }
