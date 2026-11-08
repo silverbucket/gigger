@@ -55,6 +55,32 @@ export function publicPageControls(state: {
   };
 }
 
+const exportLabel = "Export static page (.zip)";
+
+/** Which controls sit on each action row in the public page editor. */
+export function publicPageActionRows(
+  state: Parameters<typeof publicPageControls>[0],
+) {
+  const controls = publicPageControls(state);
+  const primaryRow = [
+    controls.primary,
+    ...(controls.cancel ? (["Cancel"] as const) : []),
+  ];
+  const secondaryRow = controls.openAndExport
+    ? ([
+        "Open page",
+        exportLabel,
+        ...(controls.unpublish ? (["Unpublish"] as const) : []),
+      ] as const)
+    : [];
+  return {
+    primaryRow,
+    secondaryRow,
+    /** Unpublish is last on the secondary row, aligned to the far right in the UI. */
+    unpublishTrailing: controls.unpublish,
+  };
+}
+
 /**
  * Remembers which slug is known to serve a public page. A finished publish or
  * unpublish outranks any live check that was already in flight, and a slug
