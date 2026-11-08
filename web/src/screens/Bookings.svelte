@@ -47,7 +47,7 @@ import {
 } from "../lib/inbox-watch";
 import { messageStream } from "../lib/message-stream.svelte";
 import {
-  clearInboxLangOnConversationOpen,
+  clearInboxLangUiOnConversationOpen,
   resetInboxLangOpenTracking,
 } from "../lib/message-translate-ui-session";
 import { prefillFrom, senderName, threads } from "../lib/messages.svelte";
@@ -239,7 +239,7 @@ $effect(() => {
     resetInboxLangOpenTracking();
     return;
   }
-  clearInboxLangOnConversationOpen(id);
+  clearInboxLangUiOnConversationOpen(id);
 });
 
 // A new enquiry from a message needs the message text before the form starts.
