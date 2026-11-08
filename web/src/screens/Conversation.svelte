@@ -978,7 +978,7 @@ a.gig-title:hover {
 }
 .facts a {
   color: var(--color-text);
-  text-decoration-color: var(--color-border);
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
 }
 .facts a:hover {
   color: var(--color-accent-700);

@@ -280,6 +280,7 @@ const emptyText = $derived(
 
 <style>
 .list {
+  max-width: 760px;
   padding-bottom: 24px;
 }
 .tools {

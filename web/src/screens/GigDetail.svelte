@@ -621,7 +621,8 @@ p.line.quote {
   margin-top: 6px;
 }
 .reach a {
-  color: var(--muted);
+  color: var(--color-text);
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
 }
 .reach a:hover {
   color: var(--color-accent-700);

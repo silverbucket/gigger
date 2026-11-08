@@ -551,7 +551,7 @@ ul {
 }
 .vis a {
   color: var(--color-text);
-  text-decoration-color: var(--color-border);
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
 }
 .edit .detail-head .visibility-note {
   margin-top: 8px;
