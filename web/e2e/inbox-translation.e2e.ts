@@ -265,9 +265,12 @@ test.describe("inbox email translation", () => {
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let requests = 0;
     await page.route("**/api/translate", async (route) => {
+      requests++;
       await held;
-      await route.continue();
+      // The first request is aborted when the control is rebuilt.
+      await route.continue().catch(() => {});
     });
     await page.getByRole("button", { name: "Show in English" }).click();
     await expect(page.getByText("Translating…").first()).toBeVisible();
@@ -278,7 +281,8 @@ test.describe("inbox email translation", () => {
       new Date(Date.now() + 60_000).toISOString(),
     );
     await pullRemoteInboxRefresh(page);
-    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    // The rebuilt control asks again; only then let the answers through.
+    await expect.poll(() => requests).toBeGreaterThanOrEqual(2);
     release();
     await expect(messageBody(page)).toContainText(/In English:/, {
       timeout: 15000,
