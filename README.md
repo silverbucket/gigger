@@ -26,6 +26,19 @@ Root WebFinger discovery and `/storage/storage/*` still provide remoteStorage ac
 
 `make down` stops the stack without deleting server data. Armadietto and SQLite persist in named Docker volumes. Delete them only with an explicit `docker compose down -v`. This HTTP setup with app signup is for local development. Deployment needs HTTPS and appropriate access controls. The Armadietto image supports Linux amd64; other architectures need Docker emulation.
 
+## Develop without Docker
+
+For day-to-day work on features and design, skip Compose:
+
+```sh
+bun install --frozen-lockfile
+bun run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173) and log in as `demo` / `demodemo`. `dev/index.ts` starts Vite with hot module reload and proxies `/api`, `/b`, `/storage` and `/.well-known` the way the Caddyfile does; the API runs natively under `bun --watch`, so server edits restart it in well under a second; `dev/storage.ts` replaces the Armadietto container with an in-memory remoteStorage server and the same account hook (`armadietto/auth.cjs`), saved to `.dev/storage.json` so accounts and records survive restarts; the LibreTranslate stub from `test/` answers translations. On the first start `dev/seed.ts` creates the demo account with members, venues, contacts and gigs in every status. Sign up for more accounts as usual.
+
+What the dev stack does not run: Sockethub (replies and mailbox watchers fail with a visible error, so use `make up-test` for channel work), Caddy and real Armadietto (the fake implements the remoteStorage spec the app uses, with ETags, conditional requests, folder listings and public reads, but no OAuth page, so `username@host` logins against it do not work). Ports are `DEV_WEB_PORT` 5173, `DEV_API_PORT` 3700, `DEV_STORAGE_PORT` 8700, `DEV_AUTH_PORT` 8701 and `DEV_TRANSLATE_PORT` 5700; none clash with the Compose stack, so both can run at once. Delete `.dev/` to start from scratch, or set `DEV_SEED=0` to skip the demo account.
+
 ## Workspace commands
 
 Install Bun 1.4.4, then:
@@ -46,7 +59,7 @@ AUTH_TEST_URL=http://localhost:8080/api bun test api/test/auth.integration.test.
 
 This creates disposable test accounts in the local data volume. CI runs it against its own fresh Compose stack.
 
-`bun run format` applies the single root Biome configuration, including Svelte markup. Tests use the root `bunfig.toml`. CI runs these checks and the full Compose/proxy smoke test. For UI development, run `bun run --filter @showday/web dev`; use the Compose origin to test account and authorization behavior. Set `APP_ORIGIN` to the exact public origin when using a hostname other than localhost.
+`bun run format` applies the single root Biome configuration, including Svelte markup. Tests use the root `bunfig.toml`. CI runs these checks and the full Compose/proxy smoke test. For UI development, run `bun run dev` (see Develop without Docker); use the Compose origin to test real Armadietto authorization and Sockethub behavior. Set `APP_ORIGIN` to the exact public origin when using a hostname other than localhost.
 
 ## Shared data module
 
