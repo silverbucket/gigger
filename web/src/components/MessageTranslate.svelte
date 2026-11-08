@@ -87,6 +87,10 @@ $effect(() => {
       displayBody = body;
       contentLang = undefined;
     }
+    // The copy that asked for the translation was torn down before it came
+    // back (a thread refresh mid-request); ask again instead of sitting on Original.
+    if (restored?.chosen && !readTranslationCache(id, restored.chosen))
+      runTranslate(restored.chosen, true);
   });
   return () => {
     abort?.abort();
