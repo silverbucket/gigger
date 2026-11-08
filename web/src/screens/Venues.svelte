@@ -118,16 +118,13 @@ async function save(event: SubmitEvent) {
 const short = (c: string) => (c === "under 50" ? "under 50" : c);
 </script>
 
-<ListDetailLayout open={!!id} key={router.parts.join("/")}>
+<ListDetailLayout fill open={!!id} key={router.parts.join("/")}>
   {#snippet list()}
     <div class="pane">
       <div class="page-head">
         <div>
           <h1>Venues</h1>
-          <p>
-            {plural(rows.length, "venue")}
-            · {surveyed} surveyed · {plural(data.surveys.length, "survey")}
-          </p>
+          <p>{plural(rows.length, "venue")} · {surveyed} surveyed</p>
         </div>
         <Segmented
           label="Show"
@@ -177,10 +174,12 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
                 </span>
               </span>
               <span class="rating">
-                <span class="num"
-                  >{row.averages ? row.averages.rating.toFixed(1) : "—"}</span
-                >
-                <Rating value={row.averages?.rating ?? 0} />
+                {#if row.averages}
+                  <span class="num">{row.averages.rating.toFixed(1)}</span>
+                  <Rating value={row.averages.rating} />
+                {:else}
+                  <span class="muted">—</span>
+                {/if}
               </span>
               <span class="cap"
                 >{row.averages?.capacities.map(short).join(" / ") ?? "—"}</span
@@ -297,23 +296,29 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           >
         {/snippet}
       </PhoneHeader>
-      <div class="detail-head head-row">
-        <div>
-          <p class="kicker">Venue{venue.city ? ` · ${venue.city}` : ""}</p>
-          <h2>{venue.name}</h2>
-          <p class="addr">
-            {venue.address}
-            <Tag kind="private">Private</Tag>
-            <a href={mapUrl(venue.address)} target="_blank" rel="noreferrer"
-              >Map</a
-            >
-          </p>
-        </div>
-        <a
-          class="btn btn-secondary desktop"
-          href={`#/${path("venues", venue.id, "edit")}`}
-          >Edit</a
-        >
+      <div class="detail-head">
+        <p class="kicker">Venue</p>
+        <h2>{venue.name}</h2>
+        <dl class="vis">
+          <div>
+            <dt><Tag kind="public">Public</Tag></dt>
+            <dd>
+              {venue.name}{venue.city ? `, ${venue.city}` : ""}
+              <span class="muted">· shown with confirmed gigs</span>
+            </dd>
+          </div>
+          <div>
+            <dt><Tag kind="private">Private</Tag></dt>
+            <dd>
+              {venue.address}
+              ·
+              <a href={mapUrl(venue.address)} target="_blank" rel="noreferrer"
+                >Map</a
+              >
+              <span class="muted">· surveys and notes</span>
+            </dd>
+          </div>
+        </dl>
       </div>
       <div class="scroll">
         {#if averages}
@@ -333,7 +338,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
               {
                 label: "Venue PA",
                 value: `${averages.paProvided} of ${averages.count}`,
-                note: `${Math.round((averages.paProvided / averages.count) * 100)}% provided a PA`,
+                note: "times they had a PA",
               },
               {
                 label: "Play again",
@@ -520,21 +525,23 @@ ul {
   font-size: 13px;
   color: var(--muted);
 }
-.head-row {
+.vis {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
 }
-.head-row p.addr {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+.vis div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: baseline;
   gap: 8px;
-  margin-top: 4px;
-  color: var(--muted);
+  font-size: 13px;
 }
-.detail-head .visibility-note {
+.vis dd {
+  margin: 0;
+}
+.edit .detail-head .visibility-note {
   margin-top: 8px;
 }
 .scroll {
@@ -639,12 +646,17 @@ ul {
   .row {
     margin: 0 4px;
   }
-  .desktop,
   .table-head {
     display: none;
   }
   .capacity {
     margin-inline: var(--pad);
+    gap: 4px;
+  }
+  .capacity li {
+    padding: 6px;
+    font-size: 11px;
+    white-space: nowrap;
   }
   .survey,
   .gig {

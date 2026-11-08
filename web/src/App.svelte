@@ -296,10 +296,7 @@ function choose(bandId: string) {
             router.screen !== "venues" &&
             router.screen !== "bands") ||
             data.current)}
-          <a
-            class="btn btn-icon btn-primary"
-            href={newHref}
-            aria-label={newLabel}
+          <a class="btn btn-icon new-btn" href={newHref} aria-label={newLabel}
             ><Icon name="plus" size={20} stroke={2.5} /></a
           >
         {/if}
@@ -517,9 +514,7 @@ main {
   gap: 4px;
   height: 60px;
   padding: 0 12px;
-  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
-  backdrop-filter: saturate(1.6) blur(16px);
-  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  background: var(--color-bg);
   border-bottom: var(--rule);
 }
 .phone-detail .phone-top {
@@ -541,6 +536,14 @@ main {
 }
 .phone-picker :global(.shown) {
   font-size: 16px;
+}
+.new-btn {
+  border-radius: 12px;
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+}
+.new-btn:hover {
+  background: var(--color-accent-200);
 }
 .avatar {
   display: grid;

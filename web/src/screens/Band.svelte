@@ -687,7 +687,6 @@ function createBand(event: SubmitEvent) {
         </div>
         <fieldset class="field colors">
           <legend class="label">Theme</legend>
-          <p class="hint">Theme presets</p>
           <div class="theme-swatches">
             {#each Object.entries(
               PAGE_THEME_PRESETS,
@@ -699,16 +698,16 @@ function createBand(event: SubmitEvent) {
                   (profileTheme.background === colors.background &&
                     profileTheme.text === colors.text &&
                     profileTheme.accent === colors.accent)}
-                style={`background:${colors.background};color:${colors.text};border-color:${colors.accent}`}
+                style={`background:${colors.background};color:${colors.text}`}
                 onclick={() =>
                   applyThemePreset(preset as Exclude<ThemePreset, "custom">)}
               >
+                <span class="dot" style={`background:${colors.accent}`}></span>
                 <span class="capitalize">{preset}</span>
               </button>
             {/each}
           </div>
-          <p class="hint">Custom colors</p>
-          <div class="field-row ports">
+          <div class="field-row three">
             <div class="field">
               <label for="page-bg">Background</label>
               <input
@@ -951,18 +950,10 @@ function createBand(event: SubmitEvent) {
               <span class="avatar">{initials(member.name)}</span>
               <span class="what">
                 <strong>{member.name}</strong>
-                <span class="sub">
-                  {[member.email, member.phone, member.messenger].filter(
-                    Boolean,
-                  ).length
-                    ? plural(
-                        [member.email, member.phone, member.messenger].filter(
-                          Boolean,
-                        ).length,
-                        "way to reach",
-                        "ways to reach",
-                      )
-                    : "No contact details yet"}
+                <span class="sub ellipsis">
+                  {[member.phone, member.email, member.messenger]
+                    .filter(Boolean)
+                    .join(" · ") || "No contact details yet"}
                 </span>
               </span>
             </a>
@@ -1006,7 +997,10 @@ function createBand(event: SubmitEvent) {
       <SectionLabel>
         Members · {current.members.length}
         {#snippet aside()}
-          Only a name is required. Contact details are optional.
+          <span class="visibility-note"
+            ><Icon name="lock" size={13} />Private. Member details are never
+            published.</span
+          >
         {/snippet}
       </SectionLabel>
       <div class="table-head" aria-hidden="true">
@@ -1058,19 +1052,23 @@ function createBand(event: SubmitEvent) {
               <span class="row-actions">
                 <button
                   type="button"
-                  class="btn btn-ghost"
+                  class="btn btn-ghost btn-icon"
                   disabled={ui.busy}
+                  title="Edit"
                   onclick={() => edit(member)}
                 >
-                  Edit<span class="sr-only"> {member.name}</span>
+                  <Icon name="pencil" />
+                  <span class="sr-only">Edit {member.name}</span>
                 </button>
                 <button
                   type="button"
-                  class="btn btn-ghost btn-danger"
+                  class="btn btn-ghost btn-icon btn-danger"
                   disabled={ui.busy}
+                  title="Remove"
                   onclick={() => removeMember(member)}
                 >
-                  Remove<span class="sr-only"> {member.name}</span>
+                  <Icon name="trash" />
+                  <span class="sr-only">Remove {member.name}</span>
                 </button>
               </span>
             </li>
@@ -1174,9 +1172,12 @@ function createBand(event: SubmitEvent) {
 }
 .add fieldset {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
   align-items: end;
+}
+.add-actions {
+  grid-column: 1 / -1;
 }
 .add-actions {
   display: flex;
@@ -1263,18 +1264,46 @@ function createBand(event: SubmitEvent) {
   margin-bottom: 12px;
 }
 .swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex: 1 1 4.5rem;
   min-height: 2.75rem;
-  border: 2px solid transparent;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
   cursor: pointer;
 }
+.swatch .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
 .swatch.selected {
-  outline: 2px solid var(--color-accent-700);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.colors input[type="color"] {
+  height: 40px;
+  padding: 4px;
+  cursor: pointer;
+}
+.colors input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.colors input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+.colors input[type="color"]::-moz-color-swatch {
+  border: 0;
+  border-radius: 5px;
 }
 .socials-block .hint {
   margin-bottom: 8px;

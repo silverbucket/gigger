@@ -97,8 +97,8 @@
     --color-surface-2: #1f2024;
     --color-sunken: #0c0d0f;
     --color-text: #ececee;
-    --muted: #a0a2a9;
-    --faint: #75777e;
+    --muted: #b0b2b9;
+    --faint: #8c8e96;
     --color-divider: #2a2b30;
     --color-border: #36373d;
 
@@ -144,6 +144,7 @@
     --channel-other: #a0a2a9;
 
     --public-bg: #12302b;
+    --seg-on: #34353c;
     --public-fg: #7fd4c2;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -417,7 +418,7 @@ textarea.input {
     color 120ms ease;
 }
 .seg-opt:has(input:checked) {
-  background: var(--color-surface);
+  background: var(--seg-on, var(--color-surface));
   color: var(--color-text);
   font-weight: 600;
   box-shadow: var(--shadow-md);

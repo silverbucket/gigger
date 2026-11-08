@@ -11,6 +11,7 @@ let {
   open = false,
   wide = false,
   inbox = false,
+  fill = false,
   key = "",
 }: {
   list: Snippet;
@@ -21,6 +22,8 @@ let {
   wide?: boolean;
   /** A narrow list beside a wide reading pane (the inbox). */
   inbox?: boolean;
+  /** On a desktop, the list takes the whole width until a record opens. */
+  fill?: boolean;
   /** Changes when another record opens, so the pane starts at its top. */
   key?: string;
 } = $props();
@@ -32,7 +35,13 @@ $effect(() => {
 });
 </script>
 
-<div class="layout" class:open class:wide class:inbox>
+<div
+  class="layout"
+  class:open
+  class:wide
+  class:inbox
+  class:filled={fill && !open}
+>
   <div class="list">{@render list()}</div>
   <section class="detail" aria-label="Details" bind:this={pane}>
     {@render detail()}
@@ -50,7 +59,7 @@ $effect(() => {
   grid-template-columns: minmax(0, 1fr) 640px;
 }
 .inbox {
-  grid-template-columns: 380px minmax(0, 1fr);
+  grid-template-columns: 352px minmax(0, 1fr);
 }
 .list,
 .detail {
@@ -65,6 +74,12 @@ $effect(() => {
   background: var(--color-surface);
   overscroll-behavior: contain;
 }
+.filled {
+  grid-template-columns: minmax(0, 1fr) 0;
+}
+.filled .detail {
+  display: none;
+}
 @media (max-width: 1199px) {
   .layout,
   .wide {
@@ -72,6 +87,9 @@ $effect(() => {
   }
   .inbox {
     grid-template-columns: 320px minmax(0, 1fr);
+  }
+  .filled {
+    grid-template-columns: minmax(0, 1fr) 0;
   }
 }
 @media (max-width: 899px) {

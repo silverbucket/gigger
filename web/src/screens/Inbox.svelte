@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import Icon from "../components/Icon.svelte";
 import ListDetailLayout from "../components/ListDetailLayout.svelte";
 import MessageRow from "../components/MessageRow.svelte";
@@ -71,6 +72,26 @@ const shown = $derived(
 
 const id = $derived(router.parts[0] ?? "");
 const open = $derived(items.find((i) => i.id === id));
+// The list always shows the open conversation: opening one from a gig
+// switches to the filter that holds it.
+let followed = "";
+$effect(() => {
+  const item = open;
+  if (!item || followed === item.id) return;
+  followed = item.id;
+  if (
+    !inFilter(
+      item,
+      untrack(() => filter),
+    )
+  )
+    filter =
+      item.state === "toSort"
+        ? "toSort"
+        : item.state === "converted"
+          ? "booked"
+          : "set-aside";
+});
 $effect(() => {
   const openId = open?.id;
   if (!openId) {
@@ -170,7 +191,7 @@ const emptyText = $derived(
               value: "toSort",
               label: counts.toSort ? `To sort ${counts.toSort}` : "To sort",
             },
-            { value: "booked", label: "Booked" },
+            { value: "booked", label: "With gig" },
             { value: "set-aside", label: "Set aside" },
             { value: "all", label: "All" },
           ]}

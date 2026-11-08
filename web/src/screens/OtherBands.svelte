@@ -74,7 +74,7 @@ async function save(event: SubmitEvent) {
 }
 </script>
 
-<ListDetailLayout open={!!id} key={router.parts.join("/")}>
+<ListDetailLayout fill open={!!id} key={router.parts.join("/")}>
   {#snippet list()}
     <div class="pane">
       <div class="page-head">
@@ -82,8 +82,8 @@ async function save(event: SubmitEvent) {
           <h1>Other bands</h1>
           <p>{plural(rows.length, "band")} you share a bill with</p>
           <p class="visibility-note">
-            <Icon name="lock" size={13} />Only you see these. They are never
-            published.
+            <Icon name="lock" size={13} />Private. Other bands are only for you
+            and never published.
           </p>
         </div>
       </div>
@@ -222,7 +222,7 @@ async function save(event: SubmitEvent) {
         <p class="kicker">Other band</p>
         <h2>{band.name}</h2>
         <p class="visibility-note">
-          <Icon name="lock" size={13} />Private. Only you see this.
+          <Icon name="lock" size={13} />Private. Never published.
         </p>
       </div>
       <div class="scroll">

@@ -164,80 +164,9 @@ async function sendSheet() {
   <StatusSteps status={gig.status} />
   <StatCells cells={times} />
 
-  <SectionLabel>
-    Band
-    {#snippet aside()}
-      {#if data.members.length}
-        <span class:alert-text={summary.alert} class="avail-line"
-          >{summary.line}</span
-        >
-      {/if}
-    {/snippet}
-  </SectionLabel>
-  {#if !data.members.length}
-    <p class="empty">
-      Add members on the <a href="#/band">Band page</a> to see who can play.
-    </p>
-  {:else if ui.phone}
-    <ul class="members">
-      {#each data.members as member (member.id)}
-        {@const value = gig.availability?.[member.id]}
-        <li>
-          <span class="who">
-            <strong>{member.name}</strong>
-            <span class="muted">{availabilityLabel[value ?? "none"]}</span>
-          </span>
-          <span class="choices">
-            <button
-              type="button"
-              class="btn choice"
-              class:yes={value === "yes"}
-              aria-pressed={value === "yes"}
-              disabled={ui.busy}
-              onclick={() =>
-                setAvailability(member.id, value === "yes" ? null : "yes")}
-            >
-              {#if value === "yes"}
-                <Icon name="check" size={14} stroke={3} />
-              {/if}
-              In
-            </button>
-            <button
-              type="button"
-              class="btn choice"
-              class:no={value === "no"}
-              aria-pressed={value === "no"}
-              disabled={ui.busy}
-              onclick={() =>
-                setAvailability(member.id, value === "no" ? null : "no")}
-            >
-              Out
-            </button>
-            {#if value !== "yes" &&
-              value !== "no" &&
-              (member.email || member.phone || member.messenger)}
-              <button
-                type="button"
-                class="btn btn-secondary"
-                disabled={ui.busy}
-                onclick={() => ask(member)}
-              >
-                {value === "maybe" ? "Ask again" : "Ask"}
-              </button>
-            {/if}
-          </span>
-        </li>
-      {/each}
-    </ul>
-  {:else}
-    <AvailabilityCells
-      {gig}
-      members={data.members}
-      disabled={ui.busy}
-      onchange={setAvailability}
-    />
+  {#if !ui.phone}
+    {@render bandSection()}
   {/if}
-
   <div class="sections">
     {#if venue || gig.venue || address}
       <DetailSection label="Where">
@@ -420,7 +349,86 @@ async function sendSheet() {
       </DetailSection>
     {/if}
   </div>
+  {#if ui.phone}
+    {@render bandSection()}
+  {/if}
 </div>
+
+{#snippet bandSection()}
+  <SectionLabel>
+    Band
+    {#snippet aside()}
+      {#if data.members.length}
+        <span class:alert-text={summary.alert} class="avail-line"
+          >{summary.line}</span
+        >
+      {/if}
+    {/snippet}
+  </SectionLabel>
+  {#if !data.members.length}
+    <p class="empty">
+      Add members on the <a href="#/band">Band page</a> to see who can play.
+    </p>
+  {:else if ui.phone}
+    <ul class="members">
+      {#each data.members as member (member.id)}
+        {@const value = gig.availability?.[member.id]}
+        <li>
+          <span class="who">
+            <strong>{member.name}</strong>
+            <span class="muted">{availabilityLabel[value ?? "none"]}</span>
+          </span>
+          <span class="choices">
+            <button
+              type="button"
+              class="btn choice"
+              class:yes={value === "yes"}
+              aria-pressed={value === "yes"}
+              disabled={ui.busy}
+              onclick={() =>
+                setAvailability(member.id, value === "yes" ? null : "yes")}
+            >
+              {#if value === "yes"}
+                <Icon name="check" size={14} stroke={3} />
+              {/if}
+              In
+            </button>
+            <button
+              type="button"
+              class="btn choice"
+              class:no={value === "no"}
+              aria-pressed={value === "no"}
+              disabled={ui.busy}
+              onclick={() =>
+                setAvailability(member.id, value === "no" ? null : "no")}
+            >
+              Out
+            </button>
+            {#if value !== "yes" &&
+              value !== "no" &&
+              (member.email || member.phone || member.messenger)}
+              <button
+                type="button"
+                class="btn btn-secondary"
+                disabled={ui.busy}
+                onclick={() => ask(member)}
+              >
+                Ask
+              </button>
+            {/if}
+          </span>
+        </li>
+      {/each}
+    </ul>
+  {:else}
+    <AvailabilityCells
+      {gig}
+      members={data.members}
+      disabled={ui.busy}
+      onchange={setAvailability}
+    />
+  {/if}
+{/snippet}
 
 {#if ui.phone}
   <BottomActionBar>

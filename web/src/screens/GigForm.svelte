@@ -303,8 +303,9 @@ async function submit(event: SubmitEvent) {
     </p>
     <h2>{isEdit ? "Edit gig" : "New gig"}</h2>
     <p class="visibility-note">
-      <Icon name="globe" size={13} />Fans see confirmed gigs only: date, start
-      time, venue, city, ticket link and description. The rest stays private.
+      <Icon name="globe" size={13} />Confirmed and played gigs go on your public
+      page with date, time, venue, city, tickets and description. Everything
+      else is private.
     </p>
     <button
       type="button"
@@ -491,7 +492,7 @@ async function submit(event: SubmitEvent) {
             label: channelName[s],
           }))}
           bind:value={source}
-          columns={4}
+          columns={ui.phone ? 2 : 4}
           required
         />
       </div>

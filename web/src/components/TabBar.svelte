@@ -51,9 +51,7 @@ let {
   display: grid;
   grid-template-columns: repeat(var(--n), minmax(0, 1fr));
   padding: 6px 4px env(safe-area-inset-bottom);
-  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
-  backdrop-filter: saturate(1.6) blur(16px);
-  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  background: var(--color-surface);
   border-top: var(--rule);
 }
 a {

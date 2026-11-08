@@ -234,9 +234,7 @@ function sub(gig: Gig, band: BandData) {
   {/if}
   {#each months as month (month.key)}
     <section aria-label={month.label}>
-      {#if !ui.phone}
-        <SectionLabel>{month.label}</SectionLabel>
-      {/if}
+      <SectionLabel>{month.label}</SectionLabel>
       <ul>
         {#each month.rows as { gig, band } (`${band.band.id}/${gig.id}`)}
           {@const summary = availabilitySummary(gig, band.members)}
@@ -252,7 +250,6 @@ function sub(gig: Gig, band: BandData) {
             availabilityAlert={summary.alert && gig.status !== "played"}
             amount={amountText(gig, band.band.currency ?? "EUR")}
             selected={gig.id === selectedGig}
-            showMonth={ui.phone}
           />
         {/each}
       </ul>
@@ -322,7 +319,7 @@ function sub(gig: Gig, band: BandData) {
   </div>
 {/snippet}
 
-<ListDetailLayout {open} key={router.parts.join("/")}>
+<ListDetailLayout fill {open} key={router.parts.join("/")}>
   {#snippet list()}
     <div class="list">
       {#if !ui.phone}
@@ -333,9 +330,6 @@ function sub(gig: Gig, band: BandData) {
           {@render nextBlock()}
         {/if}
         {@render controls()}
-        <SectionLabel
-          >{filter === "upcoming" ? "Coming up" : "Past"}</SectionLabel
-        >
         {@render ledger()}
       {:else if view === "board"}
         {@render board()}
@@ -477,9 +471,7 @@ function sub(gig: Gig, band: BandData) {
   gap: 10px;
   align-items: center;
   padding: 14px var(--pad);
-  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--color-surface);
   border-bottom: var(--rule);
 }
 .search {
@@ -710,7 +702,6 @@ section:not(.column) > ul {
     position: static;
     padding: 12px var(--pad) 4px;
     background: transparent;
-    backdrop-filter: none;
     border-bottom: 0;
   }
   .search {

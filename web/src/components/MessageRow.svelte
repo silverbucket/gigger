@@ -136,12 +136,12 @@ const initials = $derived(
 }
 .badge {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
+  right: -4px;
+  bottom: -4px;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--color-surface);
   box-shadow: 0 0 0 1px var(--color-divider);

@@ -18,11 +18,11 @@ Follow these rules for every new screen; don't ask. Calm, legible, and clear abo
 - Desktop: a 232px sidebar (brand, band picker, sections, settings, account), then a 56px page bar with the screen title and its one primary action, then the screen.
 - Record screens are a **list + detail pane** (`ListDetailLayout`); selecting a row never replaces the list. The Inbox uses the `inbox` variant: narrow list, wide reading pane.
 - Rows are rounded, tinted on hover, `--select-bg` when selected. Group headings are `SectionLabel` (13px, muted).
-- Phone: a translucent top bar (band picker, settings, new), content, and a bottom icon tab bar (Gigs, Inbox, Contacts, Venues, Band). A record opens on its own screen with a back button; its primary action sits in a sticky bottom bar.
+- Phone: an opaque top bar (band picker, settings, new), content, and a bottom icon tab bar (Gigs, Inbox, Contacts, Venues, Band). A record opens on its own screen with a back button; its primary action sits in a sticky bottom bar.
 
 ## Messages and gigs
 
-- A conversation is never only a step towards a gig. It lives in the Inbox (To sort, Booked, Set aside, All) and opens as a chat thread, oldest first, with the reply box pinned at the bottom.
+- A conversation is never only a step towards a gig. It lives in the Inbox (To sort, With gig, Set aside, All) and opens as a chat thread, oldest first, with the reply box pinned at the bottom.
 - The context a reply needs sits beside the thread (above it on a phone): the linked gig, or what was read from the message with Add as gig / Not a booking / Discard, and the contact.
 - Messages are shown with avatars and channel icons; gigs with date tiles and status tags. Don't mix the two shapes in one list.
 - "Enquiry" is only a gig status. Actions say "gig": New gig, Add as gig, Save gig.

@@ -254,13 +254,14 @@ select.input {
 /* Who can see a record: a one-line note under a page or form heading. */
 .visibility-note {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-size: 13px;
   color: var(--muted);
 }
 .visibility-note svg {
   flex: none;
+  margin-top: 3px;
 }
 
 /* Table-like list header inside a list pane. */

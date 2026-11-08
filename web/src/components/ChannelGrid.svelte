@@ -95,9 +95,11 @@ const iconFor = (label: string) =>
   width: 26px;
   height: 26px;
   border-radius: 7px;
-  color: var(--color-neutral-400);
+  color: var(--color-neutral-500);
+  opacity: 0.6;
 }
 .strip li.on {
+  opacity: 1;
   background: var(--color-accent-100);
   color: var(--color-accent-700);
 }
@@ -157,7 +159,12 @@ strong {
 }
 @media (max-width: 899px) {
   .large {
+    grid-template-columns: minmax(0, 1fr);
     padding: 12px var(--pad);
+  }
+  .large a,
+  .large .cell {
+    min-height: 56px;
   }
 }
 </style>

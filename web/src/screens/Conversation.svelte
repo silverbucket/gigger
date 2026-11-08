@@ -10,7 +10,6 @@ import { availabilitySummary } from "../components/AvailabilityCells.svelte";
 import ChannelIcon from "../components/ChannelIcon.svelte";
 import Icon from "../components/Icon.svelte";
 import IncomingEmailText from "../components/IncomingEmailText.svelte";
-import PhoneHeader from "../components/PhoneHeader.svelte";
 import Tag from "../components/Tag.svelte";
 import type { BandData } from "../lib/data.svelte";
 import {
@@ -276,17 +275,25 @@ const fullForm = $derived(
           </dd>
         </div>
       {/if}
-      {#if gig.loadIn || gig.soundcheck || gig.setTimes?.length}
+      {#if gig.loadIn}
         <div>
-          <dt>Times</dt>
+          <dt>Load-in</dt>
+          <dd>{gig.loadIn}</dd>
+        </div>
+      {/if}
+      {#if gig.soundcheck}
+        <div>
+          <dt>Soundcheck</dt>
+          <dd>{gig.soundcheck}</dd>
+        </div>
+      {/if}
+      {#if gig.setTimes?.length}
+        <div>
+          <dt>Set</dt>
           <dd>
-            {[
-              gig.loadIn && `Load-in ${gig.loadIn}`,
-              gig.soundcheck && `Soundcheck ${gig.soundcheck}`,
-              gig.setTimes?.length && `Set ${gig.setTimes.join(", ")}`,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+            {gig.setTimes.join(", ")}{gig.setLength
+              ? ` · ${gig.setLength} min`
+              : ""}
           </dd>
         </div>
       {/if}
@@ -370,7 +377,7 @@ const fullForm = $derived(
         disabled={ui.busy || loading || !!failed}
         onclick={createEnquiry}
       >
-        {quick ? "Add as gig" : "Add as gig…"}
+        {quick ? "Add as gig" : "Review and add"}
         <Icon name="arrow-right" stroke={2.5} />
       </button>
       {#if quick}
@@ -426,7 +433,7 @@ const fullForm = $derived(
   <section class="card ctx" aria-label="Contact">
     <div class="ctx-head">
       <h3><Icon name="user" size={15} />Contact</h3>
-      <Tag kind="private">Only you</Tag>
+      <Tag kind="private">Private</Tag>
     </div>
     {#if contact}
       <a class="gig-title" href={`#/${path("contacts", contact.id)}`}
@@ -511,11 +518,19 @@ const fullForm = $derived(
   {@render contactCard()}
 {/snippet}
 
-<PhoneHeader back={() => router.back("inbox")} backLabel="Inbox" />
-
 <div class="conv">
   <div class="main-col">
     <header class="conv-head">
+      {#if ui.phone}
+        <button
+          type="button"
+          class="back"
+          aria-label="Back to inbox"
+          onclick={() => router.back("inbox")}
+        >
+          <Icon name="chevron-left" size={24} />
+        </button>
+      {/if}
       <span class="avatar" aria-hidden="true">
         {initials}
         <span class="badge"
@@ -542,32 +557,23 @@ const fullForm = $derived(
           >{messageTimeLong(conversation.lastIn ?? item.latest)}</span
         >
       </div>
+      {#if ui.phone && item.gig}
+        <details class="peek">
+          <summary>
+            <span class="peek-icon"><Icon name="calendar" size={16} /></span>
+            <span class="peek-text">
+              <strong class="ellipsis">{item.gig.title}</strong>
+              <span class="muted">{shortDate(item.gig.date)}</span>
+            </span>
+            <Tag kind={item.gig.status}>{capitalize(item.gig.status)}</Tag>
+            <Icon name="chevron-down" />
+          </summary>
+          <div class="peek-body">{@render context()}</div>
+        </details>
+      {/if}
     </header>
 
     <div class="scroll" bind:this={scroller}>
-      {#if ui.phone}
-        <div class="phone-context">
-          {#if item.gig}
-            <details class="peek">
-              <summary>
-                <span class="peek-icon"
-                  ><Icon name="calendar" size={16} /></span
-                >
-                <span class="peek-text">
-                  <strong class="ellipsis">{item.gig.title}</strong>
-                  <span class="muted">{shortDate(item.gig.date)}</span>
-                </span>
-                <Tag kind={item.gig.status}>{capitalize(item.gig.status)}</Tag>
-                <Icon name="chevron-down" />
-              </summary>
-              <div class="peek-body">{@render context()}</div>
-            </details>
-          {:else}
-            {@render context()}
-          {/if}
-        </div>
-      {/if}
-
       <ol class="thread" aria-label="Messages">
         {#if !messages?.length}
           <li class="bubble in">
@@ -642,6 +648,9 @@ const fullForm = $derived(
       </ol>
       {#if failed}
         <p class="alert-text load-failed" role="alert">{failed}</p>
+      {/if}
+      {#if ui.phone && !item.gig}
+        <div class="phone-context">{@render context()}</div>
       {/if}
     </div>
 
@@ -954,7 +963,7 @@ a.gig-title:hover {
 }
 .facts div {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   gap: 8px;
   font-size: 13px;
 }
@@ -1011,6 +1020,9 @@ a.gig-title:hover {
 .ctx .btn-block {
   margin-top: 4px;
 }
+.ctx-secondary .btn-danger {
+  margin-left: auto;
+}
 .sub-head {
   margin: 4px 0 0;
   font-size: 12px;
@@ -1038,9 +1050,21 @@ a.gig-title:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px var(--pad) 0;
+  padding: 0 var(--pad) 16px;
+}
+.back {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 44px;
+  margin: 0 -6px 0 -8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent-600);
 }
 .peek {
+  flex-basis: 100%;
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -1082,6 +1106,8 @@ a.gig-title:hover {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 60dvh;
+  overflow: auto;
   padding: 0 8px 8px;
 }
 .peek-body :global(.card) {
@@ -1097,8 +1123,30 @@ a.gig-title:hover {
     display: block;
   }
   .conv-head {
-    padding: 14px var(--pad);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 8px var(--pad) 10px;
     background: var(--color-surface);
+    box-shadow: 0 1px 0 var(--color-divider);
+  }
+  .conv-head .avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+  .conv-head .badge {
+    width: 18px;
+    height: 18px;
+  }
+  .who h2 {
+    font-size: 16px;
+  }
+  .who p.subject {
+    display: none;
   }
   .head-side .when {
     display: none;
@@ -1118,9 +1166,7 @@ a.gig-title:hover {
     bottom: 0;
     z-index: 4;
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
-    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-    backdrop-filter: saturate(1.6) blur(16px);
-    -webkit-backdrop-filter: saturate(1.6) blur(16px);
+    background: var(--color-surface);
   }
   .send {
     width: 44px;

@@ -47,7 +47,7 @@ li::before {
   content: "";
   height: 4px;
   border-radius: var(--radius-pill);
-  background: var(--color-sunken);
+  background: var(--color-neutral-300);
 }
 .done {
   color: var(--muted);

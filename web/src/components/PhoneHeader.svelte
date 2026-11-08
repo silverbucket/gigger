@@ -58,9 +58,7 @@ let {
     gap: 8px;
     height: 56px;
     padding: 0 8px 0 4px;
-    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
-    backdrop-filter: saturate(1.6) blur(16px);
-    -webkit-backdrop-filter: saturate(1.6) blur(16px);
+    background: var(--color-surface);
     border-bottom: var(--rule);
     flex: none;
   }

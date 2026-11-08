@@ -29,9 +29,7 @@ let {
   flex: none;
   padding: 14px 28px;
   border-top: var(--rule);
-  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
-  backdrop-filter: saturate(1.6) blur(16px);
-  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  background: var(--color-surface);
 }
 .summary {
   display: flex;

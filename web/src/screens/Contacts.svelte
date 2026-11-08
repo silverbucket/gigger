@@ -171,19 +171,20 @@ async function remove(contact: Contact) {
 }
 </script>
 
-<ListDetailLayout open={!!id} key={router.parts.join("/")}>
+<ListDetailLayout fill open={!!id} key={router.parts.join("/")}>
   {#snippet list()}
     <div class="pane">
       <div class="page-head">
         <div>
           <h1>Contacts</h1>
           <p>
-            {plural(rows.length, "person", "people")}
-            · {idle} not on a gig yet
+            {plural(rows.length, "person", "people")}{idle
+              ? ` · ${idle} without gigs yet`
+              : ""}
           </p>
           <p class="visibility-note">
-            <Icon name="lock" size={13} />Only you see contacts. They are never
-            published.
+            <Icon name="lock" size={13} />Private. Contacts are only for you and
+            never published.
           </p>
         </div>
         <Segmented
@@ -237,7 +238,7 @@ async function remove(contact: Contact) {
               <span class="count">{row.gigs.length}</span>
               <span class="last"
                 >{row.last
-                  ? `${dayNumber(row.last)} ${monthShort(row.last).toUpperCase()}`
+                  ? `${dayNumber(row.last)} ${monthShort(row.last)}`
                   : "—"}</span
               >
             </a>
@@ -336,6 +337,23 @@ async function remove(contact: Contact) {
           >
             Cancel
           </button>
+          {#snippet end()}
+            {#if selected}
+              {@const linked =
+                selected.gigs.length > 0 || selected.others.length > 0}
+              <button
+                type="button"
+                class="btn btn-ghost btn-danger"
+                disabled={ui.busy || linked}
+                title={linked
+                  ? "Linked to gigs or bands. Remove those links first."
+                  : undefined}
+                onclick={() => selected && remove(selected.contact)}
+              >
+                Remove contact
+              </button>
+            {/if}
+          {/snippet}
         </BottomActionBar>
       </form>
     {:else if selected}
@@ -356,8 +374,7 @@ async function remove(contact: Contact) {
         </p>
         <h2>{contact.name}</h2>
         <p class="visibility-note">
-          <Icon name="lock" size={13} />Private. Only you see this person's
-          details.
+          <Icon name="lock" size={13} />Private. Never published.
         </p>
       </div>
       <div class="scroll">
@@ -424,24 +441,13 @@ async function remove(contact: Contact) {
           >New gig with {contact.name.split(/\s+/)[0]}
           <Icon name="arrow-right" stroke={2.5} /></a
         >
-        <a
-          class="btn btn-secondary"
-          href={`#/${path("contacts", contact.id, "edit")}`}
-          >Edit</a
-        >
-        {#snippet end()}
-          <button
-            type="button"
-            class="btn btn-ghost btn-danger"
-            disabled={ui.busy || linked}
-            title={linked
-              ? "Linked to gigs or bands. Remove those links first."
-              : undefined}
-            onclick={() => remove(contact)}
+        {#if !ui.phone}
+          <a
+            class="btn btn-secondary"
+            href={`#/${path("contacts", contact.id, "edit")}`}
+            >Edit</a
           >
-            Remove contact
-          </button>
-        {/snippet}
+        {/if}
       </BottomActionBar>
     {:else if id}
       <p class="empty">This contact isn't here any more.</p>
