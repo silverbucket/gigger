@@ -832,16 +832,6 @@ function createBand(event: SubmitEvent) {
         >
           {pageControls.primary}
         </button>
-        {#if pageControls.unpublish}
-          <button
-            type="button"
-            class="btn btn-ghost"
-            disabled={!data.loaded || publicPageBusy}
-            onclick={unpublishPage}
-          >
-            Unpublish
-          </button>
-        {/if}
         {#if pageControls.cancel}
           <button
             type="button"
@@ -871,6 +861,16 @@ function createBand(event: SubmitEvent) {
             download
             >Export static page (.zip)</a
           >
+          {#if pageControls.unpublish}
+            <button
+              type="button"
+              class="btn btn-secondary pub-unpublish"
+              disabled={!data.loaded || publicPageBusy}
+              onclick={unpublishPage}
+            >
+              Unpublish
+            </button>
+          {/if}
         </div>
       {/if}
     </section>
@@ -1314,6 +1314,9 @@ textarea.input {
 }
 .pub-links {
   margin-top: 12px;
+}
+.pub-links .pub-unpublish {
+  margin-left: auto;
 }
 .pub-error {
   margin: 10px 0 0;

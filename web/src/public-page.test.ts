@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   isPublicPageLive,
+  publicPageActionRows,
   publicPageControls,
   publicPageCouldNotPublish,
   publishUntilLive,
@@ -197,6 +198,25 @@ test("Cancel shows only with unsaved edits", () => {
   expect(
     publicPageControls({ ...idle, live: false, unsaved: true }).cancel,
   ).toBeTrue();
+});
+
+test("Unpublish sits on the secondary row with Open page and Export, not with Publish or Save", () => {
+  expect(publicPageActionRows({ ...idle, live: false })).toEqual({
+    primaryRow: ["Publish"],
+    secondaryRow: [],
+    unpublishTrailing: false,
+  });
+  const live = publicPageActionRows({ ...idle, live: true });
+  expect(live.primaryRow).toEqual(["Save"]);
+  expect(live.secondaryRow).toEqual([
+    "Open page",
+    "Export static page (.zip)",
+    "Unpublish",
+  ]);
+  expect(live.unpublishTrailing).toBeTrue();
+  const draft = publicPageActionRows({ ...idle, live: true, unsaved: true });
+  expect(draft.primaryRow).toEqual(["Save", "Cancel"]);
+  expect(draft.secondaryRow.at(-1)).toBe("Unpublish");
 });
 
 function deferred() {

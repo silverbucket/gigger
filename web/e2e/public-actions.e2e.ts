@@ -33,6 +33,35 @@ async function expectLive(page: Page) {
   await expect(link(page, "Export static page (.zip)")).toBeVisible();
 }
 
+async function expectLiveActionLayout(page: Page) {
+  const primary = page.locator(".pub-actions");
+  const secondary = page.locator(".pub-links");
+  await expect(primary.getByRole("button", { name: "Unpublish" })).toHaveCount(
+    0,
+  );
+  const unpublish = secondary.getByRole("button", {
+    name: "Unpublish",
+    exact: true,
+  });
+  await expect(unpublish).toBeVisible();
+  const open = secondary.getByRole("link", {
+    name: "Open page",
+    exact: true,
+  });
+  const exportLink = secondary.getByRole("link", {
+    name: "Export static page (.zip)",
+    exact: true,
+  });
+  const openBox = await open.boundingBox();
+  const exportBox = await exportLink.boundingBox();
+  const unpublishBox = await unpublish.boundingBox();
+  if (!openBox || !exportBox || !unpublishBox) {
+    throw new Error("public page action buttons were not laid out");
+  }
+  expect(Math.abs(openBox.y - unpublishBox.y)).toBeLessThan(8);
+  expect(unpublishBox.x).toBeGreaterThan(exportBox.x);
+}
+
 test("Publish becomes Save with Unpublish, Open page and Export, and Unpublish reverts it", async ({
   page,
   account,
@@ -54,6 +83,7 @@ test("Publish becomes Save with Unpublish, Open page and Export, and Unpublish r
   await expect(button(page, "Cancel")).toBeVisible();
   await button(page, "Publish").click();
   await expectLive(page);
+  await expectLiveActionLayout(page);
   await expect(page.getByText("1 gig listed", { exact: true })).toBeVisible();
   await expect(button(page, "Cancel")).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
@@ -62,6 +92,7 @@ test("Publish becomes Save with Unpublish, Open page and Export, and Unpublish r
   // The live state must survive the reload and recheck that follow a publish.
   await page.waitForTimeout(2000);
   await expectLive(page);
+  await expectLiveActionLayout(page);
 
   const address = page.getByRole("textbox", { name: "Page address" });
   await address.fill(`${slug}-new`);
