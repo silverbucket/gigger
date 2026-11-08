@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import {
   isPublicPageLive,
+  publicPageControls,
   publicPageCouldNotPublish,
   publishUntilLive,
+  trackPublicPageLive,
 } from "./lib/public-page";
 
 function mockFetch(handler: (path: string) => Response | Promise<Response>) {
@@ -94,4 +96,115 @@ test("publishUntilLive fails with a plain message when the page never goes live"
   } finally {
     restore();
   }
+});
+
+const idle = { unsaved: false, action: "idle" as const, listed: 2 };
+
+test("a page that is not live shows only Publish", () => {
+  const controls = publicPageControls({ ...idle, live: false });
+  expect(controls.status).toBe("Not published");
+  expect(controls.primary).toBe("Publish");
+  expect(controls.listedTag).toBeFalse();
+  expect(controls.unpublish).toBeFalse();
+  expect(controls.openAndExport).toBeFalse();
+  expect(controls.cancel).toBeFalse();
+});
+
+test("a live page shows Save, Unpublish, Open page and Export", () => {
+  const controls = publicPageControls({ ...idle, live: true });
+  expect(controls.status).toBe("Published");
+  expect(controls.primary).toBe("Save");
+  expect(controls.listedTag).toBeTrue();
+  expect(controls.unpublish).toBeTrue();
+  expect(controls.openAndExport).toBeTrue();
+  expect(
+    publicPageControls({ ...idle, live: true, listed: 0 }).listedTag,
+  ).toBeFalse();
+});
+
+test("Save starts the same live write as Publish, with its own busy label", () => {
+  const publish = publicPageControls({ ...idle, live: false });
+  const save = publicPageControls({ ...idle, live: true });
+  expect(publish.primaryAction).toBe("publishing");
+  expect(save.primaryAction).toBe("saving");
+  expect(
+    publicPageControls({ ...idle, live: false, action: "publishing" }),
+  ).toMatchObject({ primary: "Publishing…", busy: true });
+  expect(
+    publicPageControls({ ...idle, live: true, action: "saving" }),
+  ).toMatchObject({ primary: "Saving…", busy: true });
+});
+
+test("Cancel shows only with unsaved edits", () => {
+  expect(publicPageControls({ ...idle, live: true }).cancel).toBeFalse();
+  expect(
+    publicPageControls({ ...idle, live: true, unsaved: true }).cancel,
+  ).toBeTrue();
+  expect(
+    publicPageControls({ ...idle, live: false, unsaved: true }).cancel,
+  ).toBeTrue();
+});
+
+function deferred() {
+  let resolve!: (live: boolean) => void;
+  const promise = new Promise<boolean>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+test("a stored slug whose public URL still 404s is not live", async () => {
+  const seen = { live: "unset" as string | null };
+  const tracker = trackPublicPageLive(
+    (slug) => {
+      seen.live = slug;
+    },
+    async () => false,
+  );
+  await tracker.probe("stored");
+  expect(seen.live).toBeNull();
+});
+
+test("a finished publish stays live when an older check reports 404 later", async () => {
+  const seen = { live: null as string | null };
+  const pending = deferred();
+  let checks = 0;
+  const tracker = trackPublicPageLive(
+    (slug) => {
+      seen.live = slug;
+    },
+    () => {
+      checks += 1;
+      return pending.promise;
+    },
+  );
+  const stale = tracker.probe("band");
+  tracker.confirmed("band");
+  pending.resolve(false);
+  await stale;
+  expect(seen.live).toBe("band");
+  // The band reloads after publishing; that must not recheck and reset it.
+  await tracker.probe("band");
+  expect(seen.live).toBe("band");
+  expect(checks).toBe(1);
+});
+
+test("unpublish returns the page to not live, and a later check can see it again", async () => {
+  const seen = { live: null as string | null };
+  let serving = true;
+  const tracker = trackPublicPageLive(
+    (slug) => {
+      seen.live = slug;
+    },
+    async () => serving,
+  );
+  tracker.confirmed("band");
+  serving = false;
+  tracker.takenDown();
+  expect(seen.live).toBeNull();
+  await tracker.probe("band");
+  expect(seen.live).toBeNull();
+  serving = true;
+  await tracker.probe("band");
+  expect(seen.live).toBe("band");
 });

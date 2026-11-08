@@ -27,9 +27,12 @@ import { data } from "../lib/data.svelte";
 import { initials, normalize, plural } from "../lib/format";
 import {
   isPublicPageLive,
+  type PublicPageAction,
+  publicPageControls,
   publicPageCouldNotPublish,
   publicPageCouldNotUnpublish,
   publishUntilLive,
+  trackPublicPageLive,
 } from "../lib/public-page";
 import { router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
@@ -157,23 +160,18 @@ $effect(() => {
   }
 });
 const pageUrl = $derived(band?.slug ? `${location.origin}/b/${band.slug}` : "");
-let pageLive = $state(false);
-let bandPageLive = $state<Record<string, boolean>>({});
-$effect(() => {
-  const slug = band?.slug;
-  const onPublic = tab === "public";
-  if (!slug || !onPublic) {
-    pageLive = false;
-    return;
-  }
-  let cancelled = false;
-  void isPublicPageLive(slug).then((live) => {
-    if (!cancelled && band?.slug === slug) pageLive = live;
-  });
-  return () => {
-    cancelled = true;
-  };
+// Desktop shows the public pane next to the members, so this cannot depend on
+// the phone tab.
+let liveSlug = $state<string | null>(null);
+const liveTracker = trackPublicPageLive((slug) => {
+  liveSlug = slug;
 });
+const bandSlug = $derived(band?.slug);
+const pageLive = $derived(!!bandSlug && liveSlug === bandSlug);
+$effect(() => {
+  if (bandSlug) void liveTracker.probe(bandSlug);
+});
+let bandPageLive = $state<Record<string, boolean>>({});
 $effect(() => {
   const items = data.all;
   let cancelled = false;
@@ -333,18 +331,18 @@ function buildPublicProfile() {
 }
 const publicDraft = $derived(slugDirty || profileDraft !== null);
 let publicPageError = $state("");
-let publicPageAction = $state<
-  "idle" | "publishing" | "saving" | "unpublishing"
->("idle");
-const publicPageBusy = $derived(publicPageAction !== "idle");
-const primaryPageAction = $derived(
-  publicPageAction === "publishing"
-    ? "Publishing…"
-    : publicPageAction === "saving"
-      ? "Saving…"
-      : pageLive
-        ? "Save"
-        : "Publish",
+let publicPageAction = $state<PublicPageAction>("idle");
+const pageControls = $derived(
+  publicPageControls({
+    live: pageLive,
+    unsaved: publicDraft,
+    action: publicPageAction,
+    listed,
+  }),
+);
+const publicPageBusy = $derived(pageControls.busy);
+const slugChanging = $derived(
+  pageLive && !!band?.slug && slugValue.trim() !== band.slug,
 );
 function cancelPublicDraft() {
   slugDirty = false;
@@ -358,7 +356,7 @@ async function savePublicPage(event: SubmitEvent) {
   const previous = $state.snapshot(band);
   const slug = slugValue.trim();
   slugValue = slug;
-  publicPageAction = pageLive ? "saving" : "publishing";
+  publicPageAction = pageControls.primaryAction;
   publicPageError = "";
   ui.error = "";
   ui.busy = true;
@@ -402,7 +400,7 @@ async function savePublicPage(event: SubmitEvent) {
         });
       }
     });
-    pageLive = true;
+    liveTracker.confirmed(slug);
     slugDirty = false;
     profileDraft = null;
     await data.load();
@@ -433,7 +431,7 @@ async function unpublishPage() {
       { method: "DELETE", body: { bandId: previous.id } },
       publicPageCouldNotUnpublish,
     );
-    pageLive = false;
+    liveTracker.takenDown();
     slugDirty = false;
     profileDraft = null;
     slugValue = slugify(previous.name ?? "");
@@ -533,7 +531,9 @@ function createBand(event: SubmitEvent) {
           <span class="sub">
             {plural(item.members.length, "member")}
             · {item.band.currency ?? "EUR"} ·
-            {bandPageLive[item.band.id] ? "public page live" : "not published"}
+            {(viewing ? pageLive : bandPageLive[item.band.id])
+              ? "public page live"
+              : "not published"}
           </span>
         </span>
         {#if viewing}
@@ -609,8 +609,8 @@ function createBand(event: SubmitEvent) {
     <section class="block">
       <h3 class="label">Public page</h3>
       <div class="pub-head">
-        <strong class="big">{pageLive ? "Published" : "Not published"}</strong>
-        {#if pageLive && listed > 0}
+        <strong class="big">{pageControls.status}</strong>
+        {#if pageControls.listedTag}
           <Tag kind="accent">{plural(listed, "gig")} listed</Tag>
         {/if}
       </div>
@@ -630,6 +630,9 @@ function createBand(event: SubmitEvent) {
               required
             >
           </div>
+          {#if slugChanging}
+            <p class="hint">Your old address will stop working.</p>
+          {/if}
         </div>
         <p class="hint">
           Fans see confirmed and played gigs: date, start time, venue, city,
@@ -824,9 +827,9 @@ function createBand(event: SubmitEvent) {
           class="btn btn-primary"
           disabled={!data.loaded || publicPageBusy}
         >
-          {primaryPageAction}
+          {pageControls.primary}
         </button>
-        {#if pageLive}
+        {#if pageControls.unpublish}
           <button
             type="button"
             class="btn btn-ghost"
@@ -836,7 +839,7 @@ function createBand(event: SubmitEvent) {
             Unpublish
           </button>
         {/if}
-        {#if publicDraft}
+        {#if pageControls.cancel}
           <button
             type="button"
             class="btn btn-ghost"
@@ -850,7 +853,7 @@ function createBand(event: SubmitEvent) {
       {#if publicPageError}
         <p class="pub-error" role="alert">{publicPageError}</p>
       {/if}
-      {#if pageLive && band.slug}
+      {#if pageControls.openAndExport && band.slug}
         <div class="pub-links">
           <a
             class="btn btn-secondary"
