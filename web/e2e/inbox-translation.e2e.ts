@@ -238,7 +238,7 @@ test.describe("inbox email translation", () => {
         { timeout: 30000 },
       )
       .toBe(true);
-    await expect(messageBody(page)).not.toContainText(czech);
+    await expect(messageBody(page)).toHaveText(`In English: ${czech}`);
   });
 
   test("reopening a message applies session cache on the first action", async ({
