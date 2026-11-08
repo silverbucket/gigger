@@ -446,7 +446,10 @@ function sub(gig: Gig, band: BandData) {
         device.
       </p>
     {:else}
-      <p class="empty">Choose a gig or a message to see it here.</p>
+      <div class="placeholder">
+        <span class="placeholder-icon"><Icon name="calendar" size={26} /></span>
+        <p>Choose a gig to see its details.</p>
+      </div>
     {/if}
   {/snippet}
 </ListDetailLayout>
@@ -668,6 +671,31 @@ function sub(gig: Gig, band: BandData) {
   flex-direction: column;
   gap: 8px;
   padding: 16px 28px;
+}
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  min-height: 320px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+.placeholder p {
+  margin: 0;
+}
+.placeholder-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  color: var(--faint);
 }
 section:not(.column) > ul {
   display: flex;
