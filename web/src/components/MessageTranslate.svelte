@@ -14,8 +14,8 @@ import {
   writeTranslationCache,
 } from "../lib/message-translate";
 import {
-  readInboxLangSession,
-  writeInboxLangSession,
+  readInboxLangUi,
+  writeInboxLangUi,
 } from "../lib/message-translate-ui-session";
 import { ui } from "../lib/ui.svelte";
 import Segmented from "./Segmented.svelte";
@@ -53,16 +53,18 @@ let already: TranslateTarget | undefined = $state();
 let requestId = 0;
 let abort: AbortController | undefined;
 
-// Reset only when this incoming message changes — not when thread sync refreshes
-// the same stored subject/body while the user is still reading a translation.
+// Re-init only when this incoming message changes — not when thread sync refreshes
+// subject/body. In-memory UI state survives remount for the same conversation.
 $effect(() => {
   const id = messageId;
-  const convo = conversationId;
-  const saved = convo && showSubject ? readInboxLangSession(convo) : undefined;
-  const restored =
-    saved?.messageId === id && saved.segmented && saved.chosen
-      ? saved
-      : undefined;
+  const restored = untrack(() => {
+    const convo = conversationId;
+    if (!convo || !showSubject) return undefined;
+    const saved = readInboxLangUi(convo);
+    if (!saved || saved.messageId !== id || !saved.chosen || !saved.segmented)
+      return undefined;
+    return saved;
+  });
   if (restored) {
     chosen = restored.chosen;
     segmented = true;
@@ -93,11 +95,11 @@ $effect(() => {
 });
 
 $effect(() => {
-  const convo = conversationId;
-  if (!convo || !showSubject || !segmented || !chosen) return;
+  if (!conversationId || !showSubject || !segmented || !chosen) return;
   messageId;
   view;
-  writeInboxLangSession(convo, {
+  const convo = conversationId;
+  writeInboxLangUi(convo, {
     messageId,
     chosen,
     segmented,

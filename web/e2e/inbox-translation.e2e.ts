@@ -162,10 +162,10 @@ test.describe("inbox email translation", () => {
       .click();
     await expect(messageBody(page)).toContainText(/In English:/);
     await page.reload();
+    await expect(messageBody(page)).toContainText(czech, { timeout: 15000 });
     await expect(
       page.getByRole("button", { name: "Show in English" }),
     ).toBeVisible({ timeout: 15000 });
-    await expect(messageBody(page)).toContainText(czech);
   });
 
   test("translated view survives background thread refresh", async ({
@@ -220,19 +220,24 @@ test.describe("inbox email translation", () => {
         async () => {
           const kickerText = (await messageKicker(page).textContent()) ?? "";
           if (kickerText === initialKicker) return false;
-          return kickerText.includes(kickerAfterRefresh);
+          if (!kickerText.includes(kickerAfterRefresh)) return false;
+          const group = page.getByRole("radiogroup", {
+            name: "Message language",
+          });
+          if ((await group.count()) === 0) return false;
+          const english = group.getByRole("radio", {
+            name: "English",
+            exact: true,
+          });
+          if (!(await english.isChecked())) return false;
+          const body = (await messageBody(page).textContent()) ?? "";
+          if (!/In English:/.test(body)) return false;
+          const header = (await messageHeader(page).textContent()) ?? "";
+          return /In English:/.test(header);
         },
         { timeout: 30000 },
       )
       .toBe(true);
-    const languageAfterRefresh = page.getByRole("radiogroup", {
-      name: "Message language",
-    });
-    await expect(
-      languageAfterRefresh.getByRole("radio", { name: "English", exact: true }),
-    ).toBeChecked({ timeout: 15000 });
-    await expect(messageHeader(page)).toContainText(/In English:/);
-    await expect(messageBody(page)).toContainText(/In English:/);
     await expect(messageBody(page)).not.toContainText(czech);
   });
 
