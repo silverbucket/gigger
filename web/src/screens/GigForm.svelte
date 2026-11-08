@@ -180,6 +180,9 @@ function fields() {
     venueCity,
     pendingContacts: $state.snapshot(pendingContacts),
     pendingBands: $state.snapshot(pendingBands),
+    creatingContact: $state.snapshot(creatingContact),
+    contactQuery,
+    bandQuery,
   };
 }
 type Fields = ReturnType<typeof fields>;
@@ -201,6 +204,9 @@ function apply(value: Fields) {
   venueCity = value.venueCity;
   pendingContacts = structuredClone(value.pendingContacts);
   pendingBands = structuredClone(value.pendingBands);
+  creatingContact = structuredClone(value.creatingContact);
+  contactQuery = value.contactQuery;
+  bandQuery = value.bandQuery;
 }
 const blank = untrack(fields);
 const blankJson = JSON.stringify(blank);
@@ -264,9 +270,12 @@ function check(form: HTMLFormElement) {
     add(name.replace(/\(.*\)/, "").trim(), element);
   }
   venueInvalid = false;
+  const typed = venueQuery.trim().toLocaleLowerCase();
+  // Text edited after picking a venue no longer means that venue.
+  if (pickedVenue && pickedVenue.name.trim().toLocaleLowerCase() !== typed)
+    draft.venueId = "";
   if (!newVenue && !draft.venueId) {
     // A typed name that matches a venue exactly counts as picking it.
-    const typed = venueQuery.trim().toLocaleLowerCase();
     const match = typed
       ? data.venues.filter((v) => v.name.trim().toLocaleLowerCase() === typed)
       : [];

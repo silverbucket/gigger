@@ -45,6 +45,20 @@ test("a typed venue that was not picked is named, and an exact name counts", asy
   await expect(
     page.getByRole("heading", { name: "Test Club", level: 2 }),
   ).toBeVisible();
+  // A picked venue whose text is then changed is no longer picked.
+  await go(page, "bookings/new");
+  await choose(page, "Source", "Email");
+  await page.getByLabel("Proposed gig date").fill("2031-06-02");
+  await venue.fill("Test");
+  await page.getByRole("option", { name: /Test Club/ }).click();
+  await venue.fill("Elsewhere");
+  await page.getByRole("button", { name: "Save gig" }).click();
+  await expect(page.getByRole("alert")).toContainText("Choose “Elsewhere”");
+  await venue.fill("Test Club");
+  await page.getByRole("button", { name: "Save gig" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Test Club", level: 2 }),
+  ).toBeVisible();
 });
 
 test("a new gig keeps what was typed after leaving, and takes the venue name as title", async ({
