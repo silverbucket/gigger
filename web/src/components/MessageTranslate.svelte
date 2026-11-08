@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import {
   alreadyMatchesCopy,
   detectEmailLanguage,
@@ -45,10 +46,10 @@ let already: TranslateTarget | undefined = $state();
 let requestId = 0;
 let abort: AbortController | undefined;
 
+// Reset only when this incoming message changes — not when thread sync refreshes
+// the same stored subject/body while the user is still reading a translation.
 $effect(() => {
   const id = messageId;
-  const originalSubject = subject;
-  const originalBody = body;
   chosen = undefined;
   segmented = false;
   view = "original";
@@ -56,9 +57,11 @@ $effect(() => {
   failed = false;
   already = undefined;
   abort?.abort();
-  displaySubject = originalSubject;
-  displayBody = originalBody;
-  contentLang = undefined;
+  untrack(() => {
+    displaySubject = subject;
+    displayBody = body;
+    contentLang = undefined;
+  });
   return () => {
     abort?.abort();
     if (messageId === id) requestId++;

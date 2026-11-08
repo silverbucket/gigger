@@ -6,6 +6,7 @@ import {
   needsHumanAgentTag,
   replyBlocked,
 } from "@showday/schemas";
+import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import DetailSection from "../components/DetailSection.svelte";
 import Icon from "../components/Icon.svelte";
@@ -57,7 +58,7 @@ let latestBody = $state("");
 let latestLang = $state<string | undefined>();
 $effect(() => {
   item.id;
-  headerSubject = conversation.subject;
+  headerSubject = untrack(() => conversation.subject);
 });
 const address = $derived(
   conversation.channel === "instagram"

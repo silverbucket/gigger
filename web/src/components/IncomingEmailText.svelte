@@ -25,12 +25,6 @@ let {
 let displaySubject = $state<string | undefined>();
 
 $effect(() => {
-  displayBody = body;
-  displaySubject = subject;
-  contentLang = undefined;
-});
-
-$effect(() => {
   onSubject?.(displaySubject);
 });
 </script>

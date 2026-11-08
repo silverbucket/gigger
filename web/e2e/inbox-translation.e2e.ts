@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { conversationId, messagePath } from "@showday/schemas";
+import { conversationId, type Message, messagePath } from "@showday/schemas";
 import { expect, go, login, test } from "./fixtures";
 
 const messageBody = (page: Page) => page.locator(".body .pre");
@@ -51,7 +51,7 @@ async function seedInboxEmail(
     },
   });
   expect([200, 201, 412]).toContain(indexed.status());
-  return { conversation, peer };
+  return { conversation, peer, message, root, headers };
 }
 
 test.describe("inbox email translation", () => {
@@ -106,6 +106,53 @@ test.describe("inbox email translation", () => {
       page.getByRole("button", { name: "Show in English" }),
     ).toBeVisible();
     await expect(messageBody(page)).toContainText(czech);
+  });
+
+  test("translated view survives background thread refresh", async ({
+    page,
+    request,
+    account,
+  }) => {
+    const signup = await request.post("/api/auth/login", {
+      data: { username: account.username, password: account.password },
+    });
+    const { token } = await signup.json();
+    const czech =
+      "Dobrý den, nabízíme koncert 12. června v Praze. Termín by nám vyhovoval.";
+    const seeded = await seedInboxEmail(
+      request,
+      account,
+      token,
+      czech,
+      "Nabídka koncertu",
+    );
+    await login(page, account);
+    await page.goto(`/#/bookings/message/${seeded.conversation}`);
+    await page.getByRole("button", { name: "Show in English" }).click();
+    await expect(messageBody(page)).toContainText(/In English:/, {
+      timeout: 15000,
+    });
+    const language = page.getByRole("radiogroup", {
+      name: "Message language",
+    });
+    await expect(
+      language.getByRole("radio", { name: "English", exact: true }),
+    ).toBeChecked();
+    const freshMessage: Message = {
+      ...(seeded.message as Message),
+      published: new Date().toISOString(),
+    };
+    await request.put(`${seeded.root}${messagePath(freshMessage)}`, {
+      headers: seeded.headers,
+      data: freshMessage,
+    });
+    await expect
+      .poll(() => messageBody(page).textContent(), { timeout: 30000 })
+      .toMatch(/In English:/);
+    await expect(
+      language.getByRole("radio", { name: "English", exact: true }),
+    ).toBeChecked();
+    await expect(messageHeader(page)).toContainText(/In English:/);
   });
 
   test("reopening a message applies session cache on the first action", async ({
