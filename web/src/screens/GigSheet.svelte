@@ -6,6 +6,7 @@ import {
   type Venue,
 } from "@showday/schemas";
 import { longDate, mapUrl } from "../lib/format";
+import { placeOf, privateShowName } from "../lib/gigs";
 
 /** The printable gig sheet. Hidden on screen; Print shows only this. */
 let {
@@ -21,7 +22,14 @@ let {
   venue?: Venue;
   contacts: Contact[];
 } = $props();
-const address = $derived((venue?.address ?? gig.address)?.trim());
+const place = $derived(
+  gig.privateShow ? privateShowName : (venue?.name ?? gig.venue),
+);
+const address = $derived(
+  [(venue?.address ?? gig.address)?.trim(), placeOf(venue)]
+    .filter(Boolean)
+    .join(", "),
+);
 const fee = $derived(formatFee(gig.fee, currency, navigator.language));
 </script>
 
@@ -34,13 +42,13 @@ const fee = $derived(formatFee(gig.fee, currency, navigator.language));
       <dt>Band</dt>
       <dd>{bandName}</dd>
     {/if}
-    {#if venue?.name || gig.venue}
+    {#if place}
       <dt>Venue</dt>
-      <dd>{venue?.name ?? gig.venue}</dd>
+      <dd>{place}</dd>
     {/if}
     {#if address}
       <dt>Address</dt>
-      <dd>
+      <dd class="address">
         {address}
         <a href={mapUrl(address)} target="_blank" rel="noreferrer"
           >Map and directions</a
@@ -103,6 +111,9 @@ const fee = $derived(formatFee(gig.fee, currency, navigator.language));
 </article>
 
 <style>
+.address {
+  white-space: pre-line;
+}
 .gig-sheet {
   display: none;
 }

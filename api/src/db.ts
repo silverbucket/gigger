@@ -27,5 +27,10 @@ export function openDatabase(
   try {
     db.exec("ALTER TABLE email_accounts ADD COLUMN last_mail_at TEXT");
   } catch {}
+  // The shared venue list: name, address, city, country and website only. match_key (folded name|address) keeps one entry per venue;
+  // username and source_id name the band venue it came from, so that account's later edits update it.
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS directory_venues (id TEXT PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL, city TEXT, country TEXT, website TEXT, match_key TEXT NOT NULL UNIQUE, search TEXT NOT NULL, username TEXT NOT NULL, source_id TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE (username, source_id))",
+  );
   return db;
 }

@@ -3,8 +3,8 @@ import {
   type Availability,
   type Gig,
   type GigStatus,
+  isPublic,
   type Member,
-  publicStatuses,
 } from "@showday/schemas";
 import AvailabilityCells, {
   availabilityLabel,
@@ -32,9 +32,11 @@ import {
 import {
   contactsOf,
   nextMove,
+  placeOf,
   sheetText,
   timeCells,
   venueAddress,
+  venueName,
   venueOf,
 } from "../lib/gigs";
 import { channelName } from "../lib/inbox";
@@ -47,6 +49,8 @@ const bandId = $derived(data.band.id);
 const currency = $derived(data.band.currency ?? "EUR");
 const venue = $derived(venueOf(gig, data.venues));
 const address = $derived(venueAddress(gig, data.venues));
+const place = $derived(venueName(gig, data.venues));
+const mapQuery = $derived([address, placeOf(venue)].filter(Boolean).join(", "));
 const contacts = $derived(contactsOf(gig, data.contacts));
 const others = $derived(
   (gig.otherBandIds ?? []).map(
@@ -155,8 +159,8 @@ async function sendSheet() {
   <h2>{gig.title}</h2>
   <p>
     {longDate(gig.date)}
-    {#if venue?.name || gig.venue}
-      · {venue?.name ?? gig.venue}
+    {#if place}
+      · {place}
     {/if}
   </p>
 </div>
@@ -169,16 +173,21 @@ async function sendSheet() {
     {@render bandSection()}
   {/if}
   <div class="sections">
-    {#if venue || gig.venue || address}
+    {#if place || address}
       <DetailSection label="Where">
-        <span class="main">{venue?.name ?? gig.venue}</span>
+        {#snippet action()}
+          {#if gig.privateShow}
+            <Tag kind="private">Private</Tag>
+          {/if}
+        {/snippet}
+        <span class="main">{place}</span>
         {#if address}
-          <span class="line"
-            >{address}{venue?.city ? `, ${venue.city}` : ""}</span
+          <span class="line address"
+            >{address}{placeOf(venue) ? `, ${placeOf(venue)}` : ""}</span
           >
           <a
             class="line"
-            href={mapUrl(address)}
+            href={mapUrl(mapQuery)}
             target="_blank"
             rel="noreferrer"
             >Map and directions</a
@@ -286,7 +295,7 @@ async function sendSheet() {
       </DetailSection>
     {/if}
     <DetailSection label="Public page">
-      {#if publicStatuses.includes(gig.status)}
+      {#if isPublic(gig)}
         <span class="main with-tag"
           ><Tag kind="public">Public</Tag>
           {data.band.slug
@@ -301,11 +310,16 @@ async function sendSheet() {
         >
       {:else}
         <span class="main with-tag"
-          ><Tag kind="private">Private</Tag>Not on your public page yet</span
+          ><Tag kind="private">Private</Tag>
+          {gig.privateShow
+            ? "Not on your public page"
+            : "Not on your public page yet"}</span
         >
         <span class="line"
-          >Confirmed and played gigs are listed there. The title, fee, notes and
-          contacts always stay private.</span
+          >{gig.privateShow
+            ? "Private shows are never listed there."
+            : "Confirmed and played gigs are listed there."}
+          The title, fee, notes and contacts always stay private.</span
         >
       {/if}
     </DetailSection>
@@ -470,7 +484,7 @@ async function sendSheet() {
     {#if address}
       <a
         class="btn btn-secondary btn-wide"
-        href={mapUrl(address)}
+        href={mapUrl(mapQuery)}
         target="_blank"
         rel="noreferrer"
         >Directions <Icon name="map-pin" /></a
@@ -542,6 +556,9 @@ async function sendSheet() {
 {/if}
 
 <style>
+.address {
+  white-space: pre-line;
+}
 .scroll {
   flex: 1;
 }

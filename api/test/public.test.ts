@@ -171,7 +171,7 @@ test("public page, JSON, ICS and export carry only public fields and the claim i
     expect(JSON.stringify(json)).not.toMatch(privateText);
 
     const ics = await (await get("/b/the-band/gigs.ics")).text();
-    expect(ics).toContain("DTSTART;TZID=Europe/Prague:29990620T200000\r\n");
+    expect(ics).toContain("DTSTART:29990620T180000Z\r\n");
     expect(ics).toContain("DTSTART;VALUE=DATE:20010503\r\n");
     expect(ics).toContain("LOCATION:Café V lese\\, Praha");
     expect(ics).toContain("DESCRIPTION:All ages\\, doors 19:00");
@@ -480,7 +480,7 @@ test("public page translates labels and shows years on upcoming cards when neede
   expect(english).toContain("No gigs announced yet.");
 });
 
-test("calendar uses Prague timezone for timed events and dates for all-day events", () => {
+test("calendar times follow the venue's country, Prague for gigs saved before countries", () => {
   const ics = renderIcs(
     {
       name: "Band",
@@ -488,14 +488,43 @@ test("calendar uses Prague timezone for timed events and dates for all-day event
         summer: { date: "2030-07-01", start: "20:00", venue: "Club" },
         winter: { date: "2030-01-01", start: "20:00", venue: "Club" },
         allDay: { date: "2030-01-02", venue: "Club" },
+        berlin: {
+          date: "2030-07-01",
+          start: "21:30",
+          venue: "Bar",
+          country: "DE",
+        },
+        london: {
+          date: "2030-01-01",
+          start: "20:00",
+          venue: "Pub",
+          city: "London",
+          country: "GB",
+        },
+        // Time zones that disagree: the venue's clock time, with no zone.
+        texas: {
+          date: "2030-07-01",
+          start: "19:00",
+          venue: "Hall",
+          country: "US",
+        },
+        madeira: {
+          date: "2030-07-02",
+          start: "19:00",
+          venue: "Bar",
+          country: "PT",
+        },
       },
     },
     "band",
   );
-  expect(ics).toContain("TZID:Europe/Prague\r\n");
-  expect(ics).toContain("DTSTART;TZID=Europe/Prague:20300701T200000\r\n");
-  expect(ics).toContain("DTSTART;TZID=Europe/Prague:20300101T200000\r\n");
+  expect(ics).not.toContain("TZID");
+  expect(ics).toContain("DTSTART:20300701T180000Z\r\n");
+  expect(ics).toContain("DTSTART:20300101T190000Z\r\n");
   expect(ics).toContain("DTSTART;VALUE=DATE:20300102\r\n");
-  expect(ics).toContain("TZOFFSETTO:+0200\r\n");
-  expect(ics).toContain("TZOFFSETTO:+0100\r\n");
+  expect(ics).toContain("DTSTART:20300701T193000Z\r\n");
+  expect(ics).toContain("DTSTART:20300101T200000Z\r\n");
+  expect(ics).toContain("LOCATION:Pub\\, London\\, United Kingdom\r\n");
+  expect(ics).toContain("DTSTART:20300701T190000\r\n");
+  expect(ics).toContain("DTSTART:20300702T190000\r\n");
 });

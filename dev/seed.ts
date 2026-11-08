@@ -47,12 +47,14 @@ export async function seedDemo(store: MemoryStore, appOrigin: string) {
     name: "Kasárna Karlín",
     address: "Prvního pluku 2",
     city: "Prague",
+    country: "CZ",
   });
   put("venue", "venues/v-cross", {
     id: "v-cross",
     name: "Cross Club",
     address: "Plynární 1096/23",
     city: "Prague",
+    country: "CZ",
   });
   put("contact", "contacts/c-petra", {
     id: "c-petra",

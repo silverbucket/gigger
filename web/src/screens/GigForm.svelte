@@ -3,6 +3,7 @@ import type { Contact, EnquirySource } from "@showday/schemas";
 import { enquirySources, type Gig, type OtherBand } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
+import CountrySelect from "../components/CountrySelect.svelte";
 import CurrencyOptions from "../components/CurrencyOptions.svelte";
 import Icon from "../components/Icon.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
@@ -10,7 +11,14 @@ import Segmented from "../components/Segmented.svelte";
 import Tag from "../components/Tag.svelte";
 import Typeahead, { type Option, rank } from "../components/Typeahead.svelte";
 import { type BandData, data as store } from "../lib/data.svelte";
+import {
+  type DirectoryVenue,
+  findShared,
+  shareVenue,
+  usualCountry,
+} from "../lib/directory";
 import { today, usedCurrencies } from "../lib/format";
+import { privateShowName } from "../lib/gigs";
 import { channelName } from "../lib/inbox";
 import type { Prefill } from "../lib/messages.svelte";
 import { ui } from "../lib/ui.svelte";
@@ -90,14 +98,55 @@ let newVenue = $state(!!extracted.newVenue && !initial);
 let venueName = $state(extracted.newVenue ?? "");
 let venueAddress = $state("");
 let venueCity = $state("");
-const venueOptions = $derived(
-  rank(
+let venueCountry = $state(untrack(() => usualCountry(data)));
+let venueWebsite = $state("");
+// A house party or other place that isn't a venue: just an address, never shared or public.
+let privateShow = $state(!!initial?.privateShow);
+let privateAddress = $state(
+  initial?.privateShow ? (initial.address ?? "") : "",
+);
+// Venues other bands added, found as you type; picking one copies it into this band.
+let shared = $state<DirectoryVenue[]>([]);
+$effect(() => {
+  const query = venueQuery;
+  if (privateShow || newVenue) return;
+  const timer = setTimeout(async () => {
+    const found = await findShared(bandId, query, data.venues);
+    if (query === venueQuery) shared = found;
+  }, 250);
+  return () => clearTimeout(timer);
+});
+const sharedPrefix = "shared:";
+const venueOptions = $derived([
+  ...rank(
     data.venues,
     venueQuery,
     (v) => v.name,
     (v) => `${v.city ?? ""} ${v.address}`,
   ).map((v) => ({ id: v.id, label: v.name, sub: v.city || v.address })),
-);
+  ...rank(
+    shared,
+    venueQuery,
+    (v) => v.name,
+    (v) => `${v.city ?? ""} ${v.address}`,
+    5,
+  ).map((v) => ({
+    id: `${sharedPrefix}${v.id}`,
+    label: v.name,
+    sub: v.city || v.address,
+    badge: "Shared",
+  })),
+]);
+function pickShared(venue: DirectoryVenue) {
+  newVenue = true;
+  venueName = venue.name;
+  venueAddress = venue.address;
+  venueCity = venue.city ?? "";
+  venueCountry = venue.country ?? venueCountry;
+  venueWebsite = venue.website ?? "";
+  draft.venueId = "";
+  venueInvalid = false;
+}
 const pickedVenue = $derived(data.venues.find((v) => v.id === draft.venueId));
 
 // Contacts: picked ones, plus new ones saved together with the gig.
@@ -179,6 +228,10 @@ function fields() {
     venueName,
     venueAddress,
     venueCity,
+    venueCountry,
+    venueWebsite,
+    privateShow,
+    privateAddress,
     pendingContacts: $state.snapshot(pendingContacts),
     pendingBands: $state.snapshot(pendingBands),
     creatingContact: $state.snapshot(creatingContact),
@@ -203,6 +256,10 @@ function apply(value: Fields) {
   venueName = value.venueName;
   venueAddress = value.venueAddress;
   venueCity = value.venueCity;
+  venueCountry = value.venueCountry;
+  venueWebsite = value.venueWebsite;
+  privateShow = value.privateShow;
+  privateAddress = value.privateAddress;
   pendingContacts = structuredClone(value.pendingContacts);
   pendingBands = structuredClone(value.pendingBands);
   creatingContact = structuredClone(value.creatingContact);
@@ -275,7 +332,7 @@ function check(form: HTMLFormElement) {
   // Text edited after picking a venue no longer means that venue.
   if (pickedVenue && pickedVenue.name.trim().toLocaleLowerCase() !== typed)
     draft.venueId = "";
-  if (!newVenue && !draft.venueId) {
+  if (!privateShow && !newVenue && !draft.venueId) {
     // A typed name that matches a venue exactly counts as picking it.
     const match = typed
       ? data.venues.filter((v) => v.name.trim().toLocaleLowerCase() === typed)
@@ -381,14 +438,19 @@ async function submit(event: SubmitEvent) {
   ui.busy = true;
   const value = $state.snapshot(draft);
   try {
-    if (newVenue) {
+    if (privateShow) {
+      delete value.venueId;
+    } else if (newVenue) {
       const venue = {
         id: crypto.randomUUID(),
         name: venueName.trim(),
         address: venueAddress.trim(),
         ...(venueCity.trim() ? { city: venueCity.trim() } : {}),
+        ...(venueCountry ? { country: venueCountry } : {}),
+        ...(venueWebsite ? { website: venueWebsite } : {}),
       };
       await bands.save("venue", bandId, venue);
+      void shareVenue(bandId, venue);
       value.venueId = venue.id;
       // Keep the draft consistent if a later step fails, so a retry doesn't duplicate it.
       draft.venueId = venue.id;
@@ -407,10 +469,14 @@ async function submit(event: SubmitEvent) {
       draft.otherBandIds = value.otherBandIds;
       pendingBands = pendingBands.filter((b) => b.id !== band.id);
     }
-    const venueTitle =
-      data.venues.find((v) => v.id === value.venueId)?.name ?? venueName;
+    const venueTitle = privateShow
+      ? privateShowName
+      : (data.venues.find((v) => v.id === value.venueId)?.name ?? venueName);
     const saved: Gig = {
       ...value,
+      ...(privateShow
+        ? { privateShow: true, address: privateAddress.trim() }
+        : {}),
       title: value.title.trim() || venueTitle.trim(),
       contactIds: value.contactIds ?? [],
       enquirySource,
@@ -437,6 +503,11 @@ async function submit(event: SubmitEvent) {
     if (saved.setLength === undefined || saved.setLength === null)
       delete saved.setLength;
     if (!saved.otherBandIds?.length) delete saved.otherBandIds;
+    if (!privateShow) {
+      delete saved.privateShow;
+      // A private show's address goes with it; a legacy gig keeps its own.
+      if (initial?.privateShow) delete saved.address;
+    }
     await bands.save("gig", bandId, saved);
     finished = true;
     forget();
@@ -699,10 +770,47 @@ async function submit(event: SubmitEvent) {
           id="gig-title"
           class="input"
           bind:value={draft.title}
-          placeholder="Leave empty to use the venue name"
+          placeholder={privateShow
+            ? `Leave empty to call it ${privateShowName}`
+            : "Leave empty to use the venue name"}
         >
       </div>
-      {#if !newVenue}
+      <div class="field">
+        <span class="field-label">Where</span>
+        <Segmented
+          label="Where"
+          options={[
+            { value: "venue", label: "Venue" },
+            { value: "private", label: privateShowName },
+          ]}
+          value={privateShow ? "private" : "venue"}
+          onchange={(where) => {
+            privateShow = where === "private";
+            venueInvalid = false;
+          }}
+          columns={2}
+        />
+      </div>
+      {#if privateShow}
+        <div class="field">
+          <div class="label-row">
+            <label for="private-address">Address</label>
+            <Tag kind="private">Private</Tag>
+          </div>
+          <textarea
+            id="private-address"
+            class="input"
+            rows="3"
+            placeholder="Street, number, city, and how to find the door"
+            bind:value={privateAddress}
+            required
+          ></textarea>
+          <p class="field-hint">
+            For a house party or anywhere that isn't a venue. It stays off your
+            public page and out of the shared venue list.
+          </p>
+        </div>
+      {:else if !newVenue}
         <Typeahead
           label="Venue"
           bind:query={venueQuery}
@@ -717,6 +825,10 @@ async function submit(event: SubmitEvent) {
             draft.venueId = "";
           }}
           onselect={(id) => {
+            const pick = id.startsWith(sharedPrefix)
+              ? shared.find((v) => `${sharedPrefix}${v.id}` === id)
+              : undefined;
+            if (pick) return pickShared(pick);
             draft.venueId = id;
             venueInvalid = false;
             venueQuery = data.venues.find((v) => v.id === id)?.name ?? "";
@@ -736,6 +848,7 @@ async function submit(event: SubmitEvent) {
               class="btn btn-ghost"
               onclick={() => {
                 newVenue = false;
+                venueWebsite = "";
               }}
             >
               Choose existing
@@ -759,10 +872,20 @@ async function submit(event: SubmitEvent) {
               required
             >
           </div>
-          <div class="field">
-            <label for="venue-city">City</label>
-            <input id="venue-city" class="input" bind:value={venueCity}>
+          <div class="field-row">
+            <div class="field">
+              <label for="venue-city">City</label>
+              <input id="venue-city" class="input" bind:value={venueCity}>
+            </div>
+            <div class="field">
+              <label for="venue-country">Country</label>
+              <CountrySelect id="venue-country" bind:value={venueCountry} />
+            </div>
           </div>
+          <p class="field-hint">
+            Name, address, city, country and website go into the shared venue
+            list, so other bands can pick it too.
+          </p>
         </fieldset>
       {/if}
       {#if fromMessage}

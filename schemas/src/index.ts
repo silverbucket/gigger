@@ -77,6 +77,8 @@ export interface Gig {
   published?: boolean;
   /** Inbox conversation this gig was created from. */
   conversationId?: string;
+  /** A house party or other place that is not a venue: `address` says where, there is no `venueId`, and it never goes on the public page. */
+  privateShow?: boolean;
   date: string;
   loadIn?: string;
   soundcheck?: string;
@@ -109,6 +111,8 @@ export interface Venue {
   name: string;
   address: string;
   city?: string;
+  /** ISO 3166-1 alpha-2 code, e.g. "CZ". */
+  country?: string;
   /** The venue's own published ways to reach it; private to the band. */
   website?: string;
   email?: string;
@@ -120,6 +124,8 @@ export interface PublicGig {
   start?: string;
   venue: string;
   city?: string;
+  /** ISO 3166-1 alpha-2 code; sets the time zone of the calendar feed. */
+  country?: string;
   ticketUrl?: string;
   description?: string;
 }
@@ -139,12 +145,16 @@ export interface PublicPage {
   publishedRevision?: string;
 }
 export const publicStatuses: readonly GigStatus[] = ["confirmed", "played"];
+/** Confirmed and played gigs go on the public page; private shows never do. */
+export const isPublic = (gig: Pick<Gig, "status" | "privateShow">) =>
+  publicStatuses.includes(gig.status) && !gig.privateShow;
 export function publicGig(gig: Gig, venue?: Venue): PublicGig {
   return {
     date: gig.date,
     ...(gig.setTimes?.[0] ? { start: gig.setTimes[0] } : {}),
     venue: venue?.name ?? gig.venue ?? "",
     ...(venue?.city ? { city: venue.city } : {}),
+    ...(venue?.country ? { country: venue.country } : {}),
     ...(gig.public?.ticketUrl ? { ticketUrl: gig.public.ticketUrl } : {}),
     ...(gig.public?.description?.trim()
       ? { description: gig.public.description.trim() }
@@ -534,6 +544,8 @@ const email = {
   pattern: "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
 };
 const id = { type: "string", pattern: "^[A-Za-z0-9_-]+$" };
+/** ISO 3166-1 alpha-2. */
+const country = { type: "string", pattern: "^[A-Z]{2}$" };
 const date = {
   type: "string",
   format: "date",
@@ -637,6 +649,7 @@ const publicGigSchema = {
     start: time,
     venue: { type: "string" },
     city: text,
+    country,
     ticketUrl,
     description: { type: "string" },
   },
@@ -799,6 +812,7 @@ export const schemas = {
       earnings: earningsSchema,
       published: { type: "boolean" },
       conversationId: id,
+      privateShow: { type: "boolean" },
       title: text,
       venueId: id,
       contactIds: { type: "array", items: id, uniqueItems: true },
@@ -850,6 +864,10 @@ export const schemas = {
     {
       anyOf: [
         { required: ["venueId", "contactIds"] },
+        {
+          required: ["privateShow", "address", "contactIds"],
+          properties: { privateShow: { enum: [true] } },
+        },
         { required: ["venue", "address", "contacts"] },
       ],
     },
@@ -859,6 +877,7 @@ export const schemas = {
       name: text,
       address: text,
       city: text,
+      country,
       website: ticketUrl,
       email,
       phone: text,
@@ -1063,7 +1082,7 @@ export function createShowday(client: Client, publicClient?: Client) {
   async function publishGig(slug: string, bandId: string, gig: Gig) {
     if (!publicClient) return;
     const path = `${slug}/gigs/${safeId(gig.id)}`;
-    if (!publicStatuses.includes(gig.status)) {
+    if (!isPublic(gig)) {
       if (gig.published === false) return;
       const pendingPath = `pending-public-deletes/${safeId(bandId)}/${safeId(gig.id)}`;
       let existing = await publicClient.getObject(path);
@@ -1300,7 +1319,7 @@ export function createShowday(client: Client, publicClient?: Client) {
           recordPath("gig", pending.bandId, pending.gigId),
           0,
         );
-        if (gig && publicStatuses.includes(read("gig", gig).status)) {
+        if (gig && isPublic(read("gig", gig))) {
           await client.remove(path);
           continue;
         }
@@ -1377,10 +1396,11 @@ export function createShowday(client: Client, publicClient?: Client) {
       await client.storeObject(kind, recordPath(kind, bandId, value.id), value);
       if (kind === "gig") await publish(bandId, value as Gig);
     },
+    /** A private show has no venue, so its `survey` is ignored. */
     async markPlayed(
       bandId: string,
       gigId: string,
-      survey: SurveyInput,
+      survey: SurveyInput | undefined,
       earnings: Earnings,
     ) {
       const path = recordPath("gig", bandId, gigId);
@@ -1391,6 +1411,19 @@ export function createShowday(client: Client, publicClient?: Client) {
       }
       if (current.status !== "confirmed")
         throw new Error("Reload this gig before marking it played.");
+      if (
+        earnings.handedOver !== undefined &&
+        earnings.handedOver > earnings.total
+      )
+        throw new Error("Amount handed over cannot exceed total takings.");
+      if (current.privateShow) {
+        const updated = read("gig", { ...current, status: "played", earnings });
+        await client.storeObject("gig", path, updated);
+        await publish(bandId, updated);
+        return updated;
+      }
+      if (!survey)
+        throw new Error("Fill in the room before marking it played.");
       const venueId = current.venueId ?? `gig-${current.id}`;
       const existing = await client.getObject(
         recordPath("venue", bandId, venueId),
@@ -1425,11 +1458,6 @@ export function createShowday(client: Client, publicClient?: Client) {
         status: "played",
         earnings,
       });
-      if (
-        earnings.handedOver !== undefined &&
-        earnings.handedOver > earnings.total
-      )
-        throw new Error("Amount handed over cannot exceed total takings.");
       if (!existing)
         await client.storeObject(
           "venue",
@@ -1631,3 +1659,4 @@ export function groupGigs(
     }))
     .filter((group) => group.gigs.length > 0);
 }
+export { countryCodes, countryName, countryOfLocale } from "./countries";
