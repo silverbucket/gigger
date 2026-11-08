@@ -56,9 +56,17 @@ const tagged = $derived(
 let headerSubject = $state<string | undefined>();
 let latestBody = $state("");
 let latestLang = $state<string | undefined>();
+/** Keeps the translate control mounted while thread data refreshes for this item. */
+let pinnedLatest = $state<{ id: string; body: string } | undefined>();
 $effect(() => {
   item.id;
+  pinnedLatest = undefined;
   headerSubject = untrack(() => conversation.subject);
+});
+$effect(() => {
+  const incoming = latest;
+  if (!incoming) return;
+  pinnedLatest = { id: incoming.id, body: incoming.object.content };
 });
 const address = $derived(
   conversation.channel === "instagram"
@@ -190,12 +198,12 @@ async function send(event: SubmitEvent) {
 {/snippet}
 
 <div class="scroll">
-  {#if latest && conversation.channel === "email"}
+  {#if pinnedLatest && conversation.channel === "email"}
     <div class="translate-slot">
       <IncomingEmailText
-        messageId={latest.id}
+        messageId={pinnedLatest.id}
         subject={conversation.subject}
-        body={latest.object.content}
+        body={pinnedLatest.body}
         showSubject
         separateControl
         bind:displayBody={latestBody}
@@ -207,9 +215,9 @@ async function send(event: SubmitEvent) {
     </div>
   {/if}
   <div class="body">
-    {#if latest && conversation.channel === "email"}
+    {#if pinnedLatest && conversation.channel === "email"}
       <p class="pre" lang={latestLang}>
-        {latestBody || latest.object.content}
+        {latestBody || pinnedLatest.body}
       </p>
     {:else if latest}
       <p class="pre">{latest.object.content}</p>

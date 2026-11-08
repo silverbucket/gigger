@@ -221,10 +221,14 @@ test.describe("inbox email translation", () => {
         { timeout: 30000 },
       )
       .toBe(true);
+    const languageAfterRefresh = page.getByRole("radiogroup", {
+      name: "Message language",
+    });
     await expect(
-      language.getByRole("radio", { name: "English", exact: true }),
-    ).toBeChecked();
+      languageAfterRefresh.getByRole("radio", { name: "English", exact: true }),
+    ).toBeChecked({ timeout: 15000 });
     await expect(messageHeader(page)).toContainText(/In English:/);
+    await expect(messageBody(page)).toContainText(/In English:/);
     await expect(messageBody(page)).not.toContainText(czech);
   });
 
