@@ -160,3 +160,53 @@ export const venueLinks = (venue?: {
       ]
     : []),
 ];
+
+/** Widely used currencies, offered after the band's own ones. */
+const commonCurrencies = [
+  "EUR",
+  "USD",
+  "GBP",
+  "CHF",
+  "CZK",
+  "PLN",
+  "HUF",
+  "SEK",
+  "NOK",
+  "DKK",
+  "CAD",
+  "AUD",
+  "NZD",
+  "JPY",
+];
+
+/** Currency suggestions: the given codes first (band currency, ones in use), then common ones. */
+export function currencyChoices(first: (string | undefined)[]) {
+  let names: Intl.DisplayNames | undefined;
+  try {
+    names = new Intl.DisplayNames(["en"], { type: "currency" });
+  } catch {}
+  const codes = new Set<string>();
+  for (const code of [...first, ...commonCurrencies]) {
+    const upper = code?.trim().toUpperCase();
+    if (upper && /^[A-Z]{3}$/.test(upper)) codes.add(upper);
+  }
+  return [...codes].map((code) => {
+    const name = names?.of(code);
+    return { code, name: name && name !== code ? name : undefined };
+  });
+}
+
+/** Every currency the band has used on a fee or earnings, most used first. */
+export function usedCurrencies(gigs: Gig[]) {
+  const counts = new Map<string, number>();
+  for (const gig of gigs) {
+    for (const code of [
+      typeof gig.fee === "object" ? gig.fee.currency : undefined,
+      gig.earnings?.currency,
+    ]) {
+      const upper = code?.toUpperCase();
+      if (upper) counts.set(upper, (counts.get(upper) ?? 0) + 1);
+    }
+  }
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([code]) => code);
+}

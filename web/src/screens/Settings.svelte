@@ -1,6 +1,8 @@
 <script lang="ts">
+import CurrencyOptions from "../components/CurrencyOptions.svelte";
 import SectionLabel from "../components/SectionLabel.svelte";
 import { data } from "../lib/data.svelte";
+import { usedCurrencies } from "../lib/format";
 import { run, ui } from "../lib/ui.svelte";
 import { bands, logout } from "../storage";
 import Connections from "./Connections.svelte";
@@ -96,6 +98,8 @@ async function saveCurrency(event: SubmitEvent) {
             id="band-currency"
             class="input"
             name="currency"
+            list="band-currency-options"
+            autocomplete="off"
             disabled={ui.busy}
             value={currencyText}
             oninput={(event) => {
@@ -109,6 +113,10 @@ async function saveCurrency(event: SubmitEvent) {
             maxlength="3"
             required
           >
+          <CurrencyOptions
+            id="band-currency-options"
+            first={[band?.currency ?? "EUR", ...usedCurrencies(current.gigs)]}
+          />
           <button type="submit" class="btn btn-secondary" disabled={ui.busy}>
             Save<span class="sr-only"> currency</span>
           </button>

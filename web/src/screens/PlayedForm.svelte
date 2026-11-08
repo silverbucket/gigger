@@ -12,6 +12,7 @@ import {
 } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
+import CurrencyOptions from "../components/CurrencyOptions.svelte";
 import Icon from "../components/Icon.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
 import Segmented from "../components/Segmented.svelte";
@@ -425,9 +426,15 @@ const paLabels: Record<VenueSurvey["pa"], string> = {
         required
         pattern={"[A-Za-z]{3}"}
         maxlength="3"
+        list="earn-currency-options"
+        autocomplete="off"
         value={effectiveCurrency}
         oninput={changeCurrency}
       >
+      <CurrencyOptions
+        id="earn-currency-options"
+        first={[fee?.currency, currency]}
+      />
     </div>
   </fieldset>
 
