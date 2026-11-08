@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { storage } from "../storage";
 import {
   alreadyMatchesCopy,
   clearTranslationCache,
@@ -11,7 +12,14 @@ import {
   writeTranslationCache,
 } from "./message-translate";
 
-afterEach(() => clearTranslationCache());
+function asAccount(address: string) {
+  storage.remote.userAddress = address;
+}
+
+afterEach(() => {
+  clearTranslationCache();
+  storage.remote.userAddress = "";
+});
 
 test("detectEmailLanguage classifies Czech, English, mixed, and unknown", () => {
   expect(
@@ -52,13 +60,24 @@ test("copy helpers use the approved strings", () => {
   );
 });
 
-test("session cache is keyed by message and target only for this run", () => {
+test("session cache is keyed by account, message and target", () => {
+  asAccount("alice@example.com");
   writeTranslationCache("m1", "en", { body: "Hello", subject: "Hi" });
   expect(readTranslationCache("m1", "en")).toEqual({
     body: "Hello",
     subject: "Hi",
   });
   expect(readTranslationCache("m2", "en")).toBeUndefined();
+  asAccount("bob@example.com");
+  expect(readTranslationCache("m1", "en")).toBeUndefined();
+  clearTranslationCache();
+  asAccount("alice@example.com");
+  expect(readTranslationCache("m1", "en")).toBeUndefined();
+});
+
+test("clearTranslationCache runs when the storage cache is cleared on logout", () => {
+  asAccount("alice@example.com");
+  writeTranslationCache("m1", "en", { body: "Hello" });
   clearTranslationCache();
   expect(readTranslationCache("m1", "en")).toBeUndefined();
 });

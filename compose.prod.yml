@@ -85,6 +85,8 @@ services:
       META_CONFIG_ID: ${META_CONFIG_ID:-}
       META_HUMAN_AGENT: ${META_HUMAN_AGENT:-}
       TOKEN_KEY: ${TOKEN_KEY:-}
+      LIBRETRANSLATE_URL: ${LIBRETRANSLATE_URL:-}
+      LIBRETRANSLATE_API_KEY: ${LIBRETRANSLATE_API_KEY:-}
     volumes:
       - api_data:/data
     healthcheck:

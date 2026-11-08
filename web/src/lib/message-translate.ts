@@ -1,4 +1,11 @@
+import { storage } from "../storage";
 import { api } from "./api";
+import {
+  clearTranslationCache as clearCache,
+  readTranslationCacheEntry,
+  type TranslationResult,
+  writeTranslationCacheEntry,
+} from "./message-translate-cache";
 
 export type TranslateTarget = "en" | "cs";
 export type LanguageHint = "cs" | "en" | "mixed" | "unknown";
@@ -57,17 +64,20 @@ export function languageAlreadyMatches(
   return false;
 }
 
-export type TranslationResult = { subject?: string; body: string };
+export type { TranslationResult } from "./message-translate-cache";
 
-type CacheKey = `${string}:${TranslateTarget}`;
-
-const sessionCache = new Map<CacheKey, TranslationResult>();
+function translationAccount(): string | undefined {
+  const address = storage.remote.userAddress;
+  return address || undefined;
+}
 
 export function readTranslationCache(
   messageId: string,
   target: TranslateTarget,
 ): TranslationResult | undefined {
-  return sessionCache.get(`${messageId}:${target}`);
+  const account = translationAccount();
+  if (!account) return undefined;
+  return readTranslationCacheEntry(account, messageId, target);
 }
 
 export function writeTranslationCache(
@@ -75,11 +85,13 @@ export function writeTranslationCache(
   target: TranslateTarget,
   value: TranslationResult,
 ) {
-  sessionCache.set(`${messageId}:${target}`, value);
+  const account = translationAccount();
+  if (!account) return;
+  writeTranslationCacheEntry(account, messageId, target, value);
 }
 
 export function clearTranslationCache() {
-  sessionCache.clear();
+  clearCache();
 }
 
 export function sourceForTarget(hint: LanguageHint): TranslateTarget | "auto" {
