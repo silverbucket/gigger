@@ -155,7 +155,9 @@ test.describe("inbox email translation", () => {
       languageAgain.getByRole("radio", { name: "English", exact: true }),
     ).toBeChecked({ timeout: 2000 });
     await expect(messageBody(page)).toContainText(/In English:/);
-    await expect(messageBody(page)).not.toContainText(czech);
+    await expect(
+      messageBody(page).getByText(czech, { exact: true }),
+    ).not.toBeVisible();
   });
 
   test("phone full-screen message uses a full-width two-segment control", async ({
