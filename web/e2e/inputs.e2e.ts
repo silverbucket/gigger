@@ -36,6 +36,15 @@ test("band currency inputs accept real codes and reject malformed ones", async (
   await go(page, "settings");
   const currency = page.getByLabel(/^Band currency/);
   const save = page.getByRole("button", { name: "Save currency", exact: true });
+  // Suggestions start with the band's own currency, then common ones.
+  const suggested = await currency.evaluate((input: HTMLInputElement) =>
+    [...(input.list?.options ?? [])].map((option) => [
+      option.value,
+      option.textContent,
+    ]),
+  );
+  expect(suggested[0]).toEqual(["CZK", "Czech Koruna"]);
+  expect(suggested.map(([code]) => code)).toContain("EUR");
   for (const value of ["CZ", "123", "C3"]) {
     await currency.fill(value);
     await save.click();
@@ -124,6 +133,9 @@ test("booking validation opens collapsed invalid fields and preserves the draft"
   await expect(page.getByLabel("Fee currency", { exact: true })).toHaveValue(
     "CZK",
   );
+  await expect(
+    page.locator("#gig-fee-currency-options option").first(),
+  ).toHaveAttribute("value", "CZK");
   await fee.fill("-5");
   await page.getByRole("button", { name: "Save gig" }).click();
   await expect
@@ -172,6 +184,24 @@ test("survey choices are required, cancel leaves the gig unplayed", async ({
     page.getByRole("button", { name: "Mark played", exact: true }),
   ).toBeVisible();
   expect(await account.exists("surveys/prague")).toBe(false);
+});
+
+test("earnings suggest currencies the band used on other gigs", async ({
+  page,
+  account,
+}) => {
+  await account.seedGig({
+    id: "bucharest",
+    title: "Bucharest show",
+    fee: { amount: 900, currency: "RON", extras: [] },
+  });
+  await page.reload();
+  await openGig(page, "Berlin show");
+  await page.getByRole("button", { name: "Mark played", exact: true }).click();
+  const options = page.locator("#earn-currency-options option");
+  await expect(options.nth(0)).toHaveAttribute("value", "CZK");
+  await expect(options.nth(1)).toHaveAttribute("value", "RON");
+  await expect(options.nth(1)).toHaveText("Romanian Leu");
 });
 
 test("earnings validate, recalculate, persist currencies per gig and stay out of venue data", async ({

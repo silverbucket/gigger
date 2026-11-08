@@ -3,13 +3,14 @@ import type { Contact, EnquirySource } from "@showday/schemas";
 import { enquirySources, type Gig, type OtherBand } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
+import CurrencyOptions from "../components/CurrencyOptions.svelte";
 import Icon from "../components/Icon.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
 import Segmented from "../components/Segmented.svelte";
 import Tag from "../components/Tag.svelte";
 import Typeahead, { type Option, rank } from "../components/Typeahead.svelte";
 import { type BandData, data as store } from "../lib/data.svelte";
-import { today } from "../lib/format";
+import { today, usedCurrencies } from "../lib/format";
 import { channelName } from "../lib/inbox";
 import type { Prefill } from "../lib/messages.svelte";
 import { ui } from "../lib/ui.svelte";
@@ -1048,10 +1049,16 @@ async function submit(event: SubmitEvent) {
               id="gig-fee-currency"
               class="input"
               bind:value={feeCurrency}
+              list="gig-fee-currency-options"
+              autocomplete="off"
               required={amount !== undefined && amount !== null}
               pattern={"[A-Za-z]{3}"}
               maxlength="3"
             >
+            <CurrencyOptions
+              id="gig-fee-currency-options"
+              first={[currency, ...usedCurrencies(data.gigs)]}
+            />
           </div>
         </div>
         <div class="field">

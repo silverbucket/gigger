@@ -17,6 +17,7 @@ import {
 } from "@showday/schemas";
 import BottomActionBar from "../components/BottomActionBar.svelte";
 import ChannelGrid from "../components/ChannelGrid.svelte";
+import CurrencyOptions from "../components/CurrencyOptions.svelte";
 import Icon from "../components/Icon.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
 import SectionLabel from "../components/SectionLabel.svelte";
@@ -573,10 +574,19 @@ function createBand(event: SubmitEvent) {
             id="new-band-currency"
             class="input"
             bind:value={newCurrency}
+            list="new-band-currency-options"
+            autocomplete="off"
             required
             pattern={"[A-Za-z]{3}"}
             maxlength="3"
           >
+          <CurrencyOptions
+            id="new-band-currency-options"
+            first={[
+              currencyForLocale(navigator.language),
+              ...data.all.map((item) => item.band.currency),
+            ]}
+          />
         </div>
       </fieldset>
       <div class="actions">

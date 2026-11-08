@@ -15,6 +15,7 @@ import {
   normalize,
   shortDate,
   today,
+  usedCurrencies,
 } from "../lib/format";
 import {
   amountText,
@@ -363,6 +364,7 @@ function sub(gig: Gig, band: BandData) {
           gig={openGig.gig}
           venueName={venueLine(openGig.gig, openGig.band.venues)}
           currency={openGig.band.band.currency ?? "EUR"}
+          used={usedCurrencies(openGig.band.gigs)}
           busy={ui.busy}
           oncancel={() =>
             router.back(
