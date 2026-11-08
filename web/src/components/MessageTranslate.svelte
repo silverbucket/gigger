@@ -13,6 +13,10 @@ import {
   targetLabel,
   writeTranslationCache,
 } from "../lib/message-translate";
+import {
+  readInboxLangSession,
+  writeInboxLangSession,
+} from "../lib/message-translate-ui-session";
 import { ui } from "../lib/ui.svelte";
 import Segmented from "./Segmented.svelte";
 
@@ -21,6 +25,7 @@ let {
   subject,
   body,
   showSubject = false,
+  conversationId,
   displaySubject = $bindable<string | undefined>(),
   displayBody = $bindable(""),
   contentLang = $bindable<string | undefined>(),
@@ -29,6 +34,8 @@ let {
   subject?: string;
   body: string;
   showSubject?: boolean;
+  /** When set (latest email), restore the in-session control across reactive refresh. */
+  conversationId?: string;
   displaySubject?: string | undefined;
   displayBody?: string;
   contentLang?: string | undefined;
@@ -50,22 +57,52 @@ let abort: AbortController | undefined;
 // the same stored subject/body while the user is still reading a translation.
 $effect(() => {
   const id = messageId;
-  chosen = undefined;
-  segmented = false;
-  view = "original";
-  busy = false;
-  failed = false;
-  already = undefined;
+  const convo = conversationId;
+  const saved = convo && showSubject ? readInboxLangSession(convo) : undefined;
+  const restored =
+    saved?.messageId === id && saved.segmented && saved.chosen
+      ? saved
+      : undefined;
+  if (restored) {
+    chosen = restored.chosen;
+    segmented = true;
+    view = restored.view;
+    busy = false;
+    failed = false;
+    already = undefined;
+  } else {
+    chosen = undefined;
+    segmented = false;
+    view = "original";
+    busy = false;
+    failed = false;
+    already = undefined;
+  }
   abort?.abort();
   untrack(() => {
-    displaySubject = subject;
-    displayBody = body;
-    contentLang = undefined;
+    if (!restored || restored.view === "original") {
+      displaySubject = subject;
+      displayBody = body;
+      contentLang = undefined;
+    }
   });
   return () => {
     abort?.abort();
     if (messageId === id) requestId++;
   };
+});
+
+$effect(() => {
+  const convo = conversationId;
+  if (!convo || !showSubject || !segmented || !chosen) return;
+  messageId;
+  view;
+  writeInboxLangSession(convo, {
+    messageId,
+    chosen,
+    segmented,
+    view,
+  });
 });
 
 function applyView() {

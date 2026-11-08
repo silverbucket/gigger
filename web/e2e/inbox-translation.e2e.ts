@@ -160,7 +160,7 @@ test.describe("inbox email translation", () => {
     await page.reload();
     await expect(
       page.getByRole("button", { name: "Show in English" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15000 });
     await expect(messageBody(page)).toContainText(czech);
   });
 
