@@ -487,7 +487,7 @@ const paLabels: Record<VenueSurvey["pa"], string> = {
   flex-direction: column;
   gap: 16px;
   padding: 20px 28px 24px;
-  border-bottom: var(--rule-ink);
+  border-bottom: var(--rule);
 }
 .part-head {
   display: flex;
@@ -504,7 +504,7 @@ const paLabels: Record<VenueSurvey["pa"], string> = {
 }
 .title {
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 .two {
@@ -530,8 +530,8 @@ const paLabels: Record<VenueSurvey["pa"], string> = {
 }
 .took strong {
   font-size: 26px;
-  font-weight: 800;
-  color: var(--color-accent);
+  font-weight: 600;
+  color: var(--color-accent-700);
   letter-spacing: -0.02em;
   margin-left: 4px;
 }

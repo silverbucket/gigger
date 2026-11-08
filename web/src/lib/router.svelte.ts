@@ -1,4 +1,5 @@
 export const screens = [
+  "inbox",
   "bookings",
   "venues",
   "contacts",
@@ -12,7 +13,7 @@ export type Screen = (typeof screens)[number];
  * Hash routes keep the browser's back button working, so on a phone Back closes
  * a detail and returns to its list. Examples:
  *   #/bookings/gig/<bandId>/<gigId>[/edit|/played]
- *   #/bookings/message/<conversationId>
+ *   #/inbox[/<conversationId>]   (old #/bookings/message/<id> links redirect here)
  *   #/bookings/new[?from=<conversationId>|?contact=<contactId>]
  *   #/venues/<id>[/edit], #/venues/new
  */
@@ -35,6 +36,18 @@ class Router {
   read() {
     const [path, search = ""] = location.hash.replace(/^#\/?/, "").split("?");
     const [screen, ...parts] = path.split("/").filter(Boolean).map(decode);
+    // Conversations used to open inside Bookings; keep those links working.
+    if (screen === "bookings" && parts[0] === "message" && parts[1]) {
+      history.replaceState(
+        history.state,
+        "",
+        `#/inbox/${encodeURIComponent(parts[1])}`,
+      );
+      this.screen = "inbox";
+      this.parts = [parts[1]];
+      this.query = new URLSearchParams(search);
+      return;
+    }
     this.screen = (screens as readonly string[]).includes(screen)
       ? (screen as Screen)
       : "bookings";

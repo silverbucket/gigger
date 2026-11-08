@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 
-/** The action footer of a detail pane or phone form, above a 2px ink rule. Ghost actions go in `end`. */
+/** The sticky action footer of a detail pane or phone form. Ghost actions go in `end`. */
 let {
   children,
   end,
@@ -27,9 +27,9 @@ let {
   bottom: 0;
   z-index: 2;
   flex: none;
-  padding: 16px 28px;
-  border-top: var(--rule-ink);
-  background: var(--color-bg);
+  padding: 14px 28px;
+  border-top: var(--rule);
+  background: var(--color-surface);
 }
 .summary {
   display: flex;
@@ -48,11 +48,11 @@ let {
 .end {
   margin-left: auto;
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 @media (max-width: 899px) {
   .bar {
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    padding: 12px var(--pad) calc(12px + env(safe-area-inset-bottom));
   }
   .actions > :global(.btn) {
     flex: 1 1 0;
@@ -64,7 +64,7 @@ let {
   .end {
     flex-basis: 100%;
     margin-left: 0;
-    justify-content: flex-end;
+    justify-content: center;
   }
 }
 </style>

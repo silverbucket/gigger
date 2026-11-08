@@ -1,0 +1,522 @@
+/* Showday theme: the single source of colours, type, spacing, radius and the
+   shared component classes. Light and dark come from the same token names;
+   see DESIGN.md. Inter is loaded in index.html. */
+
+:root {
+  color-scheme: light;
+  accent-color: var(--color-accent-600);
+
+  /* Ground and surfaces */
+  --color-bg: #f5f5f3;
+  --color-surface: #ffffff;
+  --color-surface-2: #f0f0ed;
+  --color-sunken: #ebebe7;
+  --color-text: #18191c;
+  --muted: #55585f;
+  --faint: #6c6f77;
+  --color-divider: #e3e3de;
+  --color-border: #d6d6d0;
+  --on-accent: #ffffff;
+
+  /* Accent: a warm tomato red, used for actions, links, selection and focus. */
+  --color-accent: #e8552c;
+  --color-accent-100: #fff3ef;
+  --color-accent-200: #ffe4da;
+  --color-accent-300: #ffc6b3;
+  --color-accent-400: #fb9b7f;
+  --color-accent-500: #f2754f;
+  --color-accent-600: #cf4420;
+  --color-accent-700: #a8361a;
+  --color-accent-800: #7d2914;
+  --color-accent-900: #521b0e;
+
+  /* Neutral ramp */
+  --color-neutral-100: #f7f7f5;
+  --color-neutral-200: #efefec;
+  --color-neutral-300: #e3e3de;
+  --color-neutral-400: #c9c9c3;
+  --color-neutral-500: #a3a39e;
+  --color-neutral-600: #7d7e7a;
+  --color-neutral-700: #5c5d5a;
+  --color-neutral-800: #3e3f3d;
+  --color-neutral-900: #232422;
+
+  /* Meaning: one hue per gig status, plus danger and success. */
+  --tone-enquiry-bg: #efefed;
+  --tone-enquiry-fg: #4f5157;
+  --tone-offered-bg: #fdf1d8;
+  --tone-offered-fg: #885a07;
+  --tone-confirmed-bg: #e2f4e8;
+  --tone-confirmed-fg: #1b6b3c;
+  --tone-played-bg: #e6eef8;
+  --tone-played-fg: #2f5a8a;
+  --tone-cancelled-bg: #fbe9ec;
+  --tone-cancelled-fg: #9d2a3c;
+  --color-danger: #c0263e;
+  --color-danger-bg: #fdecef;
+  --color-success: #1f7a45;
+  --color-warning: #9a6408;
+
+  /* Channels */
+  --channel-email: #2f6bd8;
+  --channel-instagram: #c2367a;
+  --channel-messenger: #0b7dda;
+  --channel-other: #6b6e76;
+
+  /* Visibility */
+  --public-bg: #e4f3f1;
+  --public-fg: #176657;
+
+  --font-heading: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-heading-weight: 700;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgb(20 21 26 / 0.05);
+  --shadow-md: 0 1px 2px rgb(20 21 26 / 0.04), 0 4px 12px rgb(20 21 26 / 0.06);
+  --shadow-lg: 0 2px 6px rgb(20 21 26 / 0.06), 0 16px 40px rgb(20 21 26 / 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-bg: #111214;
+    --color-surface: #18191c;
+    --color-surface-2: #1f2024;
+    --color-sunken: #0c0d0f;
+    --color-text: #ececee;
+    --muted: #b0b2b9;
+    --faint: #8c8e96;
+    --color-divider: #2a2b30;
+    --color-border: #36373d;
+
+    --color-accent: #ff8a65;
+    --color-accent-100: #2e1b15;
+    --color-accent-200: #3e2219;
+    --color-accent-300: #582c1e;
+    --color-accent-400: #7e3c26;
+    --color-accent-500: #e0633c;
+    --color-accent-600: #c94a26;
+    --color-accent-700: #ffa688;
+    --color-accent-800: #ffc6b3;
+    --color-accent-900: #ffe4da;
+
+    --color-neutral-100: #1c1d21;
+    --color-neutral-200: #232428;
+    --color-neutral-300: #2e2f34;
+    --color-neutral-400: #45464c;
+    --color-neutral-500: #64656c;
+    --color-neutral-600: #85868d;
+    --color-neutral-700: #a5a6ad;
+    --color-neutral-800: #c8c9ce;
+    --color-neutral-900: #e6e6e9;
+
+    --tone-enquiry-bg: #26272b;
+    --tone-enquiry-fg: #c3c5cc;
+    --tone-offered-bg: #382b12;
+    --tone-offered-fg: #f0c674;
+    --tone-confirmed-bg: #15301f;
+    --tone-confirmed-fg: #86d6a3;
+    --tone-played-bg: #1b2738;
+    --tone-played-fg: #9cc0ea;
+    --tone-cancelled-bg: #3a1a22;
+    --tone-cancelled-fg: #f49aab;
+    --color-danger: #f47a90;
+    --color-danger-bg: #3a1a22;
+    --color-success: #86d6a3;
+    --color-warning: #f0c674;
+
+    --channel-email: #7aa6f5;
+    --channel-instagram: #ec82b6;
+    --channel-messenger: #5fb2f5;
+    --channel-other: #a0a2a9;
+
+    --public-bg: #12302b;
+    --seg-on: #34353c;
+    --public-fg: #7fd4c2;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.4), 0 16px 40px rgb(0 0 0 / 0.5);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+h1 {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+h2 {
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+h3 {
+  font-size: 17px;
+}
+h4 {
+  font-size: 15px;
+}
+h5,
+h6 {
+  font-size: 13px;
+}
+p {
+  margin: 0 0 var(--space-3);
+}
+a {
+  color: var(--color-accent-700);
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 3px;
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+img {
+  display: block;
+  max-width: 100%;
+}
+figure {
+  margin: 0;
+}
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+
+/* — buttons — */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.btn svg {
+  display: block;
+  flex: none;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-accent-600);
+  color: var(--on-accent);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+.btn-primary:hover {
+  background: var(--color-accent-700);
+}
+@media (prefers-color-scheme: dark) {
+  .btn-primary:hover {
+    background: var(--color-accent-500);
+  }
+}
+.btn-primary:active {
+  background: var(--color-accent-800);
+}
+.btn-secondary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+.btn-secondary:hover {
+  background: var(--color-surface-2);
+}
+.btn-secondary:active {
+  background: var(--color-sunken);
+}
+.btn-ghost {
+  color: var(--muted);
+  padding-inline: 10px;
+}
+.btn-ghost:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+.btn-ghost:active {
+  background: var(--color-sunken);
+}
+.btn-danger {
+  color: var(--color-danger);
+}
+.btn-danger:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+/* — forms — */
+.field > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--color-text);
+}
+.input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.input::placeholder {
+  color: var(--faint);
+}
+.input:hover {
+  border-color: var(--color-neutral-500);
+}
+.input:focus-visible {
+  border-color: var(--color-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+.input:disabled {
+  background: var(--color-surface-2);
+  color: var(--muted);
+}
+textarea.input {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.radio input,
+.seg-opt input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.radio .dot {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+}
+.radio:hover .dot {
+  border-color: var(--color-accent);
+}
+.radio input:checked + .dot {
+  border-color: var(--color-accent-600);
+  background: var(--color-accent-600);
+  box-shadow: inset 0 0 0 3px var(--color-surface);
+}
+.radio input:focus-visible + .dot {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Segmented control: a sunken track with a raised chosen option. */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-sunken);
+  border-radius: var(--radius-md);
+}
+.seg-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+.seg-opt:has(input:checked) {
+  background: var(--seg-on, var(--color-surface));
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+}
+.seg-opt:not(:has(input:checked)):hover {
+  color: var(--color-text);
+}
+.seg-opt:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* — cards — */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.elev-sm {
+  box-shadow: var(--shadow-sm);
+}
+.elev-md {
+  box-shadow: var(--shadow-md);
+}
+.elev-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+/* — dialog — */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(10 10 12 / 0.45);
+}
+.dialog {
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+/* — tags (plain HTML use; screens prefer the Tag component) — */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tag-accent {
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+}
+
+/* File inputs: the picker button looks like a secondary button. */
+input[type="file"] {
+  font-size: 13px;
+  color: var(--muted);
+}
+input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  background: var(--color-surface-2);
+}
+
+/* Search fields: a quiet clear button in the app's own colours. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: var(--faint);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}

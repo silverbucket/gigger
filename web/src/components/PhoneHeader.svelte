@@ -21,7 +21,7 @@ let {
 <div class="phone-header no-print">
   {#if back}
     <button type="button" class="back" onclick={back}>
-      <Icon name="chevron-left" /> {backLabel}
+      <Icon name="chevron-left" size={22} /> {backLabel}
     </button>
   {/if}
   {#if title}
@@ -55,28 +55,41 @@ let {
     z-index: 5;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     height: 56px;
-    padding: 0 16px;
-    background: var(--color-bg);
-    border-bottom: var(--rule-2);
+    padding: 0 8px 0 4px;
+    background: var(--color-surface);
+    border-bottom: var(--rule);
     flex: none;
+  }
+  .phone-header:not(:has(.back)) {
+    padding-left: 16px;
   }
 }
 .back {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   min-height: 44px;
-  padding: 0;
+  padding: 0 8px 0 4px;
   border: 0;
   background: transparent;
-  font-weight: 800;
-  font-size: 15px;
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--color-accent-600);
+}
+@media (prefers-color-scheme: dark) {
+  .back {
+    color: var(--color-accent);
+  }
 }
 h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 17px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .right {
   margin-left: auto;

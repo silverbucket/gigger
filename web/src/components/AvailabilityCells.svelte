@@ -26,7 +26,7 @@ export const nextAvailability = (value: Availability | undefined) =>
 </script>
 
 <script lang="ts">
-/** One cell per member: Available = ink, Can't make it = accent tint, No reply / Not asked = empty. */
+/** One chip per member: Available = green, Can't make it = red, No reply = amber, Not asked = plain. Click to cycle. */
 let {
   gig,
   members,
@@ -51,8 +51,11 @@ let {
         aria-label={`${member.name}: ${availabilityLabel[value ?? "none"]}. Change`}
         onclick={() => onchange?.(member.id, nextAvailability(value))}
       >
-        <span class="name ellipsis">{member.name}</span>
-        <span class="state">{availabilityLabel[value ?? "none"]}</span>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="text">
+          <span class="name ellipsis">{member.name}</span>
+          <span class="state">{availabilityLabel[value ?? "none"]}</span>
+        </span>
       </button>
     </li>
   {/each}
@@ -62,48 +65,80 @@ let {
 .cells {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-  border-bottom: var(--rule-2);
+  gap: 8px;
+  padding: 0 28px 16px;
 }
 li {
-  border-right: var(--rule);
-  border-bottom: var(--rule);
   min-width: 0;
 }
 button {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   height: 100%;
-  padding: 10px 12px;
-  border: 0;
-  background: transparent;
-  text-align: left;
   min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 button:hover:not(:disabled) {
-  background: var(--color-neutral-200);
+  border-color: var(--color-border);
+  background: var(--color-surface-2);
+}
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--color-neutral-500);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .name {
-  font-weight: 800;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 13px;
   max-width: 100%;
 }
 .state {
   font-size: 12px;
+  color: var(--muted);
 }
 .yes button {
-  background: var(--color-text);
-  color: var(--color-bg);
+  background: var(--tone-confirmed-bg);
+  border-color: transparent;
 }
-.yes button:hover:not(:disabled) {
-  background: var(--color-neutral-900);
+.yes .dot {
+  border: 0;
+  background: var(--tone-confirmed-fg);
+}
+.yes .state {
+  color: var(--tone-confirmed-fg);
 }
 .no button {
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
+  background: var(--tone-cancelled-bg);
+  border-color: transparent;
 }
-.no button:hover:not(:disabled) {
-  background: var(--color-accent-200);
+.no .dot {
+  border: 0;
+  background: var(--tone-cancelled-fg);
+}
+.no .state {
+  color: var(--tone-cancelled-fg);
+}
+.maybe .dot {
+  border: 0;
+  background: var(--tone-offered-fg);
+}
+.maybe .state {
+  color: var(--tone-offered-fg);
 }
 </style>

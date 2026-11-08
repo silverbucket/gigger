@@ -1,132 +1,204 @@
 <script lang="ts">
-import Tag from "./Tag.svelte";
+import type { Channel } from "@showday/schemas";
+import ChannelIcon from "./ChannelIcon.svelte";
+import Tag, { type TagKind } from "./Tag.svelte";
 
-/** An inbox item: channel, sender, preview, and how the sender matches a contact. */
+/** A conversation in the inbox: who, which channel, the latest line, and what it became (a gig, not a booking, or still to sort). */
 let {
   href,
   channel,
   sender,
+  subject,
   preview,
-  match,
-  matchTone = "ink",
   time,
+  note,
+  noteKind,
+  noteTag,
   selected = false,
-  dim = false,
+  unread = false,
 }: {
   href: string;
-  channel: string;
+  channel: Channel | "other";
   sender: string;
+  subject?: string;
   preview: string;
-  match: string;
-  matchTone?: "ink" | "accent" | "muted";
   time: string;
+  /** The line under the preview: the linked gig, or how the sender matches a contact. */
+  note?: string;
+  noteKind?: "accent" | "muted" | "ink";
+  /** A status tag beside the note, e.g. the linked gig's status. */
+  noteTag?: { kind: TagKind; label: string };
   selected?: boolean;
-  /** Already an enquiry, or set aside as not a booking. */
-  dim?: boolean;
+  /** Still to sort: shown with a dot and a bold name. */
+  unread?: boolean;
 } = $props();
+const initials = $derived(
+  sender
+    .replace(/[@._-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "?",
+);
 </script>
 
 <li>
   <a
     class="row"
     class:selected
-    class:dim
+    class:unread
     {href}
     aria-current={selected ? "true" : undefined}
   >
-    <span class="channel"><Tag kind="channel">{channel}</Tag></span>
-    <span class="what">
-      <span class="sender ellipsis">{sender}</span>
-      <span class="preview ellipsis">{preview}</span>
+    <span class="avatar" aria-hidden="true">
+      {initials}
+      <span class="badge"><ChannelIcon {channel} size={11} /></span>
     </span>
-    <span class="match {matchTone}">{match}</span>
-    <span class="time">{time}</span>
+    <span class="top">
+      <span class="sender ellipsis">{sender}</span>
+      <span class="time">{time}</span>
+    </span>
+    <span class="preview">
+      {#if subject}
+        <span class="subject">{subject}</span>
+        ·
+      {/if}
+      {preview}
+    </span>
+    {#if note || noteTag}
+      <span class="note {noteKind ?? "muted"}">
+        {#if noteTag}
+          <Tag kind={noteTag.kind}>{noteTag.label}</Tag>
+        {/if}
+        {#if note}
+          <span class="ellipsis">{note}</span>
+        {/if}
+      </span>
+    {/if}
+    {#if unread}
+      <span class="sr-only">To sort</span>
+    {/if}
   </a>
 </li>
 
 <style>
 .row {
+  position: relative;
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 220px 72px;
-  grid-template-areas: "channel what match time";
-  align-items: center;
-  gap: 2px 12px;
-  min-height: 64px;
-  padding: 10px 24px;
-  border-bottom: var(--rule);
+  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-areas:
+    "avatar top"
+    "avatar preview"
+    "avatar note";
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 12px 16px 12px 18px;
+  margin: 0 8px;
+  border-radius: var(--radius-lg);
   color: inherit;
   text-decoration: none;
 }
 .row:hover {
+  background: var(--hover-bg);
+}
+.selected,
+.selected:hover {
   background: var(--select-bg);
 }
-.selected {
-  background: var(--select-bg);
-  box-shadow: var(--select-mark);
+.unread::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 26px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent-600);
 }
-.channel {
-  grid-area: channel;
+.avatar {
+  grid-area: avatar;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
-.what {
-  grid-area: what;
+.badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 0 0 0 1px var(--color-divider);
+}
+.top {
+  grid-area: top;
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
 }
 .sender {
-  font-size: 15px;
-  font-weight: 800;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
 }
-.preview {
-  font-size: 13px;
-  color: var(--color-neutral-800);
-}
-.match {
-  grid-area: match;
-  font-size: 12px;
-  font-weight: 600;
-}
-.match.accent {
-  color: var(--color-accent-700);
-}
-.match.muted {
-  color: var(--color-neutral-600);
+.unread .sender {
+  font-weight: 700;
 }
 .time {
-  grid-area: time;
-  text-align: right;
+  flex: none;
   font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }
-.dim .sender,
-.dim .preview {
-  color: var(--color-neutral-600);
+.unread .time {
+  color: var(--color-text);
+  font-weight: 600;
 }
-@media (max-width: 1199px) {
-  .row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "channel what time"
-      ". match match";
-  }
+.preview {
+  grid-area: preview;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
 }
-@media (max-width: 899px) {
-  .row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      "channel sender time"
-      "preview preview preview"
-      "match match match";
-    padding: 12px 16px;
-    gap: 4px 8px;
-  }
-  .what {
-    display: contents;
-  }
-  .sender {
-    grid-area: sender;
-  }
-  .preview {
-    grid-area: preview;
-  }
+.subject {
+  color: var(--color-text);
+  font-weight: 500;
+}
+.note {
+  grid-area: note;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.note.muted {
+  color: var(--faint);
+}
+.note.accent {
+  color: var(--color-accent-700);
+}
+.note.ink {
+  color: var(--color-text);
 }
 </style>

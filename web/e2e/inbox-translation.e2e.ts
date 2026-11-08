@@ -2,9 +2,9 @@ import type { APIRequestContext, Page } from "@playwright/test";
 import { conversationId, type Message, messagePath } from "@showday/schemas";
 import { expect, go, login, test } from "./fixtures";
 
-const messageBody = (page: Page) => page.locator(".body .pre");
-const messageHeader = (page: Page) => page.locator(".detail-head .muted");
-const messageKicker = (page: Page) => page.locator(".detail-head .kicker");
+const messageBody = (page: Page) => page.locator(".bubble.latest .text > .pre");
+const messageHeader = (page: Page) => page.locator(".conv-head .subject");
+const messageKicker = (page: Page) => page.locator(".conv-head .when");
 
 /** Same formatting as `messageTimeLong` in the open message header (en-GB). */
 function formatMessageKickerTime(iso: string): string {
@@ -134,11 +134,11 @@ test.describe("inbox email translation", () => {
       "Nabídka koncertu",
     );
     await login(page, account);
-    await page.goto(`/#/bookings/message/${conversation}`);
+    await page.goto(`/#/inbox/${conversation}`);
     await expect(
       page.getByRole("button", { name: "Show in English" }),
     ).toBeVisible();
-    await expect(page.getByText("Nabídka koncertu")).toBeVisible();
+    await expect(messageHeader(page)).toHaveText("Nabídka koncertu");
     await page.getByRole("button", { name: "Show in English" }).click();
     await expect(
       page.getByRole("radiogroup", { name: "Message language" }),
@@ -188,7 +188,7 @@ test.describe("inbox email translation", () => {
       "Nabídka koncertu",
     );
     await login(page, account);
-    await page.goto(`/#/bookings/message/${seeded.conversation}`);
+    await page.goto(`/#/inbox/${seeded.conversation}`);
     await page.getByRole("button", { name: "Show in English" }).click();
     await expect(messageBody(page)).toContainText(/In English:/, {
       timeout: 15000,
@@ -260,7 +260,7 @@ test.describe("inbox email translation", () => {
       "Nabídka koncertu",
     );
     await login(page, account);
-    await page.goto(`/#/bookings/message/${conversation}`);
+    await page.goto(`/#/inbox/${conversation}`);
     await page.getByRole("button", { name: "Show in English" }).click();
     await expect(messageBody(page)).toContainText(/In English:/, {
       timeout: 15000,
@@ -271,8 +271,8 @@ test.describe("inbox email translation", () => {
     await expect(
       language.getByRole("radio", { name: "English", exact: true }),
     ).toBeChecked();
-    await go(page, "bookings");
-    await expect(page).toHaveURL(/#\/bookings$/);
+    await go(page, "inbox");
+    await expect(page).toHaveURL(/#\/inbox$/);
     await page
       .getByRole("link", { name: /Promoter/i })
       .first()
@@ -315,7 +315,7 @@ test.describe("inbox email translation", () => {
       "Booking enquiry",
     );
     await login(page, account);
-    await page.goto(`/#/bookings/message/${conversation}`);
+    await page.goto(`/#/inbox/${conversation}`);
     const group = page.getByRole("radiogroup", { name: "Message language" });
     await expect(
       page.getByRole("button", { name: "Show in Čeština" }),

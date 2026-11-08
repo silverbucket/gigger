@@ -1,5 +1,11 @@
 <script lang="ts">
-import type { Availability, Gig, GigStatus, Member } from "@showday/schemas";
+import {
+  type Availability,
+  type Gig,
+  type GigStatus,
+  type Member,
+  publicStatuses,
+} from "@showday/schemas";
 import AvailabilityCells, {
   availabilityLabel,
   availabilitySummary,
@@ -132,14 +138,19 @@ async function sendSheet() {
 }
 </script>
 
-<PhoneHeader back={() => router.back("bookings")} backLabel="Bookings">
+<PhoneHeader back={() => router.back("bookings")} backLabel="Gigs">
   {#snippet action()}
     <a class="btn btn-ghost" href={`#/${gigPath}/edit`}>Edit</a>
   {/snippet}
 </PhoneHeader>
 
 <div class="detail-head">
-  <p class="kicker">{data.band.name} · {gig.status}</p>
+  <p class="kicker head-tags">
+    <Tag kind={gig.status}
+      >{gig.status[0].toUpperCase() + gig.status.slice(1)}</Tag
+    >
+    <span>{data.band.name}</span>
+  </p>
   <h2>{gig.title}</h2>
   <p>
     {longDate(gig.date)}
@@ -153,6 +164,223 @@ async function sendSheet() {
   <StatusSteps status={gig.status} />
   <StatCells cells={times} />
 
+  {#if !ui.phone}
+    {@render bandSection()}
+  {/if}
+  <div class="sections">
+    {#if venue || gig.venue || address}
+      <DetailSection label="Where">
+        <span class="main">{venue?.name ?? gig.venue}</span>
+        {#if address}
+          <span class="line"
+            >{address}{venue?.city ? `, ${venue.city}` : ""}</span
+          >
+          <a
+            class="line"
+            href={mapUrl(address)}
+            target="_blank"
+            rel="noreferrer"
+            >Map and directions</a
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if contacts.length || gig.contacts?.length || others.length}
+      <DetailSection label="Who">
+        {#snippet action()}
+          <Tag kind="private">Private</Tag>
+        {/snippet}
+        {#each contacts as contact (contact.id)}
+          <span class="person">
+            <a class="main plain" href={`#/${path("contacts", contact.id)}`}
+              >{contact.name}</a
+            >
+            {#if contact.phone || contact.email}
+              <span class="line reach">
+                {#if contact.phone}
+                  <a href={`tel:${contact.phone.replace(/\s/g, "")}`}
+                    >{contact.phone}</a
+                  >
+                {/if}
+                {#if contact.phone && contact.email}
+                  <span aria-hidden="true"> · </span>
+                {/if}
+                {#if contact.email}
+                  <a href={`mailto:${contact.email}`}>{contact.email}</a>
+                {/if}
+              </span>
+            {/if}
+          </span>
+        {/each}
+        {#each gig.contacts ?? [] as contact, i (i)}
+          <span class="main">{contact}</span>
+        {/each}
+        {#if others.length}
+          <span class="line"
+            >Playing with
+            {#each others as other, i (other.id)}
+              {i ? ", " : ""}<a href={`#/${path("bands", other.id)}`}
+                >{other.name}</a
+              >
+            {/each}</span
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if fee || extras.length || gig.earnings}
+      <DetailSection label="Money">
+        {#snippet action()}
+          <Tag kind="private">Private</Tag>
+        {/snippet}
+        {#if gig.earnings}
+          <span class="main">
+            Took home {money(gig.earnings.takeHome, gig.earnings.currency)}
+          </span>
+          <span class="line">
+            {money(gig.earnings.total, gig.earnings.currency)}
+            total · {gig.earnings.dealType}{gig.earnings.numberOfBands
+              ? ` · split ${gig.earnings.numberOfBands} ways`
+              : ""}{gig.earnings.handedOver !== undefined
+              ? ` · ${money(gig.earnings.handedOver, gig.earnings.currency)} handed over`
+              : ""}
+          </span>
+          {#if fee}
+            <span class="line">Agreed fee {fee}</span>
+          {/if}
+        {:else}
+          <span class="main">{fee ?? "No fee yet"}</span>
+        {/if}
+        {#if extras.length}
+          <span class="line">Plus {extras.join(", ")}</span>
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if gig.enquirySource || gig.enquiryText?.trim() || gig.contactDate}
+      <DetailSection label="Enquiry">
+        <span class="main">
+          {gig.enquirySource
+            ? `via ${channelName[gig.enquirySource]}`
+            : "Enquiry"}{gig.contactDate
+            ? ` · ${mediumDate(gig.contactDate)}`
+            : ""}
+        </span>
+        {#if gig.enquiryText?.trim()}
+          <p class="line pre quote">{gig.enquiryText}</p>
+        {/if}
+        {#if gig.conversationId}
+          <a
+            class="btn btn-secondary convo"
+            href={`#/${path("inbox", gig.conversationId)}`}
+            ><Icon name="message" />Open conversation</a
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    <DetailSection label="Public page">
+      {#if publicStatuses.includes(gig.status)}
+        <span class="main with-tag"
+          ><Tag kind="public">Public</Tag>
+          {data.band.slug
+            ? "Listed on your public page"
+            : "Listed once you publish your page"}</span
+        >
+        <span class="line"
+          >Fans see the date, start time, venue and city{gig.public?.ticketUrl
+            ? ", ticket link"
+            : ""}{gig.public?.description?.trim() ? " and description" : ""}.
+          The title, fee, notes and contacts stay private.</span
+        >
+      {:else}
+        <span class="main with-tag"
+          ><Tag kind="private">Private</Tag>Not on your public page yet</span
+        >
+        <span class="line"
+          >Confirmed and played gigs are listed there. The title, fee, notes and
+          contacts always stay private.</span
+        >
+      {/if}
+    </DetailSection>
+    {#if gig.public?.description?.trim() || gig.public?.ticketUrl}
+      <DetailSection label="For fans">
+        {#if gig.public?.description?.trim()}
+          <span class="main pre">{gig.public.description}</span>
+        {/if}
+        {#if gig.public?.ticketUrl}
+          <span class="line"
+            >Tickets:
+            <a href={gig.public.ticketUrl} target="_blank" rel="noreferrer"
+              >{gig.public.ticketUrl.replace(/^https?:\/\//, "")}</a
+            ></span
+          >
+        {/if}
+      </DetailSection>
+    {/if}
+    {#if gig.notes?.trim()}
+      <DetailSection label="Notes">
+        {#snippet action()}
+          <Tag kind="private">Private</Tag>
+        {/snippet}
+        <span class="main pre">{gig.notes}</span>
+      </DetailSection>
+    {/if}
+    {#if gig.status !== "cancelled"}
+      <DetailSection label="Gig sheet">
+        <span>{sheetLine}</span>
+        {#snippet action()}
+          {#if !ui.phone}
+            <button
+              type="button"
+              class="btn btn-secondary"
+              disabled={ui.busy}
+              onclick={sendSheet}
+            >
+              {gig.sheetSentAt ? "Send again" : "Send to members"}
+            </button>
+          {/if}
+        {/snippet}
+      </DetailSection>
+    {/if}
+    {#if ui.phone && (canCancel || move)}
+      <DetailSection label="Status">
+        <span class="phone-status">
+          {#if gig.status === "confirmed" && !playedDue}
+            <button
+              type="button"
+              class="btn btn-secondary"
+              disabled={ui.busy}
+              onclick={() => moveTo("played")}
+            >
+              Mark played
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="btn btn-secondary"
+            onclick={() => window.print()}
+          >
+            <Icon name="printer" />
+            Print
+          </button>
+          {#if canCancel}
+            <button
+              type="button"
+              class="btn btn-ghost btn-danger"
+              disabled={ui.busy}
+              onclick={() => moveTo("cancelled")}
+            >
+              Cancel gig
+            </button>
+          {/if}
+        </span>
+      </DetailSection>
+    {/if}
+  </div>
+  {#if ui.phone}
+    {@render bandSection()}
+  {/if}
+</div>
+
+{#snippet bandSection()}
   <SectionLabel>
     Band
     {#snippet aside()}
@@ -211,7 +439,7 @@ async function sendSheet() {
                 disabled={ui.busy}
                 onclick={() => ask(member)}
               >
-                {value === "maybe" ? "Ask again" : "Ask"}
+                Ask
               </button>
             {/if}
           </span>
@@ -226,172 +454,7 @@ async function sendSheet() {
       onchange={setAvailability}
     />
   {/if}
-
-  <div class="sections">
-    {#if venue || gig.venue || address}
-      <DetailSection label="Where">
-        <span class="main">{venue?.name ?? gig.venue}</span>
-        {#if address}
-          <span class="line"
-            >{address}{venue?.city ? `, ${venue.city}` : ""}</span
-          >
-          <a
-            class="line"
-            href={mapUrl(address)}
-            target="_blank"
-            rel="noreferrer"
-            >Map and directions ↗</a
-          >
-        {/if}
-      </DetailSection>
-    {/if}
-    {#if contacts.length || gig.contacts?.length || others.length}
-      <DetailSection label="Who">
-        {#each contacts as contact (contact.id)}
-          <a class="main plain" href={`#/${path("contacts", contact.id)}`}
-            >{[contact.name, contact.phone, contact.email]
-              .filter(Boolean)
-              .join(" · ")}</a
-          >
-        {/each}
-        {#each gig.contacts ?? [] as contact, i (i)}
-          <span class="main">{contact}</span>
-        {/each}
-        {#if others.length}
-          <span class="line"
-            >Playing with
-            {#each others as other, i (other.id)}
-              {i ? ", " : ""}<a href={`#/${path("bands", other.id)}`}
-                >{other.name}</a
-              >
-            {/each}</span
-          >
-        {/if}
-      </DetailSection>
-    {/if}
-    {#if fee || extras.length || gig.earnings}
-      <DetailSection label="Money">
-        {#if gig.earnings}
-          <span class="main">
-            Took home {money(gig.earnings.takeHome, gig.earnings.currency)}
-            <Tag kind="private">Private</Tag>
-          </span>
-          <span class="line">
-            {money(gig.earnings.total, gig.earnings.currency)}
-            total · {gig.earnings.dealType}{gig.earnings.numberOfBands
-              ? ` · split ${gig.earnings.numberOfBands} ways`
-              : ""}{gig.earnings.handedOver !== undefined
-              ? ` · ${money(gig.earnings.handedOver, gig.earnings.currency)} handed over`
-              : ""}
-          </span>
-          {#if fee}
-            <span class="line">Agreed fee {fee}</span>
-          {/if}
-        {:else}
-          <span class="main"
-            >{fee ?? "No fee yet"} <Tag kind="private">Private</Tag></span
-          >
-        {/if}
-        {#if extras.length}
-          <span class="line">Plus {extras.join(", ")}</span>
-        {/if}
-      </DetailSection>
-    {/if}
-    {#if gig.enquirySource || gig.enquiryText?.trim() || gig.contactDate}
-      <DetailSection label="Enquiry">
-        <span class="main">
-          {gig.enquirySource
-            ? `via ${channelName[gig.enquirySource]}`
-            : "Enquiry"}{gig.contactDate
-            ? ` · ${mediumDate(gig.contactDate)}`
-            : ""}
-        </span>
-        {#if gig.enquiryText?.trim()}
-          <p class="line pre quote">{gig.enquiryText}</p>
-        {/if}
-        {#if gig.conversationId}
-          <a
-            class="line"
-            href={`#/${path("bookings", "message", gig.conversationId)}`}
-            >Open the conversation</a
-          >
-        {/if}
-      </DetailSection>
-    {/if}
-    {#if gig.public?.description?.trim() || gig.public?.ticketUrl}
-      <DetailSection label="Public">
-        {#if gig.public?.description?.trim()}
-          <span class="main pre">{gig.public.description}</span>
-        {/if}
-        {#if gig.public?.ticketUrl}
-          <span class="line"
-            >Tickets:
-            <a href={gig.public.ticketUrl} target="_blank" rel="noreferrer"
-              >{gig.public.ticketUrl.replace(/^https?:\/\//, "")}</a
-            ></span
-          >
-        {/if}
-      </DetailSection>
-    {/if}
-    {#if gig.notes?.trim()}
-      <DetailSection label="Notes">
-        <span class="main pre">{gig.notes}</span>
-        <span><Tag kind="private">Private</Tag></span>
-      </DetailSection>
-    {/if}
-    {#if gig.status !== "cancelled"}
-      <DetailSection label="Gig sheet">
-        <span>{sheetLine}</span>
-        {#snippet action()}
-          {#if !ui.phone}
-            <button
-              type="button"
-              class="btn btn-secondary"
-              disabled={ui.busy}
-              onclick={sendSheet}
-            >
-              {gig.sheetSentAt ? "Send again" : "Send to members"}
-            </button>
-          {/if}
-        {/snippet}
-      </DetailSection>
-    {/if}
-    {#if ui.phone && (canCancel || move)}
-      <DetailSection label="Status">
-        <span class="phone-status">
-          {#if gig.status === "confirmed" && !playedDue}
-            <button
-              type="button"
-              class="btn btn-secondary"
-              disabled={ui.busy}
-              onclick={() => moveTo("played")}
-            >
-              Mark played
-            </button>
-          {/if}
-          <button
-            type="button"
-            class="btn btn-secondary"
-            onclick={() => window.print()}
-          >
-            <Icon name="printer" />
-            Print
-          </button>
-          {#if canCancel}
-            <button
-              type="button"
-              class="btn btn-ghost"
-              disabled={ui.busy}
-              onclick={() => moveTo("cancelled")}
-            >
-              Cancel gig
-            </button>
-          {/if}
-        </span>
-      </DetailSection>
-    {/if}
-  </div>
-</div>
+{/snippet}
 
 {#if ui.phone}
   <BottomActionBar>
@@ -458,7 +521,7 @@ async function sendSheet() {
       {#if canCancel}
         <button
           type="button"
-          class="btn btn-ghost"
+          class="btn btn-ghost btn-danger"
           disabled={ui.busy}
           onclick={() => moveTo("cancelled")}
         >
@@ -483,7 +546,7 @@ async function sendSheet() {
   justify-content: space-between;
   gap: 12px;
   min-height: 60px;
-  padding: 8px 16px;
+  padding: 8px var(--pad);
   border-bottom: var(--rule);
 }
 .who {
@@ -492,24 +555,27 @@ async function sendSheet() {
   font-size: 13px;
 }
 .who strong {
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 600;
 }
 .choices {
   display: flex;
   gap: 6px;
 }
 .choice {
-  border-color: var(--color-divider);
+  border-color: var(--color-border);
+  background: var(--color-surface);
   min-width: 52px;
 }
 .choice.yes {
-  background: var(--color-text);
-  color: var(--color-bg);
+  background: var(--tone-confirmed-bg);
+  color: var(--tone-confirmed-fg);
+  border-color: transparent;
 }
 .choice.no {
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
-  border-color: var(--color-accent);
+  background: var(--tone-cancelled-bg);
+  color: var(--tone-cancelled-fg);
+  border-color: transparent;
 }
 .plain {
   color: inherit;
@@ -519,7 +585,7 @@ async function sendSheet() {
   color: var(--color-accent-700);
 }
 p.line.quote {
-  border-left: 2px solid var(--color-divider);
+  border-left: 3px solid var(--color-accent-200);
   padding-left: 10px;
   margin: 4px 0;
   max-height: 9.5em;
@@ -532,6 +598,37 @@ p.line.quote {
 }
 .main :global(.tag) {
   margin-left: 6px;
-  vertical-align: 2px;
+  vertical-align: 1px;
+}
+.with-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.main.with-tag :global(.tag) {
+  margin-left: 0;
+}
+.head-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.person {
+  display: flex;
+  flex-direction: column;
+}
+.person + .person {
+  margin-top: 6px;
+}
+.reach a {
+  color: var(--color-text);
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+}
+.reach a:hover {
+  color: var(--color-accent-700);
+}
+.convo {
+  align-self: flex-start;
+  margin-top: 6px;
 }
 </style>

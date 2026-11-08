@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 
-/** 12px uppercase label with a 2px rule under it; optional right-hand note. */
+/** A quiet group heading with an optional right-hand note. */
 let {
   children,
   aside,
@@ -26,28 +26,23 @@ let {
 .section-label {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-4);
-  padding: 18px 24px 8px;
-  border-bottom: var(--rule-2);
-}
-.accent {
-  border-bottom: var(--rule-ink);
+  padding: 20px var(--pad) 8px;
 }
 h3 {
   margin: 0;
   font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .accent h3 {
   color: var(--color-accent-700);
 }
 .aside {
-  font-size: 12px;
+  font-size: 13px;
   text-align: right;
-}
-@media (max-width: 899px) {
-  .section-label {
-    padding-inline: 16px;
-  }
+  color: var(--muted);
 }
 </style>

@@ -1,19 +1,21 @@
-/* App-wide rules built on the Modernist tokens. Component-specific styles live in each component. */
+/* App-wide rules built on the theme tokens. Component-specific styles live in each component. */
 
 :root {
   --ink: var(--color-text);
-  --muted: var(--color-neutral-700);
   --rule: 1px solid var(--color-divider);
-  --rule-2: 2px solid var(--color-divider);
-  --rule-ink: 2px solid var(--color-text);
-  --select-bg: var(--color-neutral-200);
-  --select-mark: inset 4px 0 0 var(--color-accent);
-  --topbar: 64px;
-  --tabbar: 60px;
+  --rule-2: 1px solid var(--color-divider);
+  --rule-ink: 1px solid var(--color-divider);
+  --select-bg: var(--color-accent-100);
+  --select-mark: inset 3px 0 0 var(--color-accent);
+  --hover-bg: var(--color-surface-2);
+  --topbar: 56px;
+  --tabbar: 64px;
+  --sidebar: 232px;
+  --pad: 24px;
 }
 @media (max-width: 899px) {
   :root {
-    --topbar: 56px;
+    --pad: 16px;
   }
 }
 html,
@@ -52,36 +54,37 @@ ol {
   margin: 0;
   padding: 0;
 }
-h1,
-h2,
-h3 {
-  letter-spacing: -0.03em;
-}
 select.input {
   appearance: none;
-  padding-right: 32px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23201e1d' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238d9098' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
 }
-/* Wide buttons keep their label flush left and push the icon right. */
+/* Wide buttons keep their label left and push the icon right. */
 .btn-wide {
   justify-content: space-between;
   text-align: left;
   min-width: 180px;
 }
 .btn-block {
+  display: flex;
+  width: 100%;
   justify-content: space-between;
 }
 .btn {
   white-space: nowrap;
 }
 .btn-primary:disabled:hover {
-  background: var(--color-accent);
+  background: var(--color-accent-600);
 }
 @media (max-width: 899px) {
   .btn {
     min-height: 44px;
+  }
+  .btn-icon {
+    width: 44px;
+    height: 44px;
   }
   .input {
     min-height: 44px;
@@ -89,31 +92,28 @@ select.input {
   }
 }
 
-/* Section label: 12px uppercase with a 2px rule under it. */
+/* Section label: small, quiet, sentence case. */
 .label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  color: var(--muted);
 }
 .small-label {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
 }
 .kicker {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-accent-700);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
 }
 .muted {
   color: var(--muted);
 }
 .alert-text {
-  color: var(--color-accent-700);
+  color: var(--color-danger);
 }
 .pre {
   white-space: pre-wrap;
@@ -132,53 +132,53 @@ select.input {
   white-space: nowrap;
 }
 
-/* Page heading inside a list pane: "Venues" 56px over a summary line. */
+/* Page heading inside a list pane: title over a summary line, filters on the right. */
 .page-head {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
   align-items: end;
   justify-content: space-between;
-  padding: 24px 24px 20px;
-  border-bottom: var(--rule-2);
+  padding: 24px var(--pad) 16px;
 }
 .page-head h1 {
-  font-size: 56px;
-  line-height: 1;
-  margin: 0 0 6px;
+  font-size: 26px;
+  line-height: 1.15;
+  margin: 0 0 4px;
 }
 .page-head p {
   margin: 0;
   font-size: 14px;
+  color: var(--muted);
 }
 @media (max-width: 899px) {
   .page-head {
-    padding: 16px;
+    padding: 16px var(--pad) 12px;
   }
   .page-head h1 {
-    font-size: 32px;
+    font-size: 24px;
   }
 }
 
-/* Detail pane head: kicker, big title, sub line. */
+/* Detail pane head: kicker, title, sub line. */
 .detail-head {
-  padding: 22px 28px 16px;
-  border-bottom: var(--rule-2);
+  padding: 24px 28px 18px;
+  border-bottom: var(--rule);
 }
 .detail-head h2 {
-  font-size: 36px;
-  margin: 6px 0 4px;
+  font-size: 24px;
+  margin: 4px 0 4px;
 }
 .detail-head p {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
 }
 @media (max-width: 899px) {
   .detail-head {
-    padding: 16px;
+    padding: 16px var(--pad);
   }
   .detail-head h2 {
-    font-size: 32px;
+    font-size: 22px;
   }
 }
 
@@ -196,9 +196,10 @@ select.input {
 .field > label,
 .field > .field-label {
   display: block;
-  font-size: 12px;
-  margin-bottom: 5px;
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--color-text);
 }
 .field-row {
   display: grid;
@@ -206,40 +207,88 @@ select.input {
   gap: var(--space-3);
 }
 .field-hint {
-  font-size: 12px;
-  margin: 4px 0 0;
+  font-size: 13px;
+  margin: 6px 0 0;
   color: var(--muted);
 }
 .required {
-  color: var(--color-accent-700);
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
 }
 
 /* Small inline notice strip, e.g. the global error. */
 .notice {
   margin: 0;
-  padding: 10px 24px;
+  padding: 10px var(--pad);
   font-size: 14px;
-  border-bottom: var(--rule-2);
-  background: var(--color-neutral-100);
+  border-bottom: var(--rule);
+  background: var(--color-surface-2);
 }
 .notice.error {
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 .empty {
   margin: 0;
-  padding: 16px 24px;
+  padding: 20px var(--pad);
   font-size: 14px;
   color: var(--muted);
-}
-@media (max-width: 899px) {
-  .notice,
-  .empty {
-    padding-inline: 16px;
-  }
 }
 @media print {
   .no-print {
     display: none;
   }
+}
+
+/* On desktop the page bar names the screen, so a list pane's own heading would repeat it. */
+@media (min-width: 900px) {
+  .page-head:not(.keep-title) h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Who can see a record: a one-line note under a page or form heading. */
+.visibility-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.visibility-note svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* Table-like list header inside a list pane. */
+.table-head {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+}
+
+/* Shared list row: rounded, hover-tinted, selected in accent. */
+.list-row {
+  margin: 0 12px;
+  border-radius: var(--radius-lg);
+}
+
+/* A field label with a visibility tag on the right. */
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.label-row label {
+  font-size: 13px;
+  font-weight: 500;
 }

@@ -474,7 +474,7 @@ function createBand(event: SubmitEvent) {
 
 {#snippet memberFields(compact: boolean)}
   <div class="field">
-    <label for="member-name">Name <span class="required">*</span></label>
+    <label for="member-name">Name <span class="required">Required</span></label>
     <input
       id="member-name"
       class="input"
@@ -687,7 +687,6 @@ function createBand(event: SubmitEvent) {
         </div>
         <fieldset class="field colors">
           <legend class="label">Theme</legend>
-          <p class="hint">Theme presets</p>
           <div class="theme-swatches">
             {#each Object.entries(
               PAGE_THEME_PRESETS,
@@ -699,16 +698,16 @@ function createBand(event: SubmitEvent) {
                   (profileTheme.background === colors.background &&
                     profileTheme.text === colors.text &&
                     profileTheme.accent === colors.accent)}
-                style={`background:${colors.background};color:${colors.text};border-color:${colors.accent}`}
+                style={`background:${colors.background};color:${colors.text}`}
                 onclick={() =>
                   applyThemePreset(preset as Exclude<ThemePreset, "custom">)}
               >
+                <span class="dot" style={`background:${colors.accent}`}></span>
                 <span class="capitalize">{preset}</span>
               </button>
             {/each}
           </div>
-          <p class="hint">Custom colors</p>
-          <div class="field-row ports">
+          <div class="field-row three">
             <div class="field">
               <label for="page-bg">Background</label>
               <input
@@ -941,6 +940,10 @@ function createBand(event: SubmitEvent) {
       />
     </div>
     {#if tab === "members"}
+      <p class="visibility-note phone-note">
+        <Icon name="lock" size={13} />Private. Member details are never
+        published.
+      </p>
       <ul class="phone-members">
         {#each current.members as member (member.id)}
           <li>
@@ -951,36 +954,24 @@ function createBand(event: SubmitEvent) {
               <span class="avatar">{initials(member.name)}</span>
               <span class="what">
                 <strong>{member.name}</strong>
-                <span class="sub">
-                  {[member.email, member.phone, member.messenger].filter(
-                    Boolean,
-                  ).length
-                    ? plural(
-                        [member.email, member.phone, member.messenger].filter(
-                          Boolean,
-                        ).length,
-                        "way to reach",
-                        "ways to reach",
-                      )
-                    : "No contact details yet"}
+                <span class="sub ellipsis">
+                  {[member.phone, member.email, member.messenger]
+                    .filter(Boolean)
+                    .join(" · ") || "No contact details yet"}
                 </span>
               </span>
             </a>
-            <ul class="reach">
-              {#each memberChannels(member) as channel (channel.label)}
-                <li>
-                  {#if channel.value && channel.href}
+            {#if memberChannels(member).some((c) => c.value && c.href)}
+              <ul class="reach">
+                {#each memberChannels(member).filter(
+                  (c) => c.value && c.href,
+                ) as channel (channel.label)}
+                  <li>
                     <a href={channel.href}>{channel.verb}</a>
-                  {:else}
-                    <span
-                      >—<span class="sr-only"
-                        >No {channel.label.toLowerCase()}</span
-                      ></span
-                    >
-                  {/if}
-                </li>
-              {/each}
-            </ul>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
           </li>
         {:else}
           <li class="empty">
@@ -1001,16 +992,19 @@ function createBand(event: SubmitEvent) {
 {:else}
   <div class="desktop">
     <div class="main">
-      <div class="page-head">
+      <div class="page-head keep-title">
         <div>
-          <p class="kicker">Band · you lead this band</p>
+          <p class="kicker">You lead this band</p>
           <h1>{current.band.name}</h1>
         </div>
       </div>
       <SectionLabel>
         Members · {current.members.length}
         {#snippet aside()}
-          Only a name is required. Contact details are optional.
+          <span class="visibility-note"
+            ><Icon name="lock" size={13} />Private. Member details are never
+            published.</span
+          >
         {/snippet}
       </SectionLabel>
       <div class="table-head" aria-hidden="true">
@@ -1056,25 +1050,29 @@ function createBand(event: SubmitEvent) {
                 ) as line (line)}
                   <span>{line}</span>
                 {:else}
-                  <span class="muted">Name only — no contact details</span>
+                  <span class="muted">No contact details yet</span>
                 {/each}
               </span>
               <span class="row-actions">
                 <button
                   type="button"
-                  class="btn btn-ghost"
+                  class="btn btn-ghost btn-icon"
                   disabled={ui.busy}
+                  title="Edit"
                   onclick={() => edit(member)}
                 >
-                  Edit<span class="sr-only"> {member.name}</span>
+                  <Icon name="pencil" />
+                  <span class="sr-only">Edit {member.name}</span>
                 </button>
                 <button
                   type="button"
-                  class="btn"
+                  class="btn btn-ghost btn-icon remove"
                   disabled={ui.busy}
+                  title="Remove"
                   onclick={() => removeMember(member)}
                 >
-                  Remove<span class="sr-only"> {member.name}</span>
+                  <Icon name="trash" />
+                  <span class="sr-only">Remove {member.name}</span>
                 </button>
               </span>
             </li>
@@ -1108,7 +1106,7 @@ function createBand(event: SubmitEvent) {
 <style>
 .desktop {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 560px;
+  grid-template-columns: minmax(0, 1fr) 500px;
   height: 100%;
 }
 .main,
@@ -1117,24 +1115,23 @@ function createBand(event: SubmitEvent) {
   min-height: 0;
 }
 .side {
-  border-left: var(--rule-ink);
+  border-left: var(--rule);
+  background: var(--color-bg);
 }
 .table-head,
 .member {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 230px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1.2fr) 96px minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
   padding: 10px 24px;
 }
 .table-head {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding-block: 8px;
   border-bottom: var(--rule);
 }
 .member {
-  min-height: 68px;
+  min-height: 64px;
   border-bottom: var(--rule);
 }
 .name {
@@ -1144,23 +1141,26 @@ function createBand(event: SubmitEvent) {
   min-width: 0;
 }
 .name strong {
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 600;
 }
 .avatar {
   display: grid;
   place-items: center;
   flex: none;
-  width: 40px;
-  height: 40px;
-  background: var(--color-text);
-  color: var(--color-bg);
-  font-weight: 800;
-  font-size: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+  font-weight: 600;
+  font-size: 13px;
 }
 .details {
   display: flex;
   flex-direction: column;
   font-size: 13px;
+  color: var(--muted);
   min-width: 0;
 }
 .row-actions {
@@ -1169,15 +1169,19 @@ function createBand(event: SubmitEvent) {
 }
 .add,
 .edit-row .add {
-  padding: 16px 24px;
-  background: var(--color-surface);
-  border-bottom: var(--rule-2);
+  margin: 12px 24px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
 }
 .add fieldset {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
   align-items: end;
+}
+.add-actions {
+  grid-column: 1 / -1;
 }
 .add-actions {
   display: flex;
@@ -1186,8 +1190,9 @@ function createBand(event: SubmitEvent) {
 .offer {
   margin-top: 12px;
   padding: 12px 14px;
-  border: var(--rule-ink);
-  background: var(--color-bg);
+  border: 1px solid var(--color-accent-200);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-100);
 }
 .offer p {
   margin: 4px 0;
@@ -1197,8 +1202,8 @@ function createBand(event: SubmitEvent) {
   padding-inline: 0;
 }
 .block {
-  padding: 18px 28px 20px;
-  border-bottom: var(--rule-2);
+  padding: 20px 28px;
+  border-bottom: var(--rule);
 }
 .block h3 {
   margin: 0 0 8px;
@@ -1211,8 +1216,8 @@ function createBand(event: SubmitEvent) {
   margin-bottom: 8px;
 }
 .big {
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 20px;
+  font-weight: 700;
 }
 .prefix {
   display: flex;
@@ -1224,14 +1229,20 @@ function createBand(event: SubmitEvent) {
   padding: 0 10px;
   font-size: 14px;
   color: var(--muted);
-  border: 1px solid var(--color-divider);
+  border: 1px solid var(--color-border);
   border-right: 0;
-  background: var(--color-neutral-200);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  background: var(--color-surface-2);
   white-space: nowrap;
+}
+.prefix :global(.input) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 .hint {
   font-size: 13px;
   margin: 0;
+  color: var(--muted);
 }
 .banner-preview {
   display: block;
@@ -1239,6 +1250,7 @@ function createBand(event: SubmitEvent) {
   max-height: 10rem;
   object-fit: cover;
   margin-bottom: 8px;
+  border-radius: var(--radius-md);
   border: var(--rule);
 }
 .colors {
@@ -1256,17 +1268,55 @@ function createBand(event: SubmitEvent) {
   margin-bottom: 12px;
 }
 .swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex: 1 1 4.5rem;
   min-height: 2.75rem;
-  border: 2px solid transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: capitalize;
   cursor: pointer;
 }
+.swatch .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
 .swatch.selected {
-  outline: 2px solid var(--color-accent-700);
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.remove:hover,
+.remove:focus-visible {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+.phone-note {
+  margin: 0;
+  padding: 4px var(--pad) 8px;
+}
+.colors input[type="color"] {
+  height: 40px;
+  padding: 4px;
+  cursor: pointer;
+}
+.colors input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.colors input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+.colors input[type="color"]::-moz-color-swatch {
+  border: 0;
+  border-radius: 5px;
 }
 .socials-block .hint {
   margin-bottom: 8px;
@@ -1334,19 +1384,24 @@ textarea.input {
 .pub-error {
   margin: 10px 0 0;
   font-size: 13px;
-  color: var(--color-accent-700);
+  color: var(--color-danger);
+}
+.bands {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 12px;
 }
 .bands li {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding: 14px 28px;
-  border-bottom: var(--rule);
+  padding: 10px 16px;
+  border-radius: var(--radius-lg);
 }
 .bands .viewing {
   background: var(--select-bg);
-  box-shadow: var(--select-mark);
 }
 .what {
   display: flex;
@@ -1354,11 +1409,12 @@ textarea.input {
   min-width: 0;
 }
 .what strong {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 .sub {
   font-size: 12px;
+  color: var(--muted);
 }
 .viewing-label {
   font-size: 13px;
@@ -1379,7 +1435,7 @@ textarea.input {
 .optional {
   margin: 8px 0 0;
   padding-top: 12px;
-  border-top: var(--rule-2);
+  border-top: var(--rule);
 }
 .member-screen {
   display: flex;
@@ -1410,14 +1466,19 @@ textarea.input {
     padding-bottom: calc(var(--tabbar) + 16px);
   }
   .phone-tabs {
-    border-bottom: var(--rule-2);
+    padding: 12px var(--pad) 8px;
   }
-  .phone-tabs :global(.seg) {
-    border-top: 0;
-    border-left: 0;
+  .phone-members {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px var(--pad) 0;
   }
   .phone-members > li {
-    border-bottom: var(--rule-2);
+    border: 1px solid var(--color-divider);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    overflow: hidden;
   }
   .phone-member {
     display: flex;
@@ -1428,30 +1489,21 @@ textarea.input {
     text-decoration: none;
   }
   .reach {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: var(--rule);
-  }
-  .reach li {
-    border-right: var(--rule);
-  }
-  .reach li:last-child {
-    border-right: 0;
-  }
-  .reach a,
-  .reach span {
     display: flex;
+    gap: 8px;
+    padding: 0 16px 12px 64px;
+  }
+  .reach a {
+    display: inline-flex;
     align-items: center;
-    min-height: 44px;
-    padding: 0 16px;
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-100);
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 600;
     color: var(--color-accent-700);
     text-decoration: none;
-  }
-  .reach span {
-    color: var(--color-neutral-500);
-    font-weight: 400;
   }
   .block,
   .bands li {

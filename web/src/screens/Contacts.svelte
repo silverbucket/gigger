@@ -171,15 +171,20 @@ async function remove(contact: Contact) {
 }
 </script>
 
-<ListDetailLayout open={!!id} key={router.parts.join("/")}>
+<ListDetailLayout fill open={!!id} key={router.parts.join("/")}>
   {#snippet list()}
     <div class="pane">
       <div class="page-head">
         <div>
           <h1>Contacts</h1>
           <p>
-            {plural(rows.length, "person", "people")}
-            · {idle} not on a gig yet
+            {plural(rows.length, "person", "people")}{idle
+              ? ` · ${idle} without gigs yet`
+              : ""}
+          </p>
+          <p class="visibility-note">
+            <Icon name="lock" size={13} />Private. Contacts are only for you and
+            never published.
           </p>
         </div>
         <Segmented
@@ -202,14 +207,6 @@ async function remove(contact: Contact) {
           placeholder="Search by name, email, handle or venue"
           bind:value={query}
         >
-        {#if ui.phone}
-          <a
-            class="btn btn-secondary"
-            href="#/contacts/new"
-            aria-label="New contact"
-            ><Icon name="plus" /></a
-          >
-        {/if}
       </div>
       {#if ui.phone}
         <a class="other-bands" href="#/bands"
@@ -217,14 +214,14 @@ async function remove(contact: Contact) {
         >
       {/if}
       <div class="table-head" aria-hidden="true">
-        <span>Name · linked to</span><span>Reach on</span><span>Gigs</span
+        <span>Name</span><span>Reach on</span><span>Gigs</span
         ><span>Last gig</span>
       </div>
       <ul>
         {#each shown as row (row.contact.id)}
           <li>
             <a
-              class="row"
+              class="row list-row"
               class:selected={row.contact.id === id}
               aria-current={row.contact.id === id ? "true" : undefined}
               href={`#/${path("contacts", row.contact.id)}`}
@@ -241,7 +238,7 @@ async function remove(contact: Contact) {
               <span class="count">{row.gigs.length}</span>
               <span class="last"
                 >{row.last
-                  ? `${dayNumber(row.last)} ${monthShort(row.last).toUpperCase()}`
+                  ? `${dayNumber(row.last)} ${monthShort(row.last)}`
                   : "—"}</span
               >
             </a>
@@ -316,7 +313,7 @@ async function remove(contact: Contact) {
             </div>
           </div>
           <div class="field">
-            <label for="contact-notes">Private notes</label>
+            <label for="contact-notes">Notes</label>
             <textarea
               id="contact-notes"
               class="input"
@@ -340,6 +337,23 @@ async function remove(contact: Contact) {
           >
             Cancel
           </button>
+          {#snippet end()}
+            {#if selected}
+              {@const linked =
+                selected.gigs.length > 0 || selected.others.length > 0}
+              <button
+                type="button"
+                class="btn btn-ghost btn-danger"
+                disabled={ui.busy || linked}
+                title={linked
+                  ? "Linked to gigs or bands. Remove those links first."
+                  : undefined}
+                onclick={() => selected && remove(selected.contact)}
+              >
+                Remove contact
+              </button>
+            {/if}
+          {/snippet}
         </BottomActionBar>
       </form>
     {:else if selected}
@@ -359,6 +373,9 @@ async function remove(contact: Contact) {
           Contact{linkedTo(selected) ? ` · ${linkedTo(selected)}` : ""}
         </p>
         <h2>{contact.name}</h2>
+        <p class="visibility-note">
+          <Icon name="lock" size={13} />Private. Never published.
+        </p>
       </div>
       <div class="scroll">
         <ChannelGrid
@@ -387,12 +404,7 @@ async function remove(contact: Contact) {
             <span class="pre">{contact.notes}</span>
           </DetailSection>
         {/if}
-        <SectionLabel>
-          Gigs
-          {#snippet aside()}
-            {gigs.length}
-          {/snippet}
-        </SectionLabel>
+        <SectionLabel>Gigs · {gigs.length}</SectionLabel>
         <ul>
           {#each gigs as gig (gig.id)}
             <li>
@@ -421,27 +433,16 @@ async function remove(contact: Contact) {
         <a
           class="btn btn-primary btn-wide"
           href={`#/bookings/new?contact=${encodeURIComponent(contact.id)}`}
-          >New enquiry from {contact.name.split(/\s+/)[0]}
+          >New gig with {contact.name.split(/\s+/)[0]}
           <Icon name="arrow-right" stroke={2.5} /></a
         >
-        <a
-          class="btn btn-secondary"
-          href={`#/${path("contacts", contact.id, "edit")}`}
-          >Edit</a
-        >
-        {#snippet end()}
-          <button
-            type="button"
-            class="btn btn-ghost"
-            disabled={ui.busy || linked}
-            title={linked
-              ? "Linked to gigs or bands. Remove those links first."
-              : undefined}
-            onclick={() => remove(contact)}
+        {#if !ui.phone}
+          <a
+            class="btn btn-secondary"
+            href={`#/${path("contacts", contact.id, "edit")}`}
+            >Edit</a
           >
-            Remove contact
-          </button>
-        {/snippet}
+        {/if}
       </BottomActionBar>
     {:else if id}
       <p class="empty">This contact isn't here any more.</p>
@@ -457,53 +458,62 @@ async function remove(contact: Contact) {
 .pane {
   padding-bottom: 32px;
 }
+.page-head p + p {
+  margin-top: 6px;
+}
 .search-row {
   display: flex;
   gap: 8px;
-  padding: 12px 24px;
-  border-bottom: var(--rule);
+  padding: 0 var(--pad) 12px;
 }
 .other-bands {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
-  border-bottom: var(--rule-2);
+  margin: 0 var(--pad) 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
   color: inherit;
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
 }
 .table-head,
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px 60px 80px;
+  grid-template-columns: minmax(0, 1fr) 130px 48px 72px;
   gap: 12px;
   align-items: center;
-  padding: 10px 24px;
+  padding: 10px 12px;
 }
 .table-head {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-bottom: var(--rule-2);
+  margin: 0 12px;
+  padding-block: 8px;
+  border-bottom: var(--rule);
 }
 .table-head span:nth-child(n + 3),
 .count,
 .last {
   text-align: right;
 }
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+}
 .row {
-  min-height: 64px;
-  border-bottom: var(--rule);
+  min-height: 60px;
   color: inherit;
   text-decoration: none;
 }
 .row:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
-.selected {
+.selected,
+.selected:hover {
   background: var(--select-bg);
-  box-shadow: var(--select-mark);
 }
 .what {
   display: flex;
@@ -511,21 +521,27 @@ async function remove(contact: Contact) {
   min-width: 0;
 }
 .what strong {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 .sub {
   font-size: 13px;
+  color: var(--muted);
 }
 .count {
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .last {
   font-size: 13px;
+  color: var(--muted);
 }
 .scroll {
   flex: 1;
+}
+.detail-head .visibility-note {
+  margin-top: 8px;
 }
 .tags {
   display: flex;
@@ -537,17 +553,22 @@ async function remove(contact: Contact) {
 }
 .gig {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) auto;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
-  padding: 12px 28px;
-  border-bottom: var(--rule);
+  margin: 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   color: inherit;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13px;
+}
+.gig > strong {
+  font-weight: 500;
+  color: var(--muted);
 }
 .gig:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
 .block {
   padding: 18px 28px;
@@ -563,7 +584,7 @@ async function remove(contact: Contact) {
 @media (max-width: 1199px) {
   .table-head,
   .row {
-    grid-template-columns: minmax(0, 1fr) 190px 48px;
+    grid-template-columns: minmax(0, 1fr) 130px 40px;
   }
   .table-head span:last-child,
   .last {
@@ -574,23 +595,20 @@ async function remove(contact: Contact) {
   .pane {
     padding-bottom: calc(var(--tabbar) + 16px);
   }
-  .search-row,
-  .row {
-    padding-inline: 16px;
-  }
   .table-head {
     display: none;
   }
   .row {
     grid-template-columns: minmax(0, 1fr) auto;
+    margin: 0 4px;
   }
   .count {
     display: none;
   }
   .gig {
-    grid-template-columns: 90px minmax(0, 1fr) auto;
+    grid-template-columns: 84px minmax(0, 1fr) auto;
     gap: 8px;
-    padding-inline: 16px;
+    margin: 0 4px;
   }
   .block {
     padding-inline: 16px;

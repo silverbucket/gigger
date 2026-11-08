@@ -6,6 +6,7 @@ import BottomActionBar from "../components/BottomActionBar.svelte";
 import Icon from "../components/Icon.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
 import Segmented from "../components/Segmented.svelte";
+import Tag from "../components/Tag.svelte";
 import Typeahead, { type Option, rank } from "../components/Typeahead.svelte";
 import { type BandData, data as store } from "../lib/data.svelte";
 import { today } from "../lib/format";
@@ -282,7 +283,7 @@ async function submit(event: SubmitEvent) {
 }
 </script>
 
-<PhoneHeader title={isEdit ? "Edit gig" : "New enquiry"} onclose={oncancel} />
+<PhoneHeader title={isEdit ? "Edit gig" : "New gig"} onclose={oncancel} />
 
 <form
   class="gig-form"
@@ -300,7 +301,12 @@ async function submit(event: SubmitEvent) {
           ? data.band.name
           : `New for ${data.band.name}`}
     </p>
-    <h2>{isEdit ? "Edit gig" : "New enquiry"}</h2>
+    <h2>{isEdit ? "Edit gig" : "New gig"}</h2>
+    <p class="visibility-note">
+      <Icon name="globe" size={13} />Public once your page is published: date,
+      time, venue, city, tickets and description of confirmed and played gigs.
+      The rest stays private.
+    </p>
     <button
       type="button"
       class="btn btn-icon close"
@@ -512,7 +518,10 @@ async function submit(event: SubmitEvent) {
         </div>
       </div>
       <div class="field">
-        <label for="gig-title">Title</label>
+        <div class="label-row">
+          <label for="gig-title">Title</label>
+          <Tag kind="private">Private</Tag>
+        </div>
         <input id="gig-title" class="input" bind:value={draft.title} required>
       </div>
       {#if !newVenue}
@@ -832,7 +841,8 @@ async function submit(event: SubmitEvent) {
 
     <details>
       <summary>
-        <strong>Money · Public</strong> <span>fee, extras, ticket link</span>
+        <strong>Money</strong> <span>fee and extras</span>
+        <Tag kind="private">Private</Tag>
         <Icon name="chevron-down" />
       </summary>
       <div class="form inner">
@@ -874,6 +884,19 @@ async function submit(event: SubmitEvent) {
             placeholder="Dinner&#10;Two drinks each"
           ></textarea>
         </div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <strong>Public page</strong> <span>ticket link, description</span>
+        <Tag kind="public">Public</Tag>
+        <Icon name="chevron-down" />
+      </summary>
+      <div class="form inner">
+        <p class="field-hint first">
+          Shown on your public page once the gig is confirmed.
+        </p>
         <div class="field">
           <label for="gig-ticket">Ticket URL</label>
           <input
@@ -891,17 +914,16 @@ async function submit(event: SubmitEvent) {
             class="input"
             bind:value={description}
           ></textarea>
-          <p class="field-hint">
-            Shown on your public page once the gig is confirmed.
-          </p>
         </div>
       </div>
     </details>
 
     <details>
       <summary>
-        <strong>Message · Notes</strong>
-        <span>enquiry text, private notes</span><Icon name="chevron-down" />
+        <strong>Message and notes</strong>
+        <span>enquiry text, your notes</span>
+        <Tag kind="private">Private</Tag>
+        <Icon name="chevron-down" />
       </summary>
       <div class="form inner">
         <div class="field">
@@ -914,7 +936,7 @@ async function submit(event: SubmitEvent) {
           ></textarea>
         </div>
         <div class="field">
-          <label for="gig-notes">Private notes</label>
+          <label for="gig-notes">Notes</label>
           <textarea
             id="gig-notes"
             class="input"
@@ -934,12 +956,10 @@ async function submit(event: SubmitEvent) {
       {saving
         ? "Saving…"
         : isEdit
-          ? `Save ${draft.status === "enquiry" ? "enquiry" : "gig"}`
+          ? "Save gig"
           : pendingContacts.length && fromMessage
-            ? "Create contact and enquiry"
-            : fromMessage
-              ? "Create enquiry"
-              : "Save enquiry"}
+            ? "Save contact and gig"
+            : "Save gig"}
       <Icon name="arrow-right" stroke={2.5} />
     </button>
     <button
@@ -963,65 +983,90 @@ async function submit(event: SubmitEvent) {
   position: relative;
   padding-right: 72px;
 }
+.head .visibility-note {
+  margin-top: 8px;
+}
 .close {
   position: absolute;
   top: 18px;
   right: 20px;
 }
 .block {
-  padding: 18px 28px 20px;
-  border-bottom: var(--rule-2);
+  padding: 20px 28px;
+  border-bottom: var(--rule);
 }
 .quote-block {
-  padding: 16px 28px;
-  border-bottom: var(--rule-2);
+  margin: 16px 28px 0;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
 }
 .quote-block p {
   margin: 0;
 }
 .quote-block .quote {
   margin-top: 6px;
-  font-size: 15px;
+  font-size: 14px;
   max-height: 8.5em;
   overflow: auto;
 }
 details {
-  border-bottom: var(--rule);
-  margin: 0 28px;
+  margin: 12px 28px 0;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+details[open] {
+  box-shadow: var(--shadow-sm);
 }
 summary {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 12px 0;
+  min-height: 48px;
+  padding: 10px 16px;
   cursor: pointer;
   list-style: none;
-  font-size: 15px;
+  font-size: 14px;
+}
+summary strong {
+  font-weight: 600;
 }
 summary::-webkit-details-marker {
   display: none;
 }
-summary span {
-  font-size: 12px;
+summary > span {
+  font-size: 13px;
   color: var(--muted);
 }
-summary :global(svg) {
+summary > :global(svg) {
   margin-left: auto;
-  align-self: center;
+  color: var(--faint);
+  transition: transform 150ms ease;
 }
-details[open] summary :global(svg) {
+details[open] summary > :global(svg) {
   transform: rotate(180deg);
 }
+summary :global(.tag) {
+  margin-left: auto;
+}
+summary :global(.tag) + :global(svg) {
+  margin-left: 0;
+}
 .inner {
-  padding-bottom: 18px;
+  padding: 4px 16px 18px;
+}
+.first {
+  margin-top: 0;
 }
 .nested {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 14px;
-  border: var(--rule-ink);
+  padding: 14px 16px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
 }
 .nested-head {
   display: flex;
@@ -1038,7 +1083,9 @@ details[open] summary :global(svg) {
   align-items: flex-start;
   gap: 8px;
   padding: 12px 14px;
-  border: var(--rule-ink);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 .picked > div {
   display: flex;
@@ -1048,13 +1095,14 @@ details[open] summary :global(svg) {
   min-width: 0;
 }
 .picked strong {
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 600;
 }
 .picked.new {
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
-  background: var(--color-neutral-100);
+  background: var(--color-surface-2);
 }
 .picked > .picked-head {
   display: flex;
@@ -1070,8 +1118,9 @@ details[open] summary :global(svg) {
   margin-top: 4px;
   padding: 2px 8px;
   font-size: 12px;
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
+  border-radius: var(--radius-pill);
+  background: var(--tone-confirmed-bg);
+  color: var(--tone-confirmed-fg);
 }
 .link {
   align-self: flex-start;
@@ -1079,7 +1128,10 @@ details[open] summary :global(svg) {
 }
 .suggest {
   margin-top: 8px;
-  border: var(--rule);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
 }
 .suggest button {
   display: flex;
@@ -1099,7 +1151,7 @@ details[open] summary :global(svg) {
   border-bottom: 0;
 }
 .suggest button:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
 .suggest .create {
   color: var(--color-accent-700);
@@ -1115,24 +1167,29 @@ details[open] summary :global(svg) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 4px 4px 10px;
+  padding: 3px 4px 3px 10px;
   font-size: 13px;
-  font-weight: 600;
-  background: var(--color-text);
-  color: var(--color-bg);
+  font-weight: 500;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
 }
 .chips li.new {
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
+  background: var(--tone-offered-bg);
+  color: var(--tone-offered-fg);
 }
 .chip-remove {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 0;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
+}
+.chip-remove:hover {
+  background: rgb(0 0 0 / 0.06);
 }
 .row-actions {
   display: flex;
@@ -1144,14 +1201,24 @@ details[open] summary :global(svg) {
 }
 @media (max-width: 899px) {
   .head {
+    padding: 12px var(--pad);
+  }
+  .head .kicker,
+  .head h2 {
     display: none;
   }
-  .block,
-  .quote-block {
-    padding-inline: 16px;
+  .head .visibility-note {
+    margin-top: 0;
   }
+  .close {
+    display: none;
+  }
+  .block {
+    padding-inline: var(--pad);
+  }
+  .quote-block,
   details {
-    margin: 0 16px;
+    margin-inline: var(--pad);
   }
 }
 </style>

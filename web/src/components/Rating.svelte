@@ -20,11 +20,12 @@ const filled = $derived(Math.round(value));
   gap: 2px;
 }
 span span {
-  width: 8px;
+  width: 6px;
   height: 12px;
+  border-radius: 2px;
   background: var(--color-neutral-300);
 }
 span span.on {
-  background: var(--color-text);
+  background: var(--color-warning);
 }
 </style>

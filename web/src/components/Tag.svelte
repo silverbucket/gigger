@@ -3,6 +3,8 @@ import type { GigStatus } from "@showday/schemas";
 export type TagKind =
   | GigStatus
   | "private"
+  | "public"
+  | "danger"
   | "proposed"
   | "channel"
   | "accent"
@@ -11,57 +13,86 @@ export type TagKind =
 
 <script lang="ts">
 import type { Snippet } from "svelte";
+import Icon from "./Icon.svelte";
 
-/** Status, privacy, proposed and channel tags. */
+/** Status, visibility, proposed and channel tags. Statuses get a coloured dot; Private and Public get a lock or globe. */
 let { kind = "neutral", children }: { kind?: TagKind; children: Snippet } =
   $props();
+const statuses = ["enquiry", "offered", "confirmed", "played", "cancelled"];
 </script>
 
-<span class="tag {kind}">{@render children()}</span>
+<span class="tag {kind}" class:status={statuses.includes(kind)}
+  >{#if kind === "private"}
+    <Icon name="lock" size={11} stroke={2.5} />
+  {:else if kind === "public"}
+    <Icon name="globe" size={11} stroke={2.5} />
+  {/if}
+  {@render children()}</span
+>
 
 <style>
 .tag {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   flex: none;
-  font-size: 11px;
-  line-height: 1.3;
-  letter-spacing: 0.02em;
-  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  padding: 2px 8px;
   white-space: nowrap;
-  background: var(--color-neutral-100);
-  color: var(--color-neutral-800);
-  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--muted);
 }
-.enquiry,
-.played,
-.private,
-.neutral {
-  background: var(--color-neutral-100);
-  color: var(--color-neutral-800);
+.tag.status::before,
+.tag.dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
-.cancelled {
-  background: var(--color-neutral-100);
-  color: var(--color-neutral-600);
-}
-.confirmed,
-.accent {
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
+.enquiry {
+  background: var(--tone-enquiry-bg);
+  color: var(--tone-enquiry-fg);
 }
 .offered,
 .proposed {
-  background: transparent;
-  border-color: var(--color-accent);
+  background: var(--tone-offered-bg);
+  color: var(--tone-offered-fg);
+}
+.confirmed {
+  background: var(--tone-confirmed-bg);
+  color: var(--tone-confirmed-fg);
+}
+.played {
+  background: var(--tone-played-bg);
+  color: var(--tone-played-fg);
+}
+.cancelled {
+  background: var(--tone-cancelled-bg);
+  color: var(--tone-cancelled-fg);
+}
+.accent {
+  background: var(--color-accent-100);
   color: var(--color-accent-700);
+}
+.private {
+  background: var(--color-surface-2);
+  color: var(--muted);
+}
+.public {
+  background: var(--public-bg);
+  color: var(--public-fg);
+}
+.danger {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
 }
 .channel {
   background: transparent;
-  border-color: var(--color-text);
-  color: var(--color-text);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  padding: 2px 6px;
+  padding: 0;
+  color: var(--muted);
 }
 </style>
