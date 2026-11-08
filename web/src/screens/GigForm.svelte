@@ -492,7 +492,7 @@ async function submit(event: SubmitEvent) {
             label: channelName[s],
           }))}
           bind:value={source}
-          columns={ui.phone ? 2 : 4}
+          columns={4}
           required
         />
       </div>

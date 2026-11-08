@@ -95,6 +95,8 @@ const uid = $props.id();
   }
   .grid .seg-opt {
     min-height: 44px;
+    padding-inline: 4px;
+    font-size: 13px;
   }
 }
 </style>

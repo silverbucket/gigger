@@ -215,9 +215,9 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           <p class="kicker">Venue</p>
           <h2>{id === "new" ? "New venue" : "Edit venue"}</h2>
           <p class="visibility-note">
-            <Icon name="globe" size={13} />Name and city are listed with
-            confirmed and played gigs on your public page. The address stays
-            private.
+            <Icon name="globe" size={13} />Once your public page is published,
+            name and city are listed with confirmed and played gigs. The address
+            stays private.
           </p>
         </div>
         <fieldset class="form block" disabled={ui.busy}>
@@ -305,7 +305,12 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             <dt><Tag kind="public">Public</Tag></dt>
             <dd>
               {venue.name}{venue.city ? `, ${venue.city}` : ""}
-              <span class="muted">· listed with confirmed and played gigs</span>
+              <span class="muted"
+                >·
+                {data.band.slug
+                  ? "listed with confirmed and played gigs"
+                  : "listed with confirmed and played gigs once you publish your page"}</span
+              >
             </dd>
           </div>
           <div>
@@ -543,6 +548,10 @@ ul {
 }
 .vis dd {
   margin: 0;
+}
+.vis a {
+  color: var(--color-text);
+  text-decoration-color: var(--color-border);
 }
 .edit .detail-head .visibility-note {
   margin-top: 8px;

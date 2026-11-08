@@ -4,6 +4,7 @@
 
 :root {
   color-scheme: light;
+  accent-color: var(--color-accent-600);
 
   /* Ground and surfaces */
   --color-bg: #f5f5f3;
@@ -11,8 +12,8 @@
   --color-surface-2: #f0f0ed;
   --color-sunken: #ebebe7;
   --color-text: #18191c;
-  --muted: #62656d;
-  --faint: #8d9098;
+  --muted: #55585f;
+  --faint: #6c6f77;
   --color-divider: #e3e3de;
   --color-border: #d6d6d0;
   --on-accent: #ffffff;
@@ -131,10 +132,10 @@
     --tone-confirmed-fg: #86d6a3;
     --tone-played-bg: #1b2738;
     --tone-played-fg: #9cc0ea;
-    --tone-cancelled-bg: #3a1f1d;
-    --tone-cancelled-fg: #ec9f98;
-    --color-danger: #f0857c;
-    --color-danger-bg: #3a1f1d;
+    --tone-cancelled-bg: #3a1a22;
+    --tone-cancelled-fg: #f49aab;
+    --color-danger: #f47a90;
+    --color-danger-bg: #3a1a22;
     --color-success: #86d6a3;
     --color-warning: #f0c674;
 
@@ -505,4 +506,17 @@ input[type="file"]::file-selector-button {
 }
 input[type="file"]::file-selector-button:hover {
   background: var(--color-surface-2);
+}
+
+/* Search fields: a quiet clear button in the app's own colours. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  background: var(--faint);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }

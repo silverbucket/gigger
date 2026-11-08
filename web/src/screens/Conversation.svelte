@@ -943,9 +943,6 @@ textarea::placeholder {
 }
 .draft {
   border-color: var(--color-accent-300);
-  box-shadow:
-    var(--shadow-sm),
-    0 0 0 3px var(--color-accent-100);
 }
 .draft .ctx-head h3 {
   color: var(--color-accent-700);
@@ -978,6 +975,13 @@ a.gig-title:hover {
 .facts dd {
   margin: 0;
   min-width: 0;
+}
+.facts a {
+  color: var(--color-text);
+  text-decoration-color: var(--color-border);
+}
+.facts a:hover {
+  color: var(--color-accent-700);
 }
 .with-tag {
   display: flex;

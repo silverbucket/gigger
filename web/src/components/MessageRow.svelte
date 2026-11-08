@@ -130,10 +130,6 @@ const initials = $derived(
   font-weight: 600;
   letter-spacing: 0.02em;
 }
-.unread .avatar {
-  background: var(--color-accent-100);
-  color: var(--color-accent-700);
-}
 .badge {
   position: absolute;
   right: -4px;
@@ -168,7 +164,7 @@ const initials = $derived(
   font-variant-numeric: tabular-nums;
 }
 .unread .time {
-  color: var(--color-accent-700);
+  color: var(--color-text);
   font-weight: 600;
 }
 .preview {
