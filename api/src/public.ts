@@ -1,5 +1,7 @@
 import type { Database } from "bun:sqlite";
 import {
+  countryCodes,
+  countryName,
   legacyLivePageTheme,
   migrateLegacyInstagram,
   normalizePublicWebsite,
@@ -158,6 +160,9 @@ export function cleanPage(input: unknown): PublicPage | null {
         ? { start: gig.start }
         : {}),
       ...(typeof gig.city === "string" && gig.city ? { city: gig.city } : {}),
+      ...(typeof gig.country === "string" && countryCodes.includes(gig.country)
+        ? { country: gig.country }
+        : {}),
       ...(typeof gig.ticketUrl === "string" &&
       /^https?:\/\/[^\s/]+[^\s]*$/.test(gig.ticketUrl)
         ? { ticketUrl: gig.ticketUrl }
@@ -532,21 +537,86 @@ export function renderJson(page: PublicPage) {
   );
 }
 
+/** Gigs saved before venues had a country were all in Czechia. */
+const legacyTimeZones = ["Europe/Prague"];
+/** Every time zone in the country; empty when the runtime cannot tell. */
+export function countryTimeZones(country: string | undefined) {
+  if (!country) return legacyTimeZones;
+  try {
+    return (
+      (
+        new Intl.Locale(`und-${country}`) as Intl.Locale & {
+          getTimeZones?: () => string[];
+        }
+      ).getTimeZones?.() ?? []
+    );
+  } catch {
+    return [];
+  }
+}
+/** UTC milliseconds for a wall-clock date and time in a time zone. */
+export function zonedTime(date: string, time: string, timeZone: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  const [h, min] = time.split(":").map(Number);
+  const wall = Date.UTC(y, m - 1, d, h, min);
+  const format = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const offset = (at: number) => {
+    const parts = Object.fromEntries(
+      format.formatToParts(at).map((part) => [part.type, part.value]),
+    );
+    return (
+      Date.UTC(
+        Number(parts.year),
+        Number(parts.month) - 1,
+        Number(parts.day),
+        Number(parts.hour),
+        Number(parts.minute),
+      ) - at
+    );
+  };
+  const first = wall - offset(wall);
+  return wall - offset(first);
+}
+const icsUtc = (ms: number) =>
+  new Date(ms).toISOString().replace(/[-:]|\.\d{3}/g, "");
+function icsStart(gig: PublicGig) {
+  const date = gig.date.replace(/-/g, "");
+  if (!gig.start) return `DTSTART;VALUE=DATE:${date}`;
+  const start = gig.start;
+  const instants = new Set(
+    countryTimeZones(gig.country).map((zone) =>
+      zonedTime(gig.date, start, zone),
+    ),
+  );
+  // When the country's zones disagree (Portugal and the Azores, the US), the
+  // time stays the venue's clock time with no zone.
+  if (instants.size !== 1) return `DTSTART:${date}T${start.replace(":", "")}00`;
+  return `DTSTART:${icsUtc([...instants][0])}`;
+}
 const icsText = (text: string) =>
   text.replace(/\\/g, "\\\\").replace(/[,;]/g, "\\$&").replace(/\r?\n/g, "\\n");
 export function renderIcs(page: PublicPage, identity: string) {
   const stamp = `${new Date().toISOString().replace(/[-:]|\.\d{3}/g, "")}`;
   const events = Object.entries(page.gigs).map(([id, gig]) => {
-    const date = gig.date.replace(/-/g, "");
     return [
       "BEGIN:VEVENT",
       `UID:${id}@${identity}`,
       `DTSTAMP:${stamp}`,
-      gig.start
-        ? `DTSTART;TZID=Europe/Prague:${date}T${gig.start.replace(":", "")}00`
-        : `DTSTART;VALUE=DATE:${date}`,
+      icsStart(gig),
       `SUMMARY:${icsText(`${page.name} at ${gig.venue}`)}`,
-      `LOCATION:${icsText([gig.venue, gig.city].filter(Boolean).join(", "))}`,
+      `LOCATION:${icsText(
+        [gig.venue, gig.city, gig.country && countryName(gig.country, "en")]
+          .filter(Boolean)
+          .join(", "),
+      )}`,
       ...(gig.description ? [`DESCRIPTION:${icsText(gig.description)}`] : []),
       ...(gig.ticketUrl ? [`URL:${gig.ticketUrl}`] : []),
       "END:VEVENT",
@@ -557,21 +627,6 @@ export function renderIcs(page: PublicPage, identity: string) {
     "VERSION:2.0",
     "PRODID:-//Showday//Public gigs//EN",
     `X-WR-CALNAME:${icsText(page.name)}`,
-    "BEGIN:VTIMEZONE",
-    "TZID:Europe/Prague",
-    "BEGIN:DAYLIGHT",
-    "DTSTART:19700329T020000",
-    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
-    "TZOFFSETFROM:+0100",
-    "TZOFFSETTO:+0200",
-    "END:DAYLIGHT",
-    "BEGIN:STANDARD",
-    "DTSTART:19701025T030000",
-    "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
-    "TZOFFSETFROM:+0200",
-    "TZOFFSETTO:+0100",
-    "END:STANDARD",
-    "END:VTIMEZONE",
     ...events.flat(),
     "END:VCALENDAR",
     "",

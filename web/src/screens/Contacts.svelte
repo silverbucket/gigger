@@ -20,6 +20,7 @@ import {
   plural,
   today,
 } from "../lib/format";
+import { venueName } from "../lib/gigs";
 import { path, router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
 import { bands } from "../storage";
@@ -415,11 +416,7 @@ async function remove(contact: Contact) {
                 <strong>{mediumDate(gig.date)}</strong>
                 <span class="what">
                   <strong class="ellipsis">{gig.title}</strong>
-                  <span class="sub"
-                    >{data.venues.find((v) => v.id === gig.venueId)?.name ??
-                      gig.venue ??
-                      ""}</span
-                  >
+                  <span class="sub">{venueName(gig, data.venues)}</span>
                 </span>
                 <Tag kind={gig.status}>{capitalize(gig.status)}</Tag>
               </a>

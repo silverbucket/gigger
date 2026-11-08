@@ -1,5 +1,6 @@
 import {
   type Contact,
+  countryName,
   formatFee,
   type Gig,
   type Venue,
@@ -8,15 +9,26 @@ import type { BandData } from "./data.svelte";
 import { fee, longDate, money, today } from "./format";
 
 export const venueOf = (gig: Gig, venues: Venue[]) =>
-  venues.find((v) => v.id === gig.venueId);
+  gig.privateShow ? undefined : venues.find((v) => v.id === gig.venueId);
+export const privateShowName = "Private show";
 export const venueName = (gig: Gig, venues: Venue[]) =>
-  venueOf(gig, venues)?.name ?? gig.venue ?? "";
+  gig.privateShow
+    ? privateShowName
+    : (venueOf(gig, venues)?.name ?? gig.venue ?? "");
 export const venueAddress = (gig: Gig, venues: Venue[]) =>
   (venueOf(gig, venues)?.address ?? gig.address ?? "").trim();
+/** "Prague, Czechia": the city and the country's name in the viewer's language. */
+export const placeOf = (venue?: Pick<Venue, "city" | "country">) =>
+  [
+    venue?.city,
+    venue?.country && countryName(venue.country, navigator.language),
+  ]
+    .filter(Boolean)
+    .join(", ");
 /** "Café V lese · Prague" */
 export function venueLine(gig: Gig, venues: Venue[]) {
   const venue = venueOf(gig, venues);
-  return [venue?.name ?? gig.venue, venue?.city].filter(Boolean).join(" · ");
+  return [venueName(gig, venues), venue?.city].filter(Boolean).join(" · ");
 }
 export const contactsOf = (gig: Gig, contacts: Contact[]) =>
   (gig.contactIds ?? [])
@@ -69,7 +81,12 @@ export function timeCells(gig: Gig) {
 /** The gig sheet as plain text, for email and the phone's share sheet. */
 export function sheetText(gig: Gig, data: BandData) {
   const venue = venueOf(gig, data.venues);
-  const address = venueAddress(gig, data.venues);
+  const address = [
+    venueAddress(gig, data.venues).replace(/\s*\n\s*/g, ", "),
+    placeOf(venue),
+  ]
+    .filter(Boolean)
+    .join(", ");
   const fee = formatFee(
     gig.fee,
     data.band.currency ?? "EUR",
@@ -79,7 +96,7 @@ export function sheetText(gig: Gig, data: BandData) {
     `${data.band.name}: ${gig.title}`,
     longDate(gig.date),
     "",
-    venue?.name || gig.venue ? `Venue: ${venue?.name ?? gig.venue}` : "",
+    venueName(gig, data.venues) ? `Venue: ${venueName(gig, data.venues)}` : "",
     address ? `Address: ${address}` : "",
     address
       ? `Map: https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`

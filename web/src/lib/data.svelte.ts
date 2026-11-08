@@ -10,6 +10,7 @@ import type {
   VenueSurvey,
 } from "@showday/schemas";
 import { bands, storage } from "../storage";
+import { shareAll } from "./directory";
 
 export interface BandData {
   band: Band;
@@ -71,6 +72,8 @@ class Data {
     // A slower load from a previous session must not land in this one.
     if (token !== storage.remote.token) return;
     this.all = byBandName(loaded);
+    // Venues added before the shared list existed, or while offline, join it now.
+    void shareAll(loaded);
     this.conversations = conversations;
     this.pendingPublicDeletes = pending.length > 0;
     if (this.bandId && !this.all.some((b) => b.band.id === this.bandId))

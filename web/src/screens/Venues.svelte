@@ -7,6 +7,7 @@ import {
 } from "@showday/schemas";
 import { untrack } from "svelte";
 import BottomActionBar from "../components/BottomActionBar.svelte";
+import CountrySelect from "../components/CountrySelect.svelte";
 import Icon from "../components/Icon.svelte";
 import ListDetailLayout from "../components/ListDetailLayout.svelte";
 import PhoneHeader from "../components/PhoneHeader.svelte";
@@ -16,6 +17,7 @@ import Segmented from "../components/Segmented.svelte";
 import StatCells from "../components/StatCells.svelte";
 import Tag from "../components/Tag.svelte";
 import type { BandData } from "../lib/data.svelte";
+import { shareVenue, usualCountry } from "../lib/directory";
 import {
   capitalize,
   mapUrl,
@@ -25,6 +27,7 @@ import {
   venueLinks,
   withScheme,
 } from "../lib/format";
+import { placeOf } from "../lib/gigs";
 import { path, router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
 import { bands } from "../storage";
@@ -98,6 +101,7 @@ $effect(() => {
           name: "",
           address: "",
           city: "",
+          country: usualCountry(data),
         },
       ),
     );
@@ -113,14 +117,16 @@ async function save(event: SubmitEvent) {
     name: draft.name.trim(),
     address: draft.address.trim(),
   };
-  for (const key of ["city", "email", "phone"] as const) {
+  for (const key of ["city", "country", "email", "phone"] as const) {
     value[key] = value[key]?.trim();
     if (!value[key]) delete value[key];
   }
   value.website = withScheme(value.website ?? "");
   if (!value.website) delete value.website;
-  if (await run(() => bands.save("venue", data.band.id, value)))
+  if (await run(() => bands.save("venue", data.band.id, value))) {
+    void shareVenue(data.band.id, value);
     router.go(path("venues", value.id), { replace: true });
+  }
 }
 const short = (c: string) => (c === "under 50" ? "under 50" : c);
 </script>
@@ -171,7 +177,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
                 <strong>{row.venue.name}</strong>
                 <span class="sub">
                   {[
-                    row.venue.city,
+                    placeOf(row.venue),
                     row.surveys.length
                       ? plural(row.surveys.length, "survey")
                       : "not surveyed",
@@ -223,8 +229,9 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           <h2>{id === "new" ? "New venue" : "Edit venue"}</h2>
           <p class="visibility-note">
             <Icon name="globe" size={13} />Once your public page is published,
-            name and city are listed with confirmed and played gigs. The address
-            stays private.
+            name, city and country are listed with confirmed and played gigs.
+            Other bands can pick this venue from the shared list with its
+            address and website. Email, phone and surveys stay yours.
           </p>
         </div>
         <fieldset class="form block" disabled={ui.busy}>
@@ -243,7 +250,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           <div class="field">
             <div class="label-row">
               <label for="venue-address">Address</label>
-              <Tag kind="private">Private</Tag>
+              <Tag kind="shared">Shared</Tag>
             </div>
             <input
               id="venue-address"
@@ -259,12 +266,18 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             </div>
             <input id="venue-city" class="input" bind:value={draft.city}>
           </div>
-          <div class="label-row reach">
-            <span class="field-label">How to reach the venue</span>
-            <Tag kind="private">Private</Tag>
+          <div class="field">
+            <div class="label-row">
+              <label for="venue-country">Country</label>
+              <Tag kind="public">Public</Tag>
+            </div>
+            <CountrySelect id="venue-country" bind:value={draft.country} />
           </div>
           <div class="field">
-            <label for="venue-website">Website</label>
+            <div class="label-row">
+              <label for="venue-website">Website</label>
+              <Tag kind="shared">Shared</Tag>
+            </div>
             <input
               id="venue-website"
               class="input"
@@ -274,6 +287,10 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
               pattern={"\\s*(https?://)?[^\\s/]+\\.[^\\s]+\\s*"}
               bind:value={draft.website}
             >
+          </div>
+          <div class="label-row reach">
+            <span class="field-label">How to reach the venue</span>
+            <Tag kind="private">Private</Tag>
           </div>
           <div class="field-row">
             <div class="field">
@@ -349,7 +366,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           <div>
             <dt><Tag kind="public">Public</Tag></dt>
             <dd>
-              {venue.name}{venue.city ? `, ${venue.city}` : ""}
+              {[venue.name, placeOf(venue)].filter(Boolean).join(", ")}
               <span class="muted"
                 >·
                 {data.band.slug
@@ -359,14 +376,27 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             </dd>
           </div>
           <div>
-            <dt><Tag kind="private">Private</Tag></dt>
+            <dt><Tag kind="shared">Shared</Tag></dt>
             <dd>
               {venue.address}
               ·
-              <a href={mapUrl(venue.address)} target="_blank" rel="noreferrer"
+              <a
+                href={mapUrl(
+                  [venue.address, placeOf(venue)].filter(Boolean).join(", "),
+                )}
+                target="_blank"
+                rel="noreferrer"
                 >Map</a
               >
-              <span class="muted">· surveys and notes</span>
+              <span class="muted"
+                >· in the venue list other bands pick from</span
+              >
+            </dd>
+          </div>
+          <div>
+            <dt><Tag kind="private">Private</Tag></dt>
+            <dd>
+              <span class="muted">Surveys and notes</span>
               {#if links.length}
                 <span class="reach-links">
                   {#each links as link (link.href)}

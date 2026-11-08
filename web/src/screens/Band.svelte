@@ -3,12 +3,12 @@ import {
   type BandPublicProfile,
   currencyForLocale,
   defaultNewPageTheme,
+  isPublic,
   legacyLivePageTheme,
   type Member,
   normalizeSocialUrl,
   PAGE_THEME_PRESETS,
   type PublicPageContact,
-  publicStatuses,
   type SocialPlatform,
   slugify,
   slugPattern,
@@ -190,9 +190,7 @@ $effect(() => {
     cancelled = true;
   };
 });
-const listed = $derived(
-  current?.gigs.filter((g) => publicStatuses.includes(g.status)).length ?? 0,
-);
+const listed = $derived(current?.gigs.filter(isPublic).length ?? 0);
 const editorThemeDefault = $derived(
   band?.slug && !band.publicProfile?.theme
     ? legacyLivePageTheme

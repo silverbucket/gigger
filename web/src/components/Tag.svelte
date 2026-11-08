@@ -4,6 +4,7 @@ export type TagKind =
   | GigStatus
   | "private"
   | "public"
+  | "shared"
   | "danger"
   | "proposed"
   | "channel"
@@ -15,7 +16,7 @@ export type TagKind =
 import type { Snippet } from "svelte";
 import Icon from "./Icon.svelte";
 
-/** Status, visibility, proposed and channel tags. Statuses get a coloured dot; Private and Public get a lock or globe. */
+/** Status, visibility, proposed and channel tags. Statuses get a coloured dot; Private, Public and Shared get a lock, globe or people. */
 let { kind = "neutral", children }: { kind?: TagKind; children: Snippet } =
   $props();
 const statuses = ["enquiry", "offered", "confirmed", "played", "cancelled"];
@@ -26,6 +27,8 @@ const statuses = ["enquiry", "offered", "confirmed", "played", "cancelled"];
     <Icon name="lock" size={11} stroke={2.5} />
   {:else if kind === "public"}
     <Icon name="globe" size={11} stroke={2.5} />
+  {:else if kind === "shared"}
+    <Icon name="users" size={11} stroke={2.5} />
   {/if}
   {@render children()}</span
 >
@@ -85,6 +88,10 @@ const statuses = ["enquiry", "offered", "confirmed", "played", "cancelled"];
 .public {
   background: var(--public-bg);
   color: var(--public-fg);
+}
+.shared {
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
 }
 .danger {
   background: var(--color-danger-bg);

@@ -34,7 +34,11 @@ let {
   /** Currencies the band has used, suggested first. */
   used?: string[];
   busy: boolean;
-  onsave: (survey: SurveyInput, earnings: Earnings) => Promise<void>;
+  /** A private show has no venue to survey, so `survey` is undefined. */
+  onsave: (
+    survey: SurveyInput | undefined,
+    earnings: Earnings,
+  ) => Promise<void>;
   oncancel: () => void;
 } = $props();
 let rating = $state<number>();
@@ -96,14 +100,17 @@ const splitLine = $derived(
       ? `${money(total)} total − ${money(handedOver ?? 0)} handed over`
       : `${money(total)} total`,
 );
+const room = untrack(() => !gig.privateShow);
 const missing = $derived(
-  [
-    !rating && "rating",
-    !capacity && "capacity",
-    !setting && "setting",
-    !playAgain && "play again",
-    !pa && "PA",
-  ].filter(Boolean),
+  !room
+    ? []
+    : [
+        !rating && "rating",
+        !capacity && "capacity",
+        !setting && "setting",
+        !playAgain && "play again",
+        !pa && "PA",
+      ].filter(Boolean),
 );
 function changeDeal(value: Earnings["dealType"]) {
   dealType = value;
@@ -121,19 +128,21 @@ const keepFocus = (event: PointerEvent) => event.preventDefault();
 async function submit(event: SubmitEvent) {
   event.preventDefault();
   attempted = true;
-  if (!rating || !capacity || !setting || !pa || !playAgain) return;
+  if (room && (!rating || !capacity || !setting || !pa || !playAgain)) return;
   await onsave(
-    {
-      rating,
-      capacity,
-      setting,
-      pa,
-      stageNotes,
-      playAgain: playAgain === "yes",
-      ...(num(attendance) !== undefined
-        ? { attendance: Math.round(attendance ?? 0) }
-        : {}),
-    },
+    room && rating && capacity && setting && pa && playAgain
+      ? {
+          rating,
+          capacity,
+          setting,
+          pa,
+          stageNotes,
+          playAgain: playAgain === "yes",
+          ...(num(attendance) !== undefined
+            ? { attendance: Math.round(attendance ?? 0) }
+            : {}),
+        }
+      : undefined,
     {
       dealType,
       ...(num(door) !== undefined ? { door } : {}),
@@ -188,97 +197,99 @@ const paLabels: Record<VenueSurvey["pa"], string> = {
     </button>
   </div>
 
-  <fieldset disabled={busy} class="part">
-    <legend class="part-head">
-      <span class="title">The room</span>
-      <span class="muted"
-        >Venue survey · saved in your account; sharing with other bands comes
-        later</span
-      >
-    </legend>
-    <div class="field">
-      <span class="field-label">Rating</span>
-      <Segmented
-        label="Rating"
-        options={[1, 2, 3, 4, 5].map((v) => ({ value: v, label: String(v) }))}
-        bind:value={rating}
-        columns={5}
-        required
-      />
-    </div>
-    <div class="field">
-      <span class="field-label">Capacity</span>
-      <Segmented
-        label="Capacity"
-        options={capacities.map((c) => ({
-          value: c,
-          label: c === "under 50" ? "<50" : c,
-        }))}
-        bind:value={capacity}
-        columns={5}
-        required
-      />
-    </div>
-    <div class="field">
-      <label for="survey-attendance">Attendance on the night</label>
-      <input
-        id="survey-attendance"
-        class="input"
-        type="number"
-        min="0"
-        step="1"
-        inputmode="numeric"
-        placeholder="People in the room"
-        bind:value={attendance}
-      >
-    </div>
-    <div class="field-row two">
+  {#if room}
+    <fieldset disabled={busy} class="part">
+      <legend class="part-head">
+        <span class="title">The room</span>
+        <span class="muted"
+          >Venue survey · saved in your account; sharing with other bands comes
+          later</span
+        >
+      </legend>
       <div class="field">
-        <span class="field-label">Setting</span>
+        <span class="field-label">Rating</span>
         <Segmented
-          label="Indoor or outdoor"
-          options={[
-            { value: "indoor", label: "Indoor" },
-            { value: "outdoor", label: "Outdoor" },
-          ]}
-          bind:value={setting}
-          columns={2}
+          label="Rating"
+          options={[1, 2, 3, 4, 5].map((v) => ({ value: v, label: String(v) }))}
+          bind:value={rating}
+          columns={5}
           required
         />
       </div>
       <div class="field">
-        <span class="field-label">Play again?</span>
+        <span class="field-label">Capacity</span>
         <Segmented
-          label="Would you play here again?"
-          options={[
-            { value: "yes", label: "Yes" },
-            { value: "no", label: "No" },
-          ]}
-          bind:value={playAgain}
-          columns={2}
+          label="Capacity"
+          options={capacities.map((c) => ({
+            value: c,
+            label: c === "under 50" ? "<50" : c,
+          }))}
+          bind:value={capacity}
+          columns={5}
           required
         />
       </div>
-    </div>
-    <div class="field">
-      <span class="field-label">PA</span>
-      <Segmented
-        label="PA"
-        options={paOptions.map((p) => ({ value: p, label: paLabels[p] }))}
-        bind:value={pa}
-        columns={3}
-        required
-      />
-    </div>
-    <div class="field">
-      <label for="survey-notes">Stage notes · optional</label>
-      <textarea
-        id="survey-notes"
-        class="input"
-        bind:value={stageNotes}
-      ></textarea>
-    </div>
-  </fieldset>
+      <div class="field">
+        <label for="survey-attendance">Attendance on the night</label>
+        <input
+          id="survey-attendance"
+          class="input"
+          type="number"
+          min="0"
+          step="1"
+          inputmode="numeric"
+          placeholder="People in the room"
+          bind:value={attendance}
+        >
+      </div>
+      <div class="field-row two">
+        <div class="field">
+          <span class="field-label">Setting</span>
+          <Segmented
+            label="Indoor or outdoor"
+            options={[
+              { value: "indoor", label: "Indoor" },
+              { value: "outdoor", label: "Outdoor" },
+            ]}
+            bind:value={setting}
+            columns={2}
+            required
+          />
+        </div>
+        <div class="field">
+          <span class="field-label">Play again?</span>
+          <Segmented
+            label="Would you play here again?"
+            options={[
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ]}
+            bind:value={playAgain}
+            columns={2}
+            required
+          />
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">PA</span>
+        <Segmented
+          label="PA"
+          options={paOptions.map((p) => ({ value: p, label: paLabels[p] }))}
+          bind:value={pa}
+          columns={3}
+          required
+        />
+      </div>
+      <div class="field">
+        <label for="survey-notes">Stage notes · optional</label>
+        <textarea
+          id="survey-notes"
+          class="input"
+          bind:value={stageNotes}
+        ></textarea>
+      </div>
+    </fieldset>
+  {/if}
 
   <fieldset disabled={busy} class="part">
     <legend class="part-head">

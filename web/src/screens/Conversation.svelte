@@ -21,7 +21,7 @@ import {
   money,
   shortDate,
 } from "../lib/format";
-import { contactsOf, venueOf } from "../lib/gigs";
+import { contactsOf, venueName, venueOf } from "../lib/gigs";
 import { channelName, type InboxItem, matchSender } from "../lib/inbox";
 import { beginMessageDetailConversation } from "../lib/message-translate-ui-session";
 import {
@@ -280,11 +280,11 @@ const fullForm = $derived(
         <dt>When</dt>
         <dd>{longDate(gig.date)}</dd>
       </div>
-      {#if gigVenue || gig.venue}
+      {#if venueName(gig, data.venues)}
         <div>
           <dt>Where</dt>
           <dd>
-            {gigVenue?.name ?? gig.venue}{gigVenue?.city
+            {venueName(gig, data.venues)}{gigVenue?.city
               ? `, ${gigVenue.city}`
               : ""}
           </dd>

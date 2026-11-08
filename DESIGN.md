@@ -32,6 +32,7 @@ Follow these rules for every new screen; don't ask. Calm, legible, and clear abo
 - Anything shown on the public page carries a `Public` tag (globe); private data (fees, earnings, notes, contacts, addresses, the gig title) carries `Private` (lock).
 - Forms say up front what fans can see. Group public fields together, apart from private ones.
 - Contacts and other bands are always private; say so under their headings.
+- A venue's name, address, city, country and website go into the venue list every band can pick from. Fields that other bands see but fans don't (the address, the website) carry `Shared` (people icon). A private show's address is never shared.
 
 ## Behaviour rules
 

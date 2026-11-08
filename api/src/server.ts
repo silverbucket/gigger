@@ -9,6 +9,7 @@ import { metaHandler } from "./meta";
 import { publicHandler } from "./public";
 import { type Sender, sockethubSender } from "./sender";
 import { translateHandler } from "./translate";
+import { venueHandler } from "./venues";
 export const senders = (): Record<Channel, Sender> => ({
   email: sockethubSender("email"),
   messenger: sockethubSender("messenger"),
@@ -22,6 +23,7 @@ export function handler(
   meta = metaHandler(db, messages),
   watchers: Watchers = { restart() {}, stop() {} },
   email = emailHandler(db, messages, watchers),
+  venues = venueHandler(db),
 ) {
   return (req: Request) => {
     const path = new URL(req.url).pathname;
@@ -54,6 +56,10 @@ export function handler(
       return messages.events(req);
     if (req.method === "GET" && path.startsWith("/b/"))
       return pages.serve(path);
+    if (path === "/venues") {
+      if (req.method === "GET") return venues.search(req);
+      if (req.method === "POST") return venues.add(req);
+    }
     if (path === "/public/pages") {
       if (req.method === "POST") return pages.claim(req);
       if (req.method === "DELETE") return pages.unclaim(req);
