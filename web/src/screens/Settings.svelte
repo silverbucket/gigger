@@ -78,8 +78,8 @@ async function saveCurrency(event: SubmitEvent) {
   <div class="settings">
     <div class="page-head">
       <div>
-        <p class="kicker">Settings · {current.band.name}</p>
         <h1>Band settings</h1>
+        <p>For {current.band.name}: currency, email and Meta connections.</p>
       </div>
     </div>
     <SectionLabel>
@@ -133,9 +133,12 @@ async function saveCurrency(event: SubmitEvent) {
 {/if}
 
 <style>
+.settings {
+  max-width: 760px;
+}
 .block {
-  padding: 18px 28px 20px;
-  border-bottom: var(--rule-2);
+  padding: 20px 28px;
+  border-bottom: var(--rule);
 }
 .phone-logout {
   padding-top: 0;
@@ -144,6 +147,7 @@ async function saveCurrency(event: SubmitEvent) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  max-width: 360px;
 }
 .inline .input {
   flex: 1;

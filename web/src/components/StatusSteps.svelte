@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { GigStatus } from "@showday/schemas";
 
-/** enquiry → offered → confirmed → played as four equal cells: done = ink, current = accent, later = empty. */
+/** enquiry → offered → confirmed → played as a four-part progress track: done and current filled, later empty. */
 let { status }: { status: GigStatus } = $props();
 const steps = ["enquiry", "offered", "confirmed", "played"] as const;
 const current = $derived(steps.indexOf(status as (typeof steps)[number]));
@@ -28,53 +28,63 @@ const current = $derived(steps.indexOf(status as (typeof steps)[number]));
 .steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-bottom: var(--rule-2);
+  gap: 6px;
+  padding: 16px 28px 4px;
 }
 li {
-  padding: 9px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-right: var(--rule);
-  color: var(--color-neutral-700);
+  font-weight: 500;
+  color: var(--faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: capitalize;
 }
-li:last-child {
-  border-right: 0;
+li::before {
+  content: "";
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-sunken);
 }
 .done {
-  background: var(--color-text);
-  color: var(--color-bg);
-  border-right-color: transparent;
+  color: var(--muted);
+}
+.done::before {
+  background: var(--color-accent-400);
 }
 .current {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.current::before {
   background: var(--color-accent-600);
-  color: #fff;
+}
+li span {
+  display: none;
 }
 .cancelled li {
   text-decoration: line-through;
-  color: var(--color-neutral-500);
+}
+.cancelled li::before {
+  background: var(--color-sunken);
 }
 .cancelled-line {
-  margin: 0;
-  padding: 10px 28px;
-  font-size: 14px;
-  border-bottom: var(--rule-2);
+  margin: 8px 28px 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  border-radius: var(--radius-md);
+  background: var(--tone-cancelled-bg);
+  color: var(--tone-cancelled-fg);
 }
 @media (max-width: 899px) {
-  li {
-    font-size: 10px;
-    padding: 9px 8px;
-    letter-spacing: 0.04em;
-  }
-  li span {
-    display: none;
+  .steps {
+    padding-inline: var(--pad);
   }
   .cancelled-line {
-    padding-inline: 16px;
+    margin-inline: var(--pad);
   }
 }
 </style>

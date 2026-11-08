@@ -196,9 +196,9 @@ function keydown(event: KeyboardEvent) {
 }
 .field-label {
   display: block;
-  font-size: 12px;
-  margin-bottom: 5px;
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
 }
 .box {
   position: relative;
@@ -207,7 +207,7 @@ function keydown(event: KeyboardEvent) {
   border-color: var(--color-accent);
 }
 .input.invalid {
-  border-color: var(--color-accent);
+  border-color: var(--color-danger);
 }
 .list {
   position: absolute;
@@ -217,10 +217,12 @@ function keydown(event: KeyboardEvent) {
   right: 0;
   max-height: 320px;
   overflow: auto;
-  background: var(--color-bg);
-  border: var(--rule-ink);
-  border-top: 0;
-  box-shadow: var(--shadow-md);
+  margin-top: 4px;
+  padding: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 }
 [role="option"] {
   display: flex;
@@ -229,18 +231,15 @@ function keydown(event: KeyboardEvent) {
   gap: 8px;
   min-height: 44px;
   padding: 8px 12px;
-  border-bottom: var(--rule);
+  border-radius: var(--radius-md);
   font-size: 14px;
   cursor: pointer;
 }
-[role="option"]:last-child {
-  border-bottom: 0;
-}
 .active {
-  background: var(--color-neutral-200);
+  background: var(--select-bg);
 }
 .name {
-  font-weight: 800;
+  font-weight: 600;
 }
 .create {
   color: var(--color-accent-700);
@@ -250,8 +249,9 @@ function keydown(event: KeyboardEvent) {
   flex: none;
   font-size: 11px;
   padding: 2px 8px;
+  border-radius: var(--radius-pill);
   background: var(--color-accent-100);
-  color: var(--color-accent-800);
+  color: var(--color-accent-700);
 }
 @media (max-width: 899px) {
   /* On a phone the suggestions push the form down instead of floating over it. */

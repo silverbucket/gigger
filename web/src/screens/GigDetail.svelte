@@ -1,5 +1,11 @@
 <script lang="ts">
-import type { Availability, Gig, GigStatus, Member } from "@showday/schemas";
+import {
+  type Availability,
+  type Gig,
+  type GigStatus,
+  type Member,
+  publicStatuses,
+} from "@showday/schemas";
 import AvailabilityCells, {
   availabilityLabel,
   availabilitySummary,
@@ -132,14 +138,19 @@ async function sendSheet() {
 }
 </script>
 
-<PhoneHeader back={() => router.back("bookings")} backLabel="Bookings">
+<PhoneHeader back={() => router.back("bookings")} backLabel="Gigs">
   {#snippet action()}
     <a class="btn btn-ghost" href={`#/${gigPath}/edit`}>Edit</a>
   {/snippet}
 </PhoneHeader>
 
 <div class="detail-head">
-  <p class="kicker">{data.band.name} · {gig.status}</p>
+  <p class="kicker head-tags">
+    <Tag kind={gig.status}
+      >{gig.status[0].toUpperCase() + gig.status.slice(1)}</Tag
+    >
+    <span>{data.band.name}</span>
+  </p>
   <h2>{gig.title}</h2>
   <p>
     {longDate(gig.date)}
@@ -240,7 +251,7 @@ async function sendSheet() {
             href={mapUrl(address)}
             target="_blank"
             rel="noreferrer"
-            >Map and directions ↗</a
+            >Map and directions</a
           >
         {/if}
       </DetailSection>
@@ -311,15 +322,33 @@ async function sendSheet() {
         {/if}
         {#if gig.conversationId}
           <a
-            class="line"
-            href={`#/${path("bookings", "message", gig.conversationId)}`}
-            >Open the conversation</a
+            class="btn btn-secondary convo"
+            href={`#/${path("inbox", gig.conversationId)}`}
+            ><Icon name="message" />Open conversation</a
           >
         {/if}
       </DetailSection>
     {/if}
+    <DetailSection label="Public page">
+      {#if publicStatuses.includes(gig.status)}
+        <span class="main with-tag"
+          ><Tag kind="public">Public</Tag>Shown on your public page</span
+        >
+        <span class="line"
+          >Fans see the date, start time, venue and city{gig.public?.ticketUrl
+            ? ", ticket link"
+            : ""}{gig.public?.description?.trim() ? " and description" : ""}.
+          The title, fee, notes and contacts stay private.</span
+        >
+      {:else}
+        <span class="main with-tag"
+          ><Tag kind="private">Private</Tag>Not on your public page yet</span
+        >
+        <span class="line">It appears there once the gig is confirmed.</span>
+      {/if}
+    </DetailSection>
     {#if gig.public?.description?.trim() || gig.public?.ticketUrl}
-      <DetailSection label="Public">
+      <DetailSection label="For fans">
         {#if gig.public?.description?.trim()}
           <span class="main pre">{gig.public.description}</span>
         {/if}
@@ -380,7 +409,7 @@ async function sendSheet() {
           {#if canCancel}
             <button
               type="button"
-              class="btn btn-ghost"
+              class="btn btn-ghost btn-danger"
               disabled={ui.busy}
               onclick={() => moveTo("cancelled")}
             >
@@ -458,7 +487,7 @@ async function sendSheet() {
       {#if canCancel}
         <button
           type="button"
-          class="btn btn-ghost"
+          class="btn btn-ghost btn-danger"
           disabled={ui.busy}
           onclick={() => moveTo("cancelled")}
         >
@@ -483,7 +512,7 @@ async function sendSheet() {
   justify-content: space-between;
   gap: 12px;
   min-height: 60px;
-  padding: 8px 16px;
+  padding: 8px var(--pad);
   border-bottom: var(--rule);
 }
 .who {
@@ -492,24 +521,27 @@ async function sendSheet() {
   font-size: 13px;
 }
 .who strong {
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 600;
 }
 .choices {
   display: flex;
   gap: 6px;
 }
 .choice {
-  border-color: var(--color-divider);
+  border-color: var(--color-border);
+  background: var(--color-surface);
   min-width: 52px;
 }
 .choice.yes {
-  background: var(--color-text);
-  color: var(--color-bg);
+  background: var(--tone-confirmed-bg);
+  color: var(--tone-confirmed-fg);
+  border-color: transparent;
 }
 .choice.no {
-  background: var(--color-accent-100);
-  color: var(--color-accent-800);
-  border-color: var(--color-accent);
+  background: var(--tone-cancelled-bg);
+  color: var(--tone-cancelled-fg);
+  border-color: transparent;
 }
 .plain {
   color: inherit;
@@ -519,7 +551,7 @@ async function sendSheet() {
   color: var(--color-accent-700);
 }
 p.line.quote {
-  border-left: 2px solid var(--color-divider);
+  border-left: 3px solid var(--color-accent-200);
   padding-left: 10px;
   margin: 4px 0;
   max-height: 9.5em;
@@ -532,6 +564,23 @@ p.line.quote {
 }
 .main :global(.tag) {
   margin-left: 6px;
-  vertical-align: 2px;
+  vertical-align: 1px;
+}
+.with-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.main.with-tag :global(.tag) {
+  margin-left: 0;
+}
+.head-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.convo {
+  align-self: flex-start;
+  margin-top: 6px;
 }
 </style>

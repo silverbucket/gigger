@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { Snippet } from "svelte";
 
-/** A 110px label column and the content beside it, with a 1px rule under. */
+/** A label column and the content beside it, with a hairline under. */
 let {
   label,
   children,
@@ -20,20 +20,23 @@ let {
 <style>
 .detail-section {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
   gap: var(--space-4);
   padding: 14px 28px;
   border-bottom: var(--rule);
   align-items: start;
 }
 .has-action {
-  grid-template-columns: 110px minmax(0, 1fr) auto;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
   align-items: center;
 }
 h3 {
   margin: 0;
-  padding-top: 3px;
+  padding-top: 1px;
   font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
 }
 .content {
   display: flex;
@@ -43,11 +46,11 @@ h3 {
   min-width: 0;
 }
 .content :global(.main) {
-  font-weight: 800;
-  font-size: 15px;
+  font-weight: 600;
+  font-size: 14px;
 }
 .content :global(.line) {
-  color: var(--color-neutral-800);
+  color: var(--muted);
 }
 .content :global(p) {
   margin: 0;
@@ -55,8 +58,8 @@ h3 {
 @media (max-width: 899px) {
   .detail-section {
     grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-    padding: 14px 16px;
+    gap: 4px;
+    padding: 14px var(--pad);
   }
   .has-action {
     grid-template-columns: minmax(0, 1fr) auto;

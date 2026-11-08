@@ -39,24 +39,20 @@ let {
 .cells {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
-  border-bottom: var(--rule-2);
+  padding: 16px 28px;
 }
 .cell {
-  padding: 12px 16px;
-  border-right: var(--rule);
-  border-bottom: var(--rule);
+  padding: 10px 14px;
   min-width: 0;
-}
-.cell:nth-child(4n),
-.cell:last-child {
-  border-right: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
 }
 dt {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-neutral-700);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -67,44 +63,50 @@ dd {
   flex-direction: column;
 }
 .value {
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
 }
 .sm .value {
-  font-size: 20px;
+  font-size: 16px;
 }
 .note {
   font-size: 12px;
+  color: var(--muted);
 }
 .hot {
-  background: var(--color-accent-600);
-  color: #fff;
+  background: var(--color-accent-100);
 }
-.hot dt {
-  color: inherit;
+.hot .value {
+  color: var(--color-accent-700);
 }
 .accent {
-  background: var(--color-accent-600);
-  color: #fff;
-  border-bottom: 0;
+  padding: 0;
 }
 .accent .cell {
-  border-color: color-mix(in srgb, var(--color-bg) 40%, transparent);
-}
-.accent dt {
+  background: rgb(255 255 255 / 0.14);
   color: inherit;
+}
+.accent dt,
+.accent .note {
+  color: inherit;
+  opacity: 0.8;
 }
 @media (max-width: 899px) {
   .cells {
     grid-template-columns: repeat(var(--phone-cols), minmax(0, 1fr));
+    padding: 12px var(--pad);
+  }
+  .accent {
+    padding: 0;
   }
   .cell {
-    padding: 10px 12px;
+    padding: 8px 12px;
   }
   .value {
-    font-size: 20px;
+    font-size: 17px;
   }
 }
 </style>

@@ -1,4 +1,6 @@
 <script lang="ts">
+import Icon from "./Icon.svelte";
+
 /** How to reach someone. Compact = a strip for lists; large = tappable cells for a person's page. */
 type Channel = {
   label: string;
@@ -16,6 +18,14 @@ let {
   size?: "compact" | "large";
   onadd?: (label: string) => void;
 } = $props();
+const iconFor = (label: string) =>
+  label === "Email"
+    ? ("mail" as const)
+    : label === "Phone"
+      ? ("phone" as const)
+      : label === "Instagram"
+        ? ("instagram" as const)
+        : ("message" as const);
 </script>
 
 {#if size === "compact"}
@@ -30,7 +40,9 @@ let {
     style:--cols={channels.length}
   >
     {#each channels as channel (channel.label)}
-      <li class:on={channel.value} aria-hidden="true">{channel.short}</li>
+      <li class:on={channel.value} aria-hidden="true">
+        <Icon name={iconFor(channel.label)} size={14} />
+      </li>
     {/each}
   </ul>
 {:else}
@@ -45,7 +57,7 @@ let {
           >
             <span class="head"
               ><span class="small-label">{channel.label}</span
-              ><span class="verb">{channel.verb} ↗</span></span
+              ><span class="verb">{channel.verb}</span></span
             >
             <strong>{channel.value}</strong>
           </a>
@@ -62,7 +74,7 @@ let {
           >
             <span class="head"
               ><span class="small-label">{channel.label}</span
-              ><span class="verb">+ Add</span></span
+              ><span class="verb add">Add</span></span
             >
             <strong>Not added</strong>
           </button>
@@ -74,38 +86,29 @@ let {
 
 <style>
 .strip {
-  display: inline-grid;
-  grid-template-columns: repeat(var(--cols), minmax(44px, auto));
-  border: 1px solid var(--color-neutral-500);
+  display: inline-flex;
+  gap: 4px;
 }
 .strip li {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 6px;
-  white-space: nowrap;
-  color: var(--color-neutral-500);
-  border-right: 1px solid var(--color-neutral-400);
-}
-.strip li:last-child {
-  border-right: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--color-neutral-400);
 }
 .strip li.on {
-  background: var(--color-text);
-  color: var(--color-bg);
-  border-right-color: var(--color-text);
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
 }
 .large {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-  border-bottom: var(--rule-2);
+  gap: 8px;
+  padding: 16px 28px;
 }
 .large li {
-  border-right: var(--rule);
-  border-bottom: var(--rule);
   min-width: 0;
-}
-.large li:nth-child(2n) {
-  border-right: 0;
 }
 .large a,
 .large .cell {
@@ -113,17 +116,20 @@ let {
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  min-height: 72px;
-  padding: 14px 28px;
+  height: 100%;
+  min-height: 64px;
+  padding: 10px 14px;
   color: inherit;
   text-decoration: none;
   text-align: left;
-  background: transparent;
-  border: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
 }
 .large a:hover,
 .large button.cell:hover {
-  background: var(--color-neutral-200);
+  border-color: var(--color-accent-300);
+  background: var(--color-accent-100);
 }
 .head {
   display: flex;
@@ -131,26 +137,27 @@ let {
   gap: 8px;
 }
 .verb {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--color-accent-700);
 }
 strong {
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.off {
-  background: var(--color-neutral-200);
+.off .cell {
+  border-style: dashed;
+  background: transparent;
 }
 .off strong {
-  color: var(--color-neutral-600);
+  color: var(--faint);
+  font-weight: 500;
 }
 @media (max-width: 899px) {
-  .large a,
-  .large .cell {
-    padding: 14px 16px;
+  .large {
+    padding: 12px var(--pad);
   }
 }
 </style>

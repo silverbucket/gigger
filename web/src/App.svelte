@@ -2,8 +2,8 @@
 import { onMount } from "svelte";
 import BandPicker from "./components/BandPicker.svelte";
 import Icon from "./components/Icon.svelte";
+import Sidebar from "./components/Sidebar.svelte";
 import TabBar from "./components/TabBar.svelte";
-import TopBar from "./components/TopBar.svelte";
 import { meta } from "./lib/account.svelte";
 import { data } from "./lib/data.svelte";
 import { inboxItems } from "./lib/inbox";
@@ -21,6 +21,7 @@ import Auth from "./screens/Auth.svelte";
 import Band from "./screens/Band.svelte";
 import Bookings from "./screens/Bookings.svelte";
 import Contacts from "./screens/Contacts.svelte";
+import Inbox from "./screens/Inbox.svelte";
 import OtherBands from "./screens/OtherBands.svelte";
 import Settings from "./screens/Settings.svelte";
 import Venues from "./screens/Venues.svelte";
@@ -49,29 +50,103 @@ const toSort = $derived(
   ).filter((i) => i.state === "toSort").length,
 );
 const nav = $derived([
-  { id: "bookings", label: "Bookings", href: "#/bookings", count: toSort },
-  { id: "venues", label: "Venues", href: "#/venues" },
-  { id: "contacts", label: "Contacts", href: "#/contacts" },
-  { id: "bands", label: "Other bands", href: "#/bands" },
-  { id: "band", label: "Band", href: "#/band" },
-  { id: "settings", label: "Settings", href: "#/settings" },
+  {
+    id: "bookings",
+    label: "Gigs",
+    href: "#/bookings",
+    icon: "calendar" as const,
+  },
+  {
+    id: "inbox",
+    label: "Inbox",
+    href: "#/inbox",
+    icon: "inbox" as const,
+    count: toSort,
+    countLabel: "to sort",
+  },
+  {
+    id: "contacts",
+    label: "Contacts",
+    href: "#/contacts",
+    icon: "users" as const,
+  },
+  { id: "venues", label: "Venues", href: "#/venues", icon: "map-pin" as const },
+  { id: "bands", label: "Other bands", href: "#/bands", icon: "disc" as const },
+  { id: "band", label: "Your band", href: "#/band", icon: "music" as const },
 ]);
+const footerNav = [
+  {
+    id: "settings",
+    label: "Settings",
+    href: "#/settings",
+    icon: "settings" as const,
+  },
+];
 const tabs = $derived([
-  { id: "bookings", label: "Bookings", href: "#/bookings", count: toSort },
-  { id: "contacts", label: "Contacts", href: "#/contacts" },
-  { id: "venues", label: "Venues", href: "#/venues" },
-  { id: "band", label: "Band", href: "#/band" },
-  { id: "settings", label: "Settings", href: "#/settings" },
+  {
+    id: "bookings",
+    label: "Gigs",
+    href: "#/bookings",
+    icon: "calendar" as const,
+  },
+  {
+    id: "inbox",
+    label: "Inbox",
+    href: "#/inbox",
+    icon: "inbox" as const,
+    count: toSort,
+  },
+  {
+    id: "contacts",
+    label: "Contacts",
+    href: "#/contacts",
+    icon: "users" as const,
+  },
+  { id: "venues", label: "Venues", href: "#/venues", icon: "map-pin" as const },
+  { id: "band", label: "Band", href: "#/band", icon: "music" as const },
 ]);
+const titles: Record<string, string> = {
+  inbox: "Inbox",
+  bookings: "Gigs",
+  contacts: "Contacts",
+  venues: "Venues",
+  bands: "Other bands",
+  band: "Your band",
+  settings: "Settings",
+};
 // Other bands sits under Contacts on a phone.
 const activeTab = $derived(
-  router.screen === "bands" ? "contacts" : router.screen,
+  router.screen === "bands"
+    ? "contacts"
+    : router.screen === "settings"
+      ? "band"
+      : router.screen,
 );
 /** A phone shows a record on its own screen, with its own header and no tab bar. */
 const phoneDetail = $derived(
   router.screen === "band"
     ? router.parts[0] === "member"
     : router.parts.length > 0,
+);
+const newHref = $derived(
+  router.screen === "bookings" || router.screen === "inbox"
+    ? "#/bookings/new"
+    : router.screen === "venues"
+      ? "#/venues/new"
+      : router.screen === "contacts"
+        ? "#/contacts/new"
+        : router.screen === "bands"
+          ? "#/bands/new"
+          : "",
+);
+const newLabel = $derived(
+  router.screen === "venues"
+    ? "New venue"
+    : router.screen === "contacts"
+      ? "New contact"
+      : router.screen === "bands"
+        ? "New band"
+        : "New gig",
 );
 const needsBand = $derived(
   ["venues", "contacts", "bands"].includes(router.screen),
@@ -207,168 +282,177 @@ function choose(bandId: string) {
   <div class="shell" class:phone-detail={phoneDetail}>
     {#if ui.phone}
       <header class="phone-top no-print">
-        <a class="brand" href="#/bookings"
-          ><span class="mark" aria-hidden="true"></span>Showday</a
-        >
         <div class="phone-picker">
           <BandPicker bands={data.all} value={data.bandId} onchange={choose} />
         </div>
-        {#if router.screen === "bookings"}
-          <a class="btn btn-icon" href="#/bookings/new" aria-label="New enquiry"
+        <a
+          class="btn btn-icon btn-ghost"
+          href="#/settings"
+          aria-label="Settings"
+          ><Icon name="settings" size={20} /></a
+        >
+        {#if newHref &&
+          ((router.screen !== "contacts" &&
+            router.screen !== "venues" &&
+            router.screen !== "bands") ||
+            data.current)}
+          <a
+            class="btn btn-icon btn-primary"
+            href={newHref}
+            aria-label={newLabel}
             ><Icon name="plus" size={20} stroke={2.5} /></a
           >
         {/if}
       </header>
     {:else}
-      <TopBar items={nav} active={router.screen}>
+      <Sidebar items={nav} footerItems={footerNav} active={router.screen}>
         {#snippet picker()}
           <BandPicker bands={data.all} value={data.bandId} onchange={choose} />
         {/snippet}
         {#snippet account()}
-          <span class="user muted">{userAddress}</span>
+          <span class="avatar" aria-hidden="true"
+            >{userAddress.slice(0, 1).toUpperCase()}</span
+          >
+          <span class="user ellipsis" title={userAddress}>{userAddress}</span>
           <a
-            class="logout"
+            class="logout btn btn-icon btn-ghost"
             href="/login"
+            aria-label="Log out"
+            title="Log out"
             onclick={(event) => {
               event.preventDefault();
               logout();
             }}
-            >Log out</a
+            ><Icon name="log-out" size={17} /></a
           >
         {/snippet}
-        {#snippet action()}
-          {#if router.screen === "bookings"}
-            <a class="btn btn-primary" href="#/bookings/new"
-              ><Icon name="plus" stroke={2.5} />
-              New enquiry</a
-            >
-          {:else if router.screen === "venues" && data.current}
-            <a class="btn btn-secondary" href="#/venues/new"
-              ><Icon name="plus" />
-              New venue</a
-            >
-          {:else if router.screen === "contacts" && data.current}
-            <a class="btn btn-secondary" href="#/contacts/new"
-              ><Icon name="plus" />
-              New contact</a
-            >
-          {:else if router.screen === "bands" && data.current}
-            <a class="btn btn-secondary" href="#/bands/new"
-              ><Icon name="plus" />
-              New band</a
+      </Sidebar>
+    {/if}
+
+    <div class="content">
+      {#if !ui.phone}
+        <header class="page-bar no-print">
+          <h1>{titles[router.screen]}</h1>
+          {#if newHref &&
+            (router.screen === "bookings" ||
+              router.screen === "inbox" ||
+              data.current)}
+            <a class="btn btn-primary" href={newHref}
+              ><Icon name="plus" stroke={2.5} />{newLabel}</a
             >
           {/if}
-        {/snippet}
-      </TopBar>
-    {/if}
-
-    {#if ui.error}
-      <p class="notice error no-print" role="alert">
-        {ui.error}
-        {#if ui.error === staleMessage}
+        </header>
+      {/if}
+      {#if ui.error}
+        <p class="notice error no-print" role="alert">
+          {ui.error}
+          {#if ui.error === staleMessage}
+            <button
+              type="button"
+              class="btn btn-secondary"
+              disabled={ui.busy}
+              onclick={() => run(async () => {})}
+            >
+              Reload latest
+            </button>
+          {/if}
           <button
             type="button"
-            class="btn btn-secondary"
-            disabled={ui.busy}
-            onclick={() => run(async () => {})}
+            class="btn btn-ghost dismiss"
+            onclick={() => (ui.error = "")}
           >
-            Reload latest
+            Dismiss
           </button>
-        {/if}
-        <button
-          type="button"
-          class="btn btn-ghost dismiss"
-          onclick={() => (ui.error = "")}
-        >
-          Dismiss
-        </button>
-      </p>
-    {/if}
-    {#if tokenRejected}
-      <form class="notice reconnect no-print" onsubmit={submitReconnect}>
-        <p role="status">
-          Your session ended. Log in again to sync — unsynced changes on this
-          device are kept until then.
         </p>
-        <label class="sr-only" for="reconnect-password">Password</label>
-        <input
-          id="reconnect-password"
-          class="input"
-          type="password"
-          autocomplete="current-password"
-          bind:value={reconnectPassword}
-          required
-          disabled={reconnectBusy}
-        >
-        <button
-          type="submit"
-          class="btn btn-secondary"
-          disabled={reconnectBusy || !reconnectPassword}
-        >
-          Log in again
-        </button>
-        {#if reconnectError}
-          <p class="error" role="alert">{reconnectError}</p>
-        {/if}
-      </form>
-    {/if}
-    {#if ui.syncTrouble}
-      <p class="notice no-print" role="status">{syncTroubleMessage}</p>
-    {/if}
-    {#if data.pendingPublicDeletes}
-      <p class="notice no-print" role="status">
-        A public gig removal is waiting to sync. It may remain visible until you
-        reconnect.
-      </p>
-    {/if}
-
-    <main>
-      {#if !data.loaded}
-        <p class="empty">Loading your bands…</p>
-      {:else if router.screen === "band"}
-        <Band />
-      {:else if router.screen === "settings"}
-        <Settings />
-      {:else if needsBand && !data.current}
-        <div class="page-head">
-          <div>
-            <h1>
-              {router.screen === "venues"
-                ? "Venues"
-                : router.screen === "contacts"
-                  ? "Contacts"
-                  : "Other bands"}
-            </h1>
-            <p>Each band keeps its own. Choose one to see them.</p>
-          </div>
-        </div>
-        <ul class="choose">
-          {#each data.all as item (item.band.id)}
-            <li>
-              <button
-                type="button"
-                class="btn btn-secondary btn-wide"
-                onclick={() => data.choose(item.band.id)}
-              >
-                {item.band.name} <Icon name="arrow-right" />
-              </button>
-            </li>
-          {:else}
-            <li class="empty">
-              Create a band on the <a href="#/band">Band page</a> first.
-            </li>
-          {/each}
-        </ul>
-      {:else if router.screen === "venues" && data.current}
-        <Venues data={data.current} />
-      {:else if router.screen === "contacts" && data.current}
-        <Contacts data={data.current} />
-      {:else if router.screen === "bands" && data.current}
-        <OtherBands data={data.current} />
-      {:else}
-        <Bookings humanAgent={meta.config?.humanAgent ?? false} />
       {/if}
-    </main>
+      {#if tokenRejected}
+        <form class="notice reconnect no-print" onsubmit={submitReconnect}>
+          <p role="status">
+            Your session ended. Log in again to sync — unsynced changes on this
+            device are kept until then.
+          </p>
+          <label class="sr-only" for="reconnect-password">Password</label>
+          <input
+            id="reconnect-password"
+            class="input"
+            type="password"
+            autocomplete="current-password"
+            bind:value={reconnectPassword}
+            required
+            disabled={reconnectBusy}
+          >
+          <button
+            type="submit"
+            class="btn btn-secondary"
+            disabled={reconnectBusy || !reconnectPassword}
+          >
+            Log in again
+          </button>
+          {#if reconnectError}
+            <p class="error" role="alert">{reconnectError}</p>
+          {/if}
+        </form>
+      {/if}
+      {#if ui.syncTrouble}
+        <p class="notice no-print" role="status">{syncTroubleMessage}</p>
+      {/if}
+      {#if data.pendingPublicDeletes}
+        <p class="notice no-print" role="status">
+          A public gig removal is waiting to sync. It may remain visible until
+          you reconnect.
+        </p>
+      {/if}
+
+      <main>
+        {#if !data.loaded}
+          <p class="empty">Loading your bands…</p>
+        {:else if router.screen === "band"}
+          <Band />
+        {:else if router.screen === "settings"}
+          <Settings />
+        {:else if needsBand && !data.current}
+          <div class="page-head">
+            <div>
+              <h1>
+                {router.screen === "venues"
+                  ? "Venues"
+                  : router.screen === "contacts"
+                    ? "Contacts"
+                    : "Other bands"}
+              </h1>
+              <p>Each band keeps its own. Choose one to see them.</p>
+            </div>
+          </div>
+          <ul class="choose">
+            {#each data.all as item (item.band.id)}
+              <li>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-wide"
+                  onclick={() => data.choose(item.band.id)}
+                >
+                  {item.band.name} <Icon name="arrow-right" />
+                </button>
+              </li>
+            {:else}
+              <li class="empty">
+                Create a band on the <a href="#/band">Band page</a> first.
+              </li>
+            {/each}
+          </ul>
+        {:else if router.screen === "venues" && data.current}
+          <Venues data={data.current} />
+        {:else if router.screen === "contacts" && data.current}
+          <Contacts data={data.current} />
+        {:else if router.screen === "bands" && data.current}
+          <OtherBands data={data.current} />
+        {:else if router.screen === "inbox"}
+          <Inbox humanAgent={meta.config?.humanAgent ?? false} />
+        {:else}
+          <Bookings />
+        {/if}
+      </main>
+    </div>
 
     {#if ui.phone && !phoneDetail}
       <TabBar items={tabs} active={activeTab} />
@@ -378,20 +462,47 @@ function choose(bandId: string) {
 
 <style>
 .shell {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  height: 100dvh;
+}
+.content {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-surface);
 }
 main {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
+.page-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--topbar);
+  flex: none;
+  padding: 0 var(--pad);
+  border-bottom: var(--rule);
+}
+.page-bar h1 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.page-bar .btn {
+  margin-left: auto;
+}
 @media (max-width: 899px) {
   .shell {
     display: block;
     height: auto;
     min-height: 100dvh;
+  }
+  .content {
+    background: var(--color-bg);
   }
   main {
     overflow: visible;
@@ -403,46 +514,56 @@ main {
   z-index: 6;
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 56px;
-  padding: 0 8px 0 16px;
-  background: var(--color-bg);
-  border-bottom: var(--rule-2);
+  gap: 4px;
+  height: 60px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+  backdrop-filter: saturate(1.6) blur(16px);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  border-bottom: var(--rule);
 }
 .phone-detail .phone-top {
   display: none;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 800;
-  font-size: 19px;
-  color: inherit;
-  text-decoration: none;
-}
-.mark {
-  width: 12px;
-  height: 12px;
-  background: var(--color-accent);
-}
 .phone-picker {
   display: flex;
-  justify-content: flex-end;
-  margin-left: auto;
+  flex: 1;
   min-width: 0;
-  height: 44px;
+  margin-right: 4px;
+}
+.phone-picker :global(.picker) {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
+  padding-left: 0;
+  width: auto;
+  max-width: 100%;
+}
+.phone-picker :global(.shown) {
+  font-size: 16px;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-sunken);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 .user {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--muted);
 }
 .logout {
-  font-size: 13px;
-  color: var(--color-text);
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
 }
 .notice {
   display: flex;
@@ -451,8 +572,8 @@ main {
   gap: 12px;
 }
 .reconnect {
-  padding: 12px 28px;
-  border-bottom: var(--rule-2);
+  padding: 12px var(--pad);
+  border-bottom: var(--rule);
   align-items: flex-end;
 }
 .reconnect .input {
@@ -470,7 +591,12 @@ main {
 }
 @media print {
   /* Only the gig sheet prints. */
-  .shell > :global(:not(main)),
+  .shell {
+    display: block;
+    height: auto;
+  }
+  .shell > :global(:not(.content)),
+  .content > :global(:not(main)),
   main > :global(:not(.gig-sheet)) {
     display: none;
   }

@@ -21,7 +21,7 @@ let {
   columns?: number;
   required?: boolean;
   disabled?: boolean;
-  /** Ink fill for the chosen option instead of accent (secondary filters). */
+  /** Kept for callers; every switch now uses the same raised style. */
   dark?: boolean;
   size?: "sm" | "lg";
   onchange?: (value: T) => void;
@@ -66,36 +66,35 @@ const uid = $props.id();
   user-select: none;
 }
 .lg .seg-opt {
-  min-height: 44px;
+  min-height: 40px;
   font-size: 14px;
 }
 .seg-opt:has(input:disabled) {
   cursor: not-allowed;
   opacity: 0.6;
 }
-.dark .seg-opt:has(input:checked) {
-  background: var(--color-text);
-  color: var(--color-bg);
-}
 .grid {
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   width: 100%;
-  border: 0;
-  border-top: var(--rule);
-  border-left: var(--rule);
 }
 .grid .seg-opt {
-  border: 0;
-  border-right: var(--rule);
-  border-bottom: var(--rule);
-  min-height: 44px;
-  padding: 8px 10px;
+  min-height: 38px;
+  padding: 6px 10px;
   font-size: 14px;
   white-space: normal;
   line-height: 1.2;
+  text-align: center;
 }
-.grid .seg-opt + .seg-opt {
-  border-left: 0;
+@media (max-width: 899px) {
+  .seg-opt {
+    min-height: 38px;
+  }
+  .lg .seg-opt {
+    min-height: 44px;
+  }
+  .grid .seg-opt {
+    min-height: 44px;
+  }
 }
 </style>

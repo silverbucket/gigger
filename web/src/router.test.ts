@@ -31,6 +31,21 @@ test("read() resyncs from the hash, which a session change relies on after repla
   expect(router.parts).toEqual([]);
 });
 
+test("old conversation links open in the inbox", () => {
+  const calls: string[] = [];
+  (globalThis as unknown as { history: unknown }).history = {
+    state: null,
+    replaceState: (_: unknown, __: string, url: string) => calls.push(url),
+  };
+  (globalThis as unknown as { location: { hash: string } }).location.hash =
+    "#/bookings/message/email-b1-abc";
+  router.read();
+  expect(router.screen).toBe("inbox");
+  expect(router.parts).toEqual(["email-b1-abc"]);
+  expect(calls).toEqual(["#/inbox/email-b1-abc"]);
+  delete (globalThis as unknown as { history?: unknown }).history;
+});
+
 test("settings and band routes stay separate", () => {
   (globalThis as unknown as { location: { hash: string } }).location.hash =
     "#/settings";

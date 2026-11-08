@@ -149,22 +149,16 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           placeholder="Search by name or city"
           bind:value={query}
         >
-        {#if ui.phone}
-          <a class="btn btn-secondary" href="#/venues/new"
-            ><Icon name="plus" />
-            New venue</a
-          >
-        {/if}
       </div>
       <div class="table-head" aria-hidden="true">
-        <span>Venue · City</span><span>Rating</span><span>Capacity</span
+        <span>Venue</span><span>Rating</span><span>Capacity</span
         ><span>Return</span><span>Gigs</span>
       </div>
       <ul>
         {#each shown as row (row.venue.id)}
           <li>
             <a
-              class="row"
+              class="row list-row"
               class:selected={row.venue.id === id}
               aria-current={row.venue.id === id ? "true" : undefined}
               href={`#/${path("venues", row.venue.id)}`}
@@ -221,10 +215,17 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
         <div class="detail-head">
           <p class="kicker">Venue</p>
           <h2>{id === "new" ? "New venue" : "Edit venue"}</h2>
+          <p class="visibility-note">
+            <Icon name="globe" size={13} />Name and city show with confirmed
+            gigs on your public page. The address stays private.
+          </p>
         </div>
         <fieldset class="form block" disabled={ui.busy}>
           <div class="field">
-            <label for="venue-name">Name</label>
+            <div class="label-row">
+              <label for="venue-name">Name</label>
+              <Tag kind="public">Public</Tag>
+            </div>
             <input
               id="venue-name"
               class="input"
@@ -233,7 +234,10 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             >
           </div>
           <div class="field">
-            <label for="venue-address">Address</label>
+            <div class="label-row">
+              <label for="venue-address">Address</label>
+              <Tag kind="private">Private</Tag>
+            </div>
             <input
               id="venue-address"
               class="input"
@@ -242,11 +246,11 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             >
           </div>
           <div class="field">
-            <label for="venue-city">City</label>
+            <div class="label-row">
+              <label for="venue-city">City</label>
+              <Tag kind="public">Public</Tag>
+            </div>
             <input id="venue-city" class="input" bind:value={draft.city}>
-            <p class="field-hint">
-              Shown with confirmed gigs on your public page.
-            </p>
           </div>
         </fieldset>
         <div class="spacer"></div>
@@ -297,11 +301,11 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
         <div>
           <p class="kicker">Venue{venue.city ? ` · ${venue.city}` : ""}</p>
           <h2>{venue.name}</h2>
-          <p>
+          <p class="addr">
             {venue.address}
-            ·
+            <Tag kind="private">Private</Tag>
             <a href={mapUrl(venue.address)} target="_blank" rel="noreferrer"
-              >Map ↗</a
+              >Map</a
             >
           </p>
         </div>
@@ -361,7 +365,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
           <SectionLabel>
             Surveys after each gig
             {#snippet aside()}
-              Kept in your account. Sharing with other bands comes later.
+              <Tag kind="private">Private</Tag>
             {/snippet}
           </SectionLabel>
           <ul>
@@ -421,7 +425,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
         <a
           class="btn btn-primary btn-wide"
           href={`#/bookings/new?venue=${encodeURIComponent(venue.id)}`}
-          >New enquiry <Icon name="arrow-right" stroke={2.5} /></a
+          >New gig here <Icon name="arrow-right" stroke={2.5} /></a
         >
         <a
           class="btn btn-secondary"
@@ -441,42 +445,51 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
 .pane {
   padding-bottom: 32px;
 }
+.gig > strong {
+  font-weight: 500;
+  color: var(--muted);
+}
 .search-row {
   display: flex;
   gap: 8px;
-  padding: 12px 24px;
-  border-bottom: var(--rule);
+  padding: 0 var(--pad) 12px;
 }
 .table-head,
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px 110px 70px 48px;
+  grid-template-columns: minmax(0, 1fr) 130px 110px 64px 44px;
   gap: 12px;
   align-items: center;
-  padding: 10px 24px;
+  padding: 10px 12px;
 }
 .table-head {
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-bottom: var(--rule-2);
+  margin: 0 12px;
+  padding-block: 8px;
+  border-bottom: var(--rule);
 }
 .table-head span:last-child,
 .gigs {
   text-align: right;
 }
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pane ul {
+  padding-top: 6px;
+}
 .row {
-  min-height: 64px;
-  border-bottom: var(--rule);
+  min-height: 60px;
   color: inherit;
   text-decoration: none;
 }
 .row:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
-.selected {
+.selected,
+.selected:hover {
   background: var(--select-bg);
-  box-shadow: var(--select-mark);
 }
 .what {
   display: flex;
@@ -484,11 +497,12 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
   min-width: 0;
 }
 .what strong {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 .sub {
   font-size: 13px;
+  color: var(--muted);
 }
 .rating {
   display: flex;
@@ -497,15 +511,14 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
 }
 .num,
 .gigs {
-  font-weight: 800;
-  font-size: 15px;
-}
-.gigs {
-  font-size: 18px;
+  font-weight: 600;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 .cap,
 .again {
   font-size: 13px;
+  color: var(--muted);
 }
 .head-row {
   display: flex;
@@ -513,48 +526,63 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
   align-items: flex-end;
   gap: 16px;
 }
+.head-row p.addr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--muted);
+}
+.detail-head .visibility-note {
+  margin-top: 8px;
+}
 .scroll {
   flex: 1;
 }
 .capacity {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin: 12px 28px 16px;
-  border: var(--rule);
+  gap: 6px;
+  margin: 4px 28px 8px;
 }
 .capacity li {
   display: flex;
   flex-direction: column;
   padding: 8px 10px;
-  border-right: var(--rule);
-  font-size: 11px;
-}
-.capacity li:last-child {
-  border-right: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-size: 12px;
+  color: var(--muted);
 }
 .capacity strong {
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
 }
 .capacity .hot {
-  background: var(--color-accent-600);
-  color: #fff;
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
 }
-.capacity .zero {
-  color: var(--color-neutral-500);
+.capacity .hot strong {
+  color: var(--color-accent-700);
+}
+.capacity .zero strong {
+  color: var(--faint);
 }
 .survey {
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr);
   gap: 16px;
-  padding: 14px 28px;
+  margin: 0 16px;
+  padding: 12px;
   border-bottom: var(--rule);
 }
 .when {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 14px;
+  font-size: 13px;
 }
 .tag-row {
   display: flex;
@@ -563,21 +591,23 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
 }
 .notes {
   margin: 8px 0 0;
-  font-size: 14px;
+  font-size: 13px;
+  color: var(--muted);
 }
 .gig {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) auto;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
-  padding: 12px 28px;
-  border-bottom: var(--rule);
+  margin: 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   color: inherit;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13px;
 }
 .gig:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
 .block {
   padding: 18px 28px;
@@ -593,7 +623,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
 @media (max-width: 1199px) {
   .table-head,
   .row {
-    grid-template-columns: minmax(0, 1fr) 110px 48px;
+    grid-template-columns: minmax(0, 1fr) 110px 40px;
   }
   .table-head span:nth-child(3),
   .table-head span:nth-child(4),
@@ -606,28 +636,26 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
   .pane {
     padding-bottom: calc(var(--tabbar) + 16px);
   }
-  .search-row,
-  .table-head,
   .row {
-    padding-inline: 16px;
+    margin: 0 4px;
   }
   .desktop,
   .table-head {
     display: none;
   }
   .capacity {
-    margin-inline: 16px;
+    margin-inline: var(--pad);
   }
   .survey,
   .gig {
-    padding-inline: 16px;
+    margin-inline: 4px;
   }
   .survey {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
   .gig {
-    grid-template-columns: 90px minmax(0, 1fr) auto;
+    grid-template-columns: 84px minmax(0, 1fr) auto;
     gap: 8px;
   }
   .block {

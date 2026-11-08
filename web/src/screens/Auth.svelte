@@ -68,9 +68,15 @@ async function authenticate(event: SubmitEvent) {
 
 <div class="auth">
   <div class="brand-side">
-    <p class="brand"><span class="mark" aria-hidden="true"></span>Showday</p>
+    <p class="brand">
+      <span class="mark" aria-hidden="true"
+        ><Icon name="music" size={15} stroke={2.5} /></span
+      >Showday
+    </p>
     <p class="claim">Book it, plan it, play it, post it.</p>
-    <p class="sub">Enquiries, gigs, venues and the band, in one place.</p>
+    <p class="sub">
+      Booking messages, gigs, venues and the band, in one calm place.
+    </p>
   </div>
   <section class="form-side" aria-labelledby="auth-title">
     <p class="kicker">{mode === "signup" ? "New here" : "Welcome back"}</p>
@@ -172,62 +178,94 @@ async function authenticate(event: SubmitEvent) {
 <style>
 .auth {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   min-height: 100dvh;
+  background: var(--color-surface);
 }
 .brand-side {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 32px 48px 48px;
-  background: var(--color-accent-600);
+  margin: 12px;
+  padding: 32px 40px 40px;
+  border-radius: 20px;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      90% 70% at 100% 0%,
+      var(--color-accent-500) 0%,
+      transparent 60%
+    ),
+    radial-gradient(70% 60% at 0% 100%, #2a2a8f 0%, transparent 70%),
+    var(--color-accent-700);
   color: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  .brand-side {
+    background:
+      radial-gradient(
+        90% 70% at 100% 0%,
+        var(--color-accent-500) 0%,
+        transparent 60%
+      ),
+      radial-gradient(70% 60% at 0% 100%, #1b1b55 0%, transparent 70%),
+      var(--color-accent-400);
+  }
 }
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 0;
-  font-weight: 800;
-  font-size: 22px;
+  font-weight: 700;
+  font-size: 18px;
 }
 .mark {
-  width: 14px;
-  height: 14px;
-  background: var(--color-bg);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.18);
 }
 .claim {
   margin: auto 0 12px;
-  font-size: clamp(48px, 7vw, 96px);
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -0.04em;
-  max-width: 10ch;
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  max-width: 11ch;
 }
 .sub {
   margin: 0;
-  font-size: 17px;
+  max-width: 34ch;
+  font-size: 16px;
+  opacity: 0.85;
 }
 .form-side {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 48px;
-  border-left: var(--rule-ink);
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 48px 32px;
 }
 h1 {
-  font-size: 48px;
+  font-size: 28px;
   margin: 4px 0 24px;
 }
 .submit {
   margin-top: 8px;
-  min-height: 48px;
+  min-height: 44px;
 }
 .switch {
   margin-top: 24px;
   padding-top: 16px;
-  border-top: var(--rule-2);
+  border-top: var(--rule);
   font-size: 14px;
+  color: var(--muted);
 }
 .switch a {
   color: var(--color-accent-700);
@@ -239,19 +277,20 @@ h1 {
     grid-template-rows: auto 1fr;
   }
   .brand-side {
-    padding: 20px 16px 24px;
+    margin: 8px;
+    padding: 20px 20px 24px;
+    border-radius: 16px;
   }
   .claim {
-    margin-top: 32px;
-    font-size: 44px;
+    margin-top: 40px;
+    font-size: 36px;
   }
   .form-side {
     justify-content: flex-start;
-    padding: 24px 16px 40px;
-    border-left: 0;
+    padding: 24px 20px 40px;
   }
   h1 {
-    font-size: 36px;
+    font-size: 24px;
   }
 }
 </style>

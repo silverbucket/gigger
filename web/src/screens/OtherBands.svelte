@@ -81,13 +81,11 @@ async function save(event: SubmitEvent) {
         <div>
           <h1>Other bands</h1>
           <p>{plural(rows.length, "band")} you share a bill with</p>
+          <p class="visibility-note">
+            <Icon name="lock" size={13} />Only you see these. They are never
+            published.
+          </p>
         </div>
-        {#if ui.phone}
-          <a class="btn btn-secondary" href="#/bands/new"
-            ><Icon name="plus" />
-            New band</a
-          >
-        {/if}
       </div>
       <div class="search-row">
         <label class="sr-only" for="band-search">Search bands</label>
@@ -103,7 +101,7 @@ async function save(event: SubmitEvent) {
         {#each shown as row (row.band.id)}
           <li>
             <a
-              class="row"
+              class="row list-row"
               class:selected={row.band.id === id}
               aria-current={row.band.id === id ? "true" : undefined}
               href={`#/${path("bands", row.band.id)}`}
@@ -185,7 +183,7 @@ async function save(event: SubmitEvent) {
             hint="New people are added from the Contacts screen."
           />
           <div class="field">
-            <label for="other-notes">Private notes</label>
+            <label for="other-notes">Notes</label>
             <textarea
               id="other-notes"
               class="input"
@@ -223,6 +221,9 @@ async function save(event: SubmitEvent) {
       <div class="detail-head">
         <p class="kicker">Other band</p>
         <h2>{band.name}</h2>
+        <p class="visibility-note">
+          <Icon name="lock" size={13} />Private. Only you see this.
+        </p>
       </div>
       <div class="scroll">
         <DetailSection label="Contacts">
@@ -293,27 +294,33 @@ async function save(event: SubmitEvent) {
 .pane {
   padding-bottom: 32px;
 }
+.page-head p + p {
+  margin-top: 6px;
+}
 .search-row {
-  padding: 12px 24px;
-  border-bottom: var(--rule-2);
+  padding: 0 var(--pad) 12px;
+}
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  min-height: 64px;
-  padding: 10px 24px;
-  border-bottom: var(--rule);
+  min-height: 60px;
+  padding: 10px 12px;
   color: inherit;
   text-decoration: none;
 }
 .row:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
-.selected {
+.selected,
+.selected:hover {
   background: var(--select-bg);
-  box-shadow: var(--select-mark);
 }
 .what {
   display: flex;
@@ -321,15 +328,19 @@ async function save(event: SubmitEvent) {
   min-width: 0;
 }
 .what strong {
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 .sub,
 .count {
   font-size: 13px;
+  color: var(--muted);
 }
 .scroll {
   flex: 1;
+}
+.detail-head .visibility-note {
+  margin-top: 8px;
 }
 .plain {
   color: inherit;
@@ -340,17 +351,18 @@ async function save(event: SubmitEvent) {
 }
 .gig {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) auto;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
   gap: 16px;
   align-items: center;
-  padding: 12px 28px;
-  border-bottom: var(--rule);
+  margin: 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   color: inherit;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13px;
 }
 .gig:hover {
-  background: var(--select-bg);
+  background: var(--hover-bg);
 }
 .chips {
   display: flex;
@@ -361,20 +373,25 @@ async function save(event: SubmitEvent) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 4px 4px 10px;
+  padding: 3px 4px 3px 10px;
   font-size: 13px;
-  font-weight: 600;
-  background: var(--color-text);
-  color: var(--color-bg);
+  font-weight: 500;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
 }
 .chip-remove {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 0;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
+}
+.chip-remove:hover {
+  background: var(--color-accent-200);
 }
 .block {
   padding: 18px 28px;
@@ -391,14 +408,15 @@ async function save(event: SubmitEvent) {
   .pane {
     padding-bottom: calc(var(--tabbar) + 16px);
   }
-  .search-row,
   .row,
-  .gig,
+  .gig {
+    margin-inline: 4px;
+  }
   .block {
     padding-inline: 16px;
   }
   .gig {
-    grid-template-columns: 90px minmax(0, 1fr) auto;
+    grid-template-columns: 84px minmax(0, 1fr) auto;
     gap: 8px;
   }
 }

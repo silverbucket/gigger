@@ -10,6 +10,7 @@ let {
   detail,
   open = false,
   wide = false,
+  inbox = false,
   key = "",
 }: {
   list: Snippet;
@@ -18,6 +19,8 @@ let {
   open?: boolean;
   /** A 640px pane for forms. */
   wide?: boolean;
+  /** A narrow list beside a wide reading pane (the inbox). */
+  inbox?: boolean;
   /** Changes when another record opens, so the pane starts at its top. */
   key?: string;
 } = $props();
@@ -29,7 +32,7 @@ $effect(() => {
 });
 </script>
 
-<div class="layout" class:open class:wide>
+<div class="layout" class:open class:wide class:inbox>
   <div class="list">{@render list()}</div>
   <section class="detail" aria-label="Details" bind:this={pane}>
     {@render detail()}
@@ -46,6 +49,9 @@ $effect(() => {
 .wide {
   grid-template-columns: minmax(0, 1fr) 640px;
 }
+.inbox {
+  grid-template-columns: 380px minmax(0, 1fr);
+}
 .list,
 .detail {
   min-height: 0;
@@ -55,18 +61,23 @@ $effect(() => {
 .detail {
   display: flex;
   flex-direction: column;
-  border-left: var(--rule-ink);
+  border-left: var(--rule);
+  background: var(--color-surface);
   overscroll-behavior: contain;
 }
 @media (max-width: 1199px) {
   .layout,
   .wide {
-    grid-template-columns: minmax(0, 1fr) 520px;
+    grid-template-columns: minmax(0, 1fr) 500px;
+  }
+  .inbox {
+    grid-template-columns: 320px minmax(0, 1fr);
   }
 }
 @media (max-width: 899px) {
   .layout,
-  .wide {
+  .wide,
+  .inbox {
     display: block;
     height: auto;
   }
@@ -76,7 +87,7 @@ $effect(() => {
   }
   .detail {
     border-left: 0;
-    min-height: calc(100dvh - var(--topbar));
+    min-height: 100dvh;
   }
   .open .list,
   .layout:not(.open) .detail {

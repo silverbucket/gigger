@@ -120,7 +120,7 @@ test("a reload while another tab blocks a logout's cleanup never opens the old c
   ]);
   await go(page, "bookings");
   await expect(
-    page.getByRole("link", { name: "New enquiry", exact: true }),
+    page.getByRole("link", { name: "New gig", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Secret show")).toHaveCount(0);
 });

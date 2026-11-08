@@ -257,7 +257,7 @@ const note = $derived(
     <Segmented
       label="Message language"
       name={`message-language-${messageId}`}
-      size="lg"
+      size={ui.phone ? "lg" : "sm"}
       columns={ui.phone ? 2 : undefined}
       options={[
         { value: "original", label: "Original" },
@@ -282,25 +282,40 @@ const note = $derived(
 
 <style>
 .translate {
-  padding: 12px 0 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 0 0 4px;
 }
 .first-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 6px;
 }
 .pick {
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-accent-700);
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--muted);
   font: inherit;
-  font-size: 14px;
-  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+}
+.pick:hover {
+  color: var(--color-accent-700);
+  border-color: var(--color-accent-300);
+}
+@media (max-width: 899px) {
+  .pick {
+    min-height: 36px;
+    padding-inline: 12px;
+  }
 }
 .pick:disabled {
   opacity: 0.6;
@@ -312,7 +327,7 @@ const note = $derived(
 }
 .status {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
 }
 .live {

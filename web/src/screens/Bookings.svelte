@@ -4,17 +4,13 @@ import { availabilitySummary } from "../components/AvailabilityCells.svelte";
 import Icon from "../components/Icon.svelte";
 import LedgerRow from "../components/LedgerRow.svelte";
 import ListDetailLayout from "../components/ListDetailLayout.svelte";
-import MessageRow from "../components/MessageRow.svelte";
 import SectionLabel from "../components/SectionLabel.svelte";
 import Segmented from "../components/Segmented.svelte";
-import StatCells from "../components/StatCells.svelte";
 import Tag from "../components/Tag.svelte";
-import { api } from "../lib/account.svelte";
 import { type BandData, data } from "../lib/data.svelte";
 import {
   capitalize,
   daysUntil,
-  messageTime,
   monthLabel,
   normalize,
   shortDate,
@@ -29,38 +25,15 @@ import {
   venueLine,
   venueName,
 } from "../lib/gigs";
-import {
-  channelTag,
-  type InboxItem,
-  inboxItems,
-  matchLine,
-  matchSender,
-} from "../lib/inbox";
-import {
-  aggregateBookingsInboxStatus,
-  bookingsInboxLabel,
-  bookingsInboxTagKind,
-  hasIncomingMailbox,
-  type MailWatchAccount,
-  refreshBookingsMailByBand,
-  showToSortSection,
-} from "../lib/inbox-watch";
-import { messageStream } from "../lib/message-stream.svelte";
-import {
-  clearInboxLangUiOnConversationOpen,
-  resetInboxLangOpenTracking,
-} from "../lib/message-translate-ui-session";
-import { prefillFrom, senderName, threads } from "../lib/messages.svelte";
+import { inboxItems } from "../lib/inbox";
+import { prefillFrom, threads } from "../lib/messages.svelte";
 import { path, router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
 import { bands } from "../storage";
 import GigDetail from "./GigDetail.svelte";
 import GigForm from "./GigForm.svelte";
 import GigSheet from "./GigSheet.svelte";
-import MessageDetail from "./MessageDetail.svelte";
 import PlayedForm from "./PlayedForm.svelte";
-
-let { humanAgent = false }: { humanAgent?: boolean } = $props();
 
 let view = $state<"list" | "board">(
   localStorage.getItem("showday:view") === "board" ? "board" : "list",
@@ -68,22 +41,11 @@ let view = $state<"list" | "board">(
 // Upcoming first; played, cancelled and past-dated gigs are under Past.
 let filter = $state<"upcoming" | "past">("upcoming");
 let query = $state("");
-let showReviewed = $state(false);
-let showDiscarded = $state(false);
-let allToSort = $state(false);
 const now = today();
 const many = $derived(data.all.length > 1 && !data.current);
 
 const rows = $derived(
   data.inView.flatMap((band) => band.gigs.map((gig) => ({ gig, band }))),
-);
-const inbox = $derived(
-  inboxItems(
-    data.conversations,
-    data.inView.map((b) => b.band.id),
-    rows.map((r) => r.gig),
-    data.inView.flatMap((b) => b.triage),
-  ),
 );
 const bandOf = (bandId: string) => data.band(bandId);
 const needle = $derived(normalize(query));
@@ -98,62 +60,6 @@ function gigMatches(gig: Gig, band: BandData) {
       band.band.name,
     ].join(" "),
   ).includes(needle);
-}
-function messageMatches(item: InboxItem) {
-  if (!needle) return true;
-  return normalize(
-    `${senderName(item.conversation, bandOf(item.conversation.bandId))} ${item.conversation.peer.id} ${item.conversation.preview}`,
-  ).includes(needle);
-}
-const toSort = $derived(
-  inbox.filter((i) => i.state === "toSort" && messageMatches(i)),
-);
-const reviewed = $derived(
-  inbox.filter(
-    (i) =>
-      (i.state === "converted" || i.state === "archived") && messageMatches(i),
-  ),
-);
-const discarded = $derived(
-  inbox.filter((i) => i.state === "discarded" && messageMatches(i)),
-);
-const hasListedInbox = $derived(
-  toSort.length > 0 || reviewed.length > 0 || discarded.length > 0,
-);
-let mailByBand = $state<Record<string, MailWatchAccount>>({});
-$effect(() => {
-  const bandIds = data.inView.map((item) => item.band.id);
-  if (router.screen !== "bookings" || bandIds.length === 0) return;
-  let cancelled = false;
-  const refresh = async () => {
-    const next = await refreshBookingsMailByBand(
-      mailByBand,
-      bandIds,
-      (bandId) =>
-        api<Omit<MailWatchAccount, "bandId"> | null>("/api/email/account", {
-          query: { bandId },
-        }),
-    );
-    if (!cancelled) mailByBand = next;
-  };
-  void refresh();
-  const timer = setInterval(refresh, 5000);
-  return () => {
-    cancelled = true;
-    clearInterval(timer);
-  };
-});
-const mailAccounts = $derived(Object.values(mailByBand));
-const inboxWatch = $derived(
-  aggregateBookingsInboxStatus(mailAccounts, messageStream.retrying),
-);
-const showToSort = $derived(
-  showToSortSection(hasIncomingMailbox(mailAccounts), hasListedInbox),
-);
-function openEmailSettings(event: MouseEvent) {
-  event.preventDefault();
-  if (inboxWatch.bandId && !data.current) data.choose(inboxWatch.bandId);
-  router.go("settings");
 }
 const visibleGigs = $derived(
   rows
@@ -208,9 +114,6 @@ const openGig = $derived.by(() => {
   const gig = band?.gigs.find((g) => g.id === router.parts[2]);
   return band && gig ? { band, gig, mode: router.parts[3] ?? "" } : undefined;
 });
-const openMessage = $derived(
-  kind === "message" ? inbox.find((i) => i.id === router.parts[1]) : undefined,
-);
 const from = $derived(router.query.get("from") ?? "");
 const fromItem = $derived(
   from
@@ -231,16 +134,6 @@ const newBand = $derived(
 );
 const open = $derived(!!kind);
 const selectedGig = $derived(openGig?.gig.id ?? "");
-const selectedMessage = $derived(openMessage?.id ?? "");
-
-$effect(() => {
-  const id = selectedMessage;
-  if (!id) {
-    resetInboxLangOpenTracking();
-    return;
-  }
-  clearInboxLangUiOnConversationOpen(id);
-});
 
 // A new enquiry from a message needs the message text before the form starts.
 let fromLoaded = $state("");
@@ -261,18 +154,6 @@ function sub(gig: Gig, band: BandData) {
   return [venueLine(gig, band.venues), many ? band.band.name : ""]
     .filter(Boolean)
     .join(" · ");
-}
-function matchFor(item: InboxItem) {
-  if (item.state === "converted")
-    return { text: "Already an enquiry", tone: "muted" as const };
-  if (item.state === "archived")
-    return { text: "Not a booking", tone: "muted" as const };
-  const band = bandOf(item.conversation.bandId);
-  const match = matchSender(item.conversation, band?.contacts ?? []);
-  return {
-    text: matchLine(match),
-    tone: match.kind === "matched" ? ("ink" as const) : ("accent" as const),
-  };
 }
 </script>
 
@@ -295,16 +176,13 @@ function matchFor(item: InboxItem) {
       <input
         class="input"
         type="search"
-        placeholder={ui.phone
-          ? "Search"
-          : "Search gigs, venues, contacts, messages"}
+        placeholder={ui.phone ? "Search gigs" : "Search gigs, venues, people"}
         bind:value={query}
       >
     </label>
     {#if view === "list" || ui.phone}
       <Segmented
         label="Show"
-        dark
         options={[
           { value: "upcoming", label: "Upcoming" },
           { value: "past", label: "Past" },
@@ -313,132 +191,6 @@ function matchFor(item: InboxItem) {
       />
     {/if}
   </div>
-{/snippet}
-
-{#snippet toSortGroup()}
-  {#if showToSort}
-    <section aria-labelledby="to-sort">
-      <SectionLabel tone="accent" id="to-sort">
-        To sort · {toSort.length}
-        {#snippet aside()}
-          <div class="to-sort-aside">
-            {#if inboxWatch.status !== "hidden"}
-              <a
-                href="#/settings"
-                class="inbox-watch-link"
-                aria-live="polite"
-                onclick={openEmailSettings}
-              >
-                <Tag kind={bookingsInboxTagKind(inboxWatch.status)}
-                  >{bookingsInboxLabel(inboxWatch.status)}</Tag
-                >
-              </a>
-            {:else if !ui.phone}
-              <span class="muted">From email, Messenger, Instagram</span>
-            {/if}
-            {#if ui.phone && toSort.length > 3}
-              <button
-                type="button"
-                class="link"
-                onclick={() => (allToSort = !allToSort)}
-              >
-                {allToSort ? "Show fewer" : "See all"}
-              </button>
-            {/if}
-          </div>
-        {/snippet}
-      </SectionLabel>
-      {#if inboxWatch.status === "error"}
-        <p class="inbox-watch-alert" role="alert">
-          New email may not arrive.
-          <a
-            href="#/settings"
-            class="inbox-watch-settings"
-            onclick={openEmailSettings}
-            >Open email settings</a
-          >
-          to fix this.
-        </p>
-      {/if}
-      <ul>
-        {#each ui.phone && !allToSort
-          ? toSort.slice(0, 3)
-          : toSort as item (item.id)}
-          {@const band = bandOf(item.conversation.bandId)}
-          {@const match = matchFor(item)}
-          <MessageRow
-            href={`#/${path("bookings", "message", item.id)}`}
-            channel={channelTag[item.conversation.channel]}
-            sender={senderName(item.conversation, band)}
-            preview={item.conversation.preview}
-            match={match.text}
-            matchTone={match.tone}
-            time={messageTime(item.latest)}
-            selected={item.id === selectedMessage}
-          />
-        {:else}
-          <li class="empty">Nothing to sort. New messages land here.</li>
-        {/each}
-        {#if showReviewed}
-          {#each reviewed as item (item.id)}
-            {@const band = bandOf(item.conversation.bandId)}
-            {@const match = matchFor(item)}
-            <MessageRow
-              href={`#/${path("bookings", "message", item.id)}`}
-              channel={channelTag[item.conversation.channel]}
-              sender={senderName(item.conversation, band)}
-              preview={item.conversation.preview}
-              match={match.text}
-              matchTone={match.tone}
-              time={messageTime(item.latest)}
-              selected={item.id === selectedMessage}
-              dim
-            />
-          {/each}
-        {/if}
-      </ul>
-      {#if reviewed.length}
-        <button
-          type="button"
-          class="link more"
-          onclick={() => (showReviewed = !showReviewed)}
-        >
-          {showReviewed
-            ? "Hide reviewed messages"
-            : `Show ${reviewed.length} reviewed ${reviewed.length === 1 ? "message" : "messages"}`}
-        </button>
-      {/if}
-      {#if discarded.length}
-        <button
-          type="button"
-          class="link more"
-          onclick={() => (showDiscarded = !showDiscarded)}
-        >
-          {showDiscarded
-            ? "Hide discarded messages"
-            : `Show ${discarded.length} discarded ${discarded.length === 1 ? "message" : "messages"}`}
-        </button>
-        {#if showDiscarded}
-          <ul class="discarded">
-            {#each discarded as item (item.id)}
-              {@const band = bandOf(item.conversation.bandId)}
-              <MessageRow
-                href={`#/${path("bookings", "message", item.id)}`}
-                channel={channelTag[item.conversation.channel]}
-                sender={senderName(item.conversation, band)}
-                preview={item.conversation.preview}
-                match="Discarded"
-                matchTone="muted"
-                time={messageTime(item.latest)}
-                selected={item.id === selectedMessage}
-                dim
-              />
-            {/each}
-          </ul>
-        {/if}
-      {/if}
-    </section>
-  {/if}
 {/snippet}
 
 {#snippet nextBlock()}
@@ -463,8 +215,16 @@ function matchFor(item: InboxItem) {
           · {venueName(next.gig, next.data.venues)}
         {/if}</span
       >
+      {#if timeCells(next.gig).length}
+        <span class="next-times">
+          {#each timeCells(next.gig) as cell (cell.label)}
+            <span class="next-time"
+              ><span>{cell.label}</span><strong>{cell.value}</strong></span
+            >
+          {/each}
+        </span>
+      {/if}
     </a>
-    <StatCells cells={timeCells(next.gig)} size="sm" tone="accent" />
   {/if}
 {/snippet}
 
@@ -513,7 +273,7 @@ function matchFor(item: InboxItem) {
     {#each columns as column (column.status)}
       <section class="column" aria-label={capitalize(column.status)}>
         <h3 class="column-head">
-          <span class="label">{column.status}</span
+          <Tag kind={column.status}>{capitalize(column.status)}</Tag
           ><span class="count">{column.rows.length}</span>
         </h3>
         <ul>
@@ -569,7 +329,6 @@ function matchFor(item: InboxItem) {
         {@render controls()}
       {/if}
       {#if ui.phone}
-        {@render toSortGroup()}
         {#if !query && filter === "upcoming"}
           {@render nextBlock()}
         {/if}
@@ -579,10 +338,11 @@ function matchFor(item: InboxItem) {
         >
         {@render ledger()}
       {:else if view === "board"}
-        {@render toSortGroup()}
         {@render board()}
       {:else}
-        {@render toSortGroup()}
+        {#if !query && filter === "upcoming"}
+          {@render nextBlock()}
+        {/if}
         {@render ledger()}
       {/if}
     </div>
@@ -637,18 +397,10 @@ function matchFor(item: InboxItem) {
       {/key}
     {:else if openGig}
       <GigDetail data={openGig.band} gig={openGig.gig} />
-    {:else if openMessage}
-      {@const band = bandOf(openMessage.conversation.bandId)}
-      {#if band}
-        <!-- Keyed so an unsent reply draft never follows you to another conversation. -->
-        {#key openMessage.id}
-          <MessageDetail item={openMessage} data={band} {humanAgent} />
-        {/key}
-      {/if}
     {:else if kind === "new"}
       {#if !newBand}
         <div class="detail-head">
-          <p class="kicker">New enquiry</p>
+          <p class="kicker">New gig</p>
           <h2>Which band is it for?</h2>
         </div>
         <ul class="choose">
@@ -719,11 +471,13 @@ function matchFor(item: InboxItem) {
   z-index: 3;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  padding: 16px 24px;
-  background: var(--color-bg);
-  border-bottom: var(--rule-2);
+  padding: 14px var(--pad);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: var(--rule);
 }
 .search {
   position: relative;
@@ -734,137 +488,180 @@ function matchFor(item: InboxItem) {
 }
 .search :global(svg) {
   position: absolute;
-  left: 10px;
-  color: var(--muted);
+  left: 11px;
+  color: var(--faint);
   pointer-events: none;
 }
 .search .input {
   padding-left: 34px;
 }
-.link {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--color-text);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.more {
-  margin: 10px 24px 4px;
-  color: var(--muted);
-}
 .next {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 18px 16px 14px;
-  margin-top: 16px;
-  background: var(--color-accent-600);
+  margin: 16px var(--pad) 4px;
+  padding: 18px 20px 16px;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(
+      120% 140% at 100% 0%,
+      var(--color-accent-500) 0%,
+      transparent 55%
+    ),
+    var(--color-accent-700);
   color: #fff;
   text-decoration: none;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+  .next {
+    background:
+      radial-gradient(
+        120% 140% at 100% 0%,
+        var(--color-accent-500) 0%,
+        transparent 55%
+      ),
+      var(--color-accent-400);
+  }
+}
+.next:hover {
+  box-shadow: var(--shadow-lg);
 }
 .next-head {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.85;
 }
 .next-date {
-  font-size: 40px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  text-transform: uppercase;
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 .next-title {
+  font-size: 15px;
+  font-weight: 500;
+  opacity: 0.95;
+}
+.next-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.next-time {
+  display: flex;
+  flex-direction: column;
+  min-width: 92px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.14);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.next-time span {
+  opacity: 0.8;
+}
+.next-time strong {
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  grid-template-columns: repeat(5, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 16px var(--pad);
   overflow-x: auto;
   min-height: 60vh;
+  background: var(--color-bg);
 }
 .column {
-  border-right: var(--rule-2);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-}
-.column:last-child {
-  border-right: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-sunken);
 }
 .column-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   margin: 0;
-  padding: 16px 16px 10px;
-  border-bottom: var(--rule-2);
-  font-family: var(--font-body);
+  padding: 12px 12px 4px;
 }
 .count {
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .column ul {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 8px;
+  padding: 8px;
 }
 .card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 14px;
-  background: var(--color-surface);
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
   color: inherit;
   text-decoration: none;
 }
-.card:hover,
-.card.selected {
-  background: var(--color-neutral-300);
+.card:hover {
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-md);
 }
 .card.selected {
-  box-shadow: var(--select-mark);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-200);
 }
 .card.hot {
-  background: var(--color-accent-600);
-  color: #fff;
+  border-color: var(--color-accent-300);
 }
 .card-top {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 8px;
   justify-content: space-between;
-  font-weight: 800;
-  font-size: 13px;
-  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-accent-700);
 }
 .card-kick {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: capitalize;
 }
 .card-title {
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.2;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 .card-sub {
   font-size: 12px;
+  color: var(--muted);
 }
 .card-money {
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
   padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-top: var(--rule);
   font-size: 12px;
+  color: var(--muted);
+}
+.card-money strong {
+  color: var(--color-text);
+  font-weight: 600;
 }
 .choose {
   display: flex;
@@ -872,56 +669,24 @@ function matchFor(item: InboxItem) {
   gap: 8px;
   padding: 16px 28px;
 }
-.to-sort-aside {
+section:not(.column) > ul {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-}
-.inbox-watch-link {
-  display: inline-flex;
-  align-items: center;
-  color: inherit;
-  text-decoration: none;
-  border-radius: 2px;
-}
-.inbox-watch-link:focus-visible,
-.inbox-watch-settings:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-.inbox-watch-settings {
-  color: inherit;
-}
-.inbox-watch-alert {
-  margin: 0;
-  padding: 0 24px 12px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--color-accent-700);
+  flex-direction: column;
+  gap: 2px;
 }
 @media (max-width: 899px) {
-  .inbox-watch-link {
-    min-width: 44px;
-    min-height: 44px;
-    justify-content: center;
-  }
-  .inbox-watch-alert {
-    padding-inline: 16px;
-  }
   .list {
-    padding-bottom: calc(var(--tabbar) + 16px);
+    padding-bottom: calc(var(--tabbar) + 24px);
   }
   .list-head {
     position: static;
-    padding: 12px 16px;
+    padding: 12px var(--pad) 4px;
+    background: transparent;
+    backdrop-filter: none;
+    border-bottom: 0;
   }
   .search {
     flex-basis: 100%;
-  }
-  .more {
-    margin-inline: 16px;
   }
 }
 </style>
