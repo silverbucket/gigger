@@ -11,6 +11,8 @@ export const test = base.extend<{
     seedGig: (gig: Partial<Gig> & Pick<Gig, "id" | "title">) => Promise<void>;
     seedVenue: (id: string, name: string) => Promise<void>;
     seedOtherBand: (id: string, name: string) => Promise<void>;
+    /** Stores a slug on the band without registering or writing a public page. */
+    storeSlug: (slug: string) => Promise<void>;
   };
 }>({
   account: async ({ request }, use) => {
@@ -92,6 +94,11 @@ export const test = base.extend<{
           name,
           contactIds: [],
         });
+      },
+      async storeSlug(slug) {
+        const band = await request.get(`${path}band`, { headers });
+        expect(band.ok()).toBe(true);
+        await put("band", "band", { ...(await band.json()), slug });
       },
       async seedGig(gig) {
         await put("gig", `gigs/${gig.id}`, {
