@@ -1,9 +1,36 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { conversationId, type Message, messagePath } from "@showday/schemas";
+import { messageTimeLong } from "../src/lib/format";
 import { expect, go, login, test } from "./fixtures";
 
 const messageBody = (page: Page) => page.locator(".body .pre");
 const messageHeader = (page: Page) => page.locator(".detail-head .muted");
+const messageKicker = (page: Page) => page.locator(".detail-head .kicker");
+
+async function bumpConversationLastIn(
+  request: APIRequestContext,
+  seeded: {
+    root: string;
+    headers: Record<string, string>;
+    conversation: string;
+  },
+  lastIn: string,
+) {
+  const indexUrl = `${seeded.root}conversations/index`;
+  const got = await request.get(indexUrl, { headers: seeded.headers });
+  expect(got.ok()).toBe(true);
+  const etag = got.headers().etag;
+  const index = (await got.json()) as Record<string, unknown>;
+  const entry = index[seeded.conversation] as Record<string, unknown>;
+  const updated = await request.put(indexUrl, {
+    headers: { ...seeded.headers, ...(etag ? { "If-Match": etag } : {}) },
+    data: {
+      ...index,
+      [seeded.conversation]: { ...entry, lastIn },
+    },
+  });
+  expect([200, 201, 412]).toContain(updated.status());
+}
 
 async function seedInboxEmail(
   request: APIRequestContext,
@@ -138,21 +165,35 @@ test.describe("inbox email translation", () => {
     await expect(
       language.getByRole("radio", { name: "English", exact: true }),
     ).toBeChecked();
+    const initialKicker = (await messageKicker(page).textContent()) ?? "";
+    const refreshedAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const kickerAfterRefresh = messageTimeLong(refreshedAt);
     const freshMessage: Message = {
       ...(seeded.message as Message),
-      published: new Date().toISOString(),
+      published: refreshedAt,
     };
     await request.put(`${seeded.root}${messagePath(freshMessage)}`, {
       headers: seeded.headers,
       data: freshMessage,
     });
+    await bumpConversationLastIn(request, seeded, refreshedAt);
     await expect
-      .poll(() => messageBody(page).textContent(), { timeout: 30000 })
-      .toMatch(/In English:/);
+      .poll(
+        async () => {
+          const kickerText = (await messageKicker(page).textContent()) ?? "";
+          if (kickerText === initialKicker) return false;
+          if (!kickerText.includes(kickerAfterRefresh)) return false;
+          const body = (await messageBody(page).textContent()) ?? "";
+          return /In English:/.test(body);
+        },
+        { timeout: 30000 },
+      )
+      .toBe(true);
     await expect(
       language.getByRole("radio", { name: "English", exact: true }),
     ).toBeChecked();
     await expect(messageHeader(page)).toContainText(/In English:/);
+    await expect(messageBody(page)).not.toContainText(czech);
   });
 
   test("reopening a message applies session cache on the first action", async ({
