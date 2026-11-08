@@ -474,7 +474,7 @@ function createBand(event: SubmitEvent) {
 
 {#snippet memberFields(compact: boolean)}
   <div class="field">
-    <label for="member-name">Name <span class="required">*</span></label>
+    <label for="member-name">Name <span class="required">Required</span></label>
     <input
       id="member-name"
       class="input"
@@ -1050,7 +1050,7 @@ function createBand(event: SubmitEvent) {
                 ) as line (line)}
                   <span>{line}</span>
                 {:else}
-                  <span class="muted">Name only — no contact details</span>
+                  <span class="muted">No contact details yet</span>
                 {/each}
               </span>
               <span class="row-actions">

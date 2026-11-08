@@ -187,6 +187,9 @@ async function sendSheet() {
     {/if}
     {#if contacts.length || gig.contacts?.length || others.length}
       <DetailSection label="Who">
+        {#snippet action()}
+          <Tag kind="private">Private</Tag>
+        {/snippet}
         {#each contacts as contact (contact.id)}
           <span class="person">
             <a class="main plain" href={`#/${path("contacts", contact.id)}`}
@@ -226,10 +229,12 @@ async function sendSheet() {
     {/if}
     {#if fee || extras.length || gig.earnings}
       <DetailSection label="Money">
+        {#snippet action()}
+          <Tag kind="private">Private</Tag>
+        {/snippet}
         {#if gig.earnings}
           <span class="main">
             Took home {money(gig.earnings.takeHome, gig.earnings.currency)}
-            <Tag kind="private">Private</Tag>
           </span>
           <span class="line">
             {money(gig.earnings.total, gig.earnings.currency)}
@@ -243,9 +248,7 @@ async function sendSheet() {
             <span class="line">Agreed fee {fee}</span>
           {/if}
         {:else}
-          <span class="main"
-            >{fee ?? "No fee yet"} <Tag kind="private">Private</Tag></span
-          >
+          <span class="main">{fee ?? "No fee yet"}</span>
         {/if}
         {#if extras.length}
           <span class="line">Plus {extras.join(", ")}</span>
@@ -314,8 +317,10 @@ async function sendSheet() {
     {/if}
     {#if gig.notes?.trim()}
       <DetailSection label="Notes">
+        {#snippet action()}
+          <Tag kind="private">Private</Tag>
+        {/snippet}
         <span class="main pre">{gig.notes}</span>
-        <span><Tag kind="private">Private</Tag></span>
       </DetailSection>
     {/if}
     {#if gig.status !== "cancelled"}

@@ -197,7 +197,7 @@ async function authenticate(event: SubmitEvent) {
       var(--color-accent-500) 0%,
       transparent 60%
     ),
-    radial-gradient(70% 60% at 0% 100%, #2a2a8f 0%, transparent 70%),
+    radial-gradient(70% 60% at 0% 100%, #8f2a12 0%, transparent 70%),
     var(--color-accent-700);
   color: #fff;
 }
@@ -209,7 +209,7 @@ async function authenticate(event: SubmitEvent) {
         var(--color-accent-500) 0%,
         transparent 60%
       ),
-      radial-gradient(70% 60% at 0% 100%, #1b1b55 0%, transparent 70%),
+      radial-gradient(70% 60% at 0% 100%, #4a1a0d 0%, transparent 70%),
       var(--color-accent-400);
   }
 }

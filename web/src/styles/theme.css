@@ -17,17 +17,17 @@
   --color-border: #d6d6d0;
   --on-accent: #ffffff;
 
-  /* Accent: a calm indigo, used for actions, links, selection and focus. */
-  --color-accent: #5b5bd6;
-  --color-accent-100: #f0f0fe;
-  --color-accent-200: #e1e1fb;
-  --color-accent-300: #c7c7f6;
-  --color-accent-400: #a0a0ee;
-  --color-accent-500: #7474e2;
-  --color-accent-600: #5151cd;
-  --color-accent-700: #4242b0;
-  --color-accent-800: #333385;
-  --color-accent-900: #22225a;
+  /* Accent: a warm tomato red, used for actions, links, selection and focus. */
+  --color-accent: #e8552c;
+  --color-accent-100: #fff3ef;
+  --color-accent-200: #ffe4da;
+  --color-accent-300: #ffc6b3;
+  --color-accent-400: #fb9b7f;
+  --color-accent-500: #f2754f;
+  --color-accent-600: #cf4420;
+  --color-accent-700: #a8361a;
+  --color-accent-800: #7d2914;
+  --color-accent-900: #521b0e;
 
   /* Neutral ramp */
   --color-neutral-100: #f7f7f5;
@@ -41,18 +41,18 @@
   --color-neutral-900: #232422;
 
   /* Meaning: one hue per gig status, plus danger and success. */
-  --tone-enquiry-bg: #eef1f6;
-  --tone-enquiry-fg: #42536b;
+  --tone-enquiry-bg: #efefed;
+  --tone-enquiry-fg: #4f5157;
   --tone-offered-bg: #fdf1d8;
   --tone-offered-fg: #885a07;
   --tone-confirmed-bg: #e2f4e8;
   --tone-confirmed-fg: #1b6b3c;
-  --tone-played-bg: #eeebfb;
-  --tone-played-fg: #54439e;
-  --tone-cancelled-bg: #f8e9e8;
-  --tone-cancelled-fg: #9a3b35;
-  --color-danger: #c4342b;
-  --color-danger-bg: #fbeceb;
+  --tone-played-bg: #e6eef8;
+  --tone-played-fg: #2f5a8a;
+  --tone-cancelled-bg: #fbe9ec;
+  --tone-cancelled-fg: #9d2a3c;
+  --color-danger: #c0263e;
+  --color-danger-bg: #fdecef;
   --color-success: #1f7a45;
   --color-warning: #9a6408;
 
@@ -102,16 +102,16 @@
     --color-divider: #2a2b30;
     --color-border: #36373d;
 
-    --color-accent: #8d8ff3;
-    --color-accent-100: #1f2040;
-    --color-accent-200: #282a55;
-    --color-accent-300: #34376e;
-    --color-accent-400: #4b4e9c;
-    --color-accent-500: #6a6dd6;
-    --color-accent-600: #5d60d8;
-    --color-accent-700: #b0b2fa;
-    --color-accent-800: #c9cafc;
-    --color-accent-900: #e3e3fe;
+    --color-accent: #ff8a65;
+    --color-accent-100: #2e1b15;
+    --color-accent-200: #3e2219;
+    --color-accent-300: #582c1e;
+    --color-accent-400: #7e3c26;
+    --color-accent-500: #e0633c;
+    --color-accent-600: #c94a26;
+    --color-accent-700: #ffa688;
+    --color-accent-800: #ffc6b3;
+    --color-accent-900: #ffe4da;
 
     --color-neutral-100: #1c1d21;
     --color-neutral-200: #232428;
@@ -123,14 +123,14 @@
     --color-neutral-800: #c8c9ce;
     --color-neutral-900: #e6e6e9;
 
-    --tone-enquiry-bg: #232a36;
-    --tone-enquiry-fg: #a9bad3;
+    --tone-enquiry-bg: #26272b;
+    --tone-enquiry-fg: #c3c5cc;
     --tone-offered-bg: #382b12;
     --tone-offered-fg: #f0c674;
     --tone-confirmed-bg: #15301f;
     --tone-confirmed-fg: #86d6a3;
-    --tone-played-bg: #29243f;
-    --tone-played-fg: #bdb1f2;
+    --tone-played-bg: #1b2738;
+    --tone-played-fg: #9cc0ea;
     --tone-cancelled-bg: #3a1f1d;
     --tone-cancelled-fg: #ec9f98;
     --color-danger: #f0857c;

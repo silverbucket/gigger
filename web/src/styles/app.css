@@ -212,7 +212,10 @@ select.input {
   color: var(--muted);
 }
 .required {
-  color: var(--color-danger);
+  margin-left: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
 }
 
 /* Small inline notice strip, e.g. the global error. */

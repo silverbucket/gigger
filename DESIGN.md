@@ -8,8 +8,8 @@ Follow these rules for every new screen; don't ask. Calm, legible, and clear abo
 - Font: Inter 400/500/600/700. Headings 600–700, body 14px, labels 13px. Sentence case everywhere; no uppercase labels.
 - Ground `--color-bg`, panes and cards `--color-surface`, fills `--color-surface-2`, tracks `--color-sunken`. Hairline `--rule` (1px) between rows and sections.
 - Radius: 6/8/12/16 (`--radius-sm` … `--radius-xl`), pills for tags. Soft shadows only (`--shadow-sm|md|lg`).
-- Accent (indigo) only for: the primary action, the current nav item, the selected row, links, focus, unread markers and the next-gig card.
-- Status colours come from `--tone-<status>-bg/fg` (enquiry slate, offered amber, confirmed green, played violet, cancelled red); channels from `--channel-<name>`; danger from `--color-danger`.
+- Accent (warm tomato red) only for: the primary action, the current nav item, the selected row, links, focus, unread markers and the next-gig card.
+- Status colours come from `--tone-<status>-bg/fg` (enquiry grey, offered amber, confirmed green, played blue, cancelled crimson). No purple anywhere; channels from `--channel-<name>`; danger from `--color-danger`.
 - Icons: Lucide paths in `Icon.svelte`, 14–22px, `currentColor`.
 - Hit targets on phone ≥ 44px.
 

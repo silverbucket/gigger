@@ -28,7 +28,7 @@ let {
 }
 .has-action {
   grid-template-columns: 120px minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
 }
 h3 {
   margin: 0;
