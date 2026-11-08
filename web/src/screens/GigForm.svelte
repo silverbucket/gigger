@@ -152,7 +152,164 @@ const bandOptions = $derived(
 
 let error = $state("");
 let saving = $state(false);
+/** Set after a save attempt, so missing fields are marked from then on. */
+let tried = $state(false);
+let venueInvalid = $state(false);
 const isEdit = !!initial;
+
+// A plain new gig keeps what was typed while you look elsewhere (say, the gig
+// list); it is dropped on save or Start over.
+const draftKey =
+  !initial && !start.conversationId && !start.contactId && !extracted.venueId
+    ? `showday:new-gig:${bandId}`
+    : "";
+function fields() {
+  return {
+    draft: $state.snapshot(draft),
+    source,
+    timesText,
+    amount,
+    feeCurrency,
+    extraText,
+    ticketUrl,
+    description,
+    venueQuery,
+    newVenue,
+    venueName,
+    venueAddress,
+    venueCity,
+    pendingContacts: $state.snapshot(pendingContacts),
+    pendingBands: $state.snapshot(pendingBands),
+  };
+}
+type Fields = ReturnType<typeof fields>;
+function apply(value: Fields) {
+  // Replace the draft's contents in place; the state object itself stays.
+  for (const key of Object.keys(draft)) delete draft[key as keyof Gig];
+  Object.assign(draft, structuredClone(value.draft));
+  source = value.source;
+  timesText = value.timesText;
+  amount = value.amount;
+  feeCurrency = value.feeCurrency;
+  extraText = value.extraText;
+  ticketUrl = value.ticketUrl;
+  description = value.description;
+  venueQuery = value.venueQuery;
+  newVenue = value.newVenue;
+  venueName = value.venueName;
+  venueAddress = value.venueAddress;
+  venueCity = value.venueCity;
+  pendingContacts = structuredClone(value.pendingContacts);
+  pendingBands = structuredClone(value.pendingBands);
+}
+const blank = untrack(fields);
+const blankJson = JSON.stringify(blank);
+function readStored(): Fields | undefined {
+  try {
+    const raw = draftKey && sessionStorage.getItem(draftKey);
+    return raw ? JSON.parse(raw) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function forget() {
+  try {
+    if (draftKey) sessionStorage.removeItem(draftKey);
+  } catch {
+    // Without sessionStorage there is nothing to forget.
+  }
+}
+let restored = $state(false);
+const stored = readStored();
+if (stored) {
+  untrack(() => apply(stored));
+  restored = true;
+}
+let finished = false;
+$effect(() => {
+  const json = JSON.stringify(fields());
+  if (!draftKey || finished) return;
+  try {
+    if (json === blankJson) sessionStorage.removeItem(draftKey);
+    else sessionStorage.setItem(draftKey, json);
+  } catch {
+    // Without sessionStorage the draft lives only while the form is open.
+  }
+});
+function startOver() {
+  forget();
+  apply(blank);
+  restored = false;
+  tried = false;
+  venueInvalid = false;
+  error = "";
+}
+
+/** Everything that blocks saving, by field name, and the field to go to first. */
+function check(form: HTMLFormElement) {
+  const names: string[] = [];
+  let first: HTMLElement | undefined;
+  const add = (name: string, element?: HTMLElement | null) => {
+    if (!names.includes(name)) names.push(name);
+    if (!first && element) first = element;
+  };
+  for (const element of Array.from(form.elements) as HTMLInputElement[]) {
+    if (!element.willValidate || element.validity.valid) continue;
+    const group = element.closest('[role="radiogroup"]');
+    if (element === venueInput(form)) continue;
+    const name =
+      group?.getAttribute("aria-label") ??
+      element.labels?.[0]?.textContent ??
+      element.name;
+    add(name.replace(/\(.*\)/, "").trim(), element);
+  }
+  venueInvalid = false;
+  if (!newVenue && !draft.venueId) {
+    // A typed name that matches a venue exactly counts as picking it.
+    const typed = venueQuery.trim().toLocaleLowerCase();
+    const match = typed
+      ? data.venues.filter((v) => v.name.trim().toLocaleLowerCase() === typed)
+      : [];
+    if (match.length === 1) draft.venueId = match[0].id;
+    else {
+      venueInvalid = true;
+      add("Venue", venueInput(form));
+    }
+  }
+  if (contactQuery.trim())
+    add("Add a contact", queryInput(form, "Add a contact"));
+  if (bandQuery.trim()) add("Add a band", queryInput(form, "Add a band"));
+  return { names, first };
+}
+function venueInput(form: HTMLFormElement) {
+  return queryInput(form, "Venue");
+}
+function queryInput(form: HTMLFormElement, label: string) {
+  return Array.from(
+    form.querySelectorAll<HTMLInputElement>('input[role="combobox"]'),
+  ).find((input) => input.labels?.[0]?.textContent?.trim() === label);
+}
+function explain(names: string[]) {
+  if (names.length === 1 && names[0] === "Venue")
+    return venueQuery.trim()
+      ? `Choose “${venueQuery.trim()}” from the venue suggestions, or create it as a new venue.`
+      : "Choose a venue, or create a new one.";
+  if (names.length === 1 && names[0] === "Add a contact")
+    return "Pick the contact you typed from the suggestions, or clear the box.";
+  if (names.length === 1 && names[0] === "Add a band")
+    return "Pick the band you typed from the suggestions, or clear the box.";
+  return `To save, check: ${names.join(", ")}.`;
+}
+function goTo(element: HTMLElement) {
+  const section = element.closest("details");
+  if (section) section.open = true;
+  const target =
+    element.closest<HTMLElement>('[role="radiogroup"]') ??
+    element.closest<HTMLElement>(".field") ??
+    element;
+  target.scrollIntoView({ block: "center" });
+  element.focus({ preventScroll: true });
+}
 
 function noteFromMessage() {
   const found = [
@@ -200,13 +357,13 @@ const clean = (contact: Contact) => {
 async function submit(event: SubmitEvent) {
   event.preventDefault();
   error = "";
-  if (!newVenue && !draft.venueId) {
-    error = "Choose a venue from the suggestions, or create a new one.";
-    return;
-  }
+  tried = true;
+  const form = event.currentTarget as HTMLFormElement;
+  const problems = check(form);
   const enquirySource = source;
-  if (!enquirySource) {
-    error = "Choose where the enquiry came from.";
+  if (problems.names.length || !enquirySource) {
+    error = explain(problems.names.length ? problems.names : ["Source"]);
+    if (problems.first) goTo(problems.first);
     return;
   }
   if (creatingContact?.name.trim()) addPendingContact();
@@ -240,9 +397,11 @@ async function submit(event: SubmitEvent) {
       draft.otherBandIds = value.otherBandIds;
       pendingBands = pendingBands.filter((b) => b.id !== band.id);
     }
+    const venueTitle =
+      data.venues.find((v) => v.id === value.venueId)?.name ?? venueName;
     const saved: Gig = {
       ...value,
-      title: value.title.trim(),
+      title: value.title.trim() || venueTitle.trim(),
       contactIds: value.contactIds ?? [],
       enquirySource,
       fee: {
@@ -269,6 +428,8 @@ async function submit(event: SubmitEvent) {
       delete saved.setLength;
     if (!saved.otherBandIds?.length) delete saved.otherBandIds;
     await bands.save("gig", bandId, saved);
+    finished = true;
+    forget();
     await store.load();
     onsaved(saved.id);
   } catch (cause) {
@@ -285,14 +446,7 @@ async function submit(event: SubmitEvent) {
 
 <PhoneHeader title={isEdit ? "Edit gig" : "New gig"} onclose={oncancel} />
 
-<form
-  class="gig-form"
-  onsubmit={submit}
-  oninvalidcapture={(event) => {
-    const section = (event.target as HTMLElement).closest("details");
-    if (section) section.open = true;
-  }}
->
+<form class="gig-form" class:tried novalidate onsubmit={submit}>
   <div class="detail-head head">
     <p class="kicker">
       {fromMessage
@@ -316,6 +470,15 @@ async function submit(event: SubmitEvent) {
       <Icon name="x" size={20} />
     </button>
   </div>
+
+  {#if restored}
+    <p class="restored">
+      <span>Restored what you typed earlier.</span>
+      <button type="button" class="btn btn-ghost" onclick={startOver}>
+        Start over
+      </button>
+    </p>
+  {/if}
 
   <fieldset disabled={saving}>
     {#if fromMessage && start.enquiryText}
@@ -522,7 +685,12 @@ async function submit(event: SubmitEvent) {
           <label for="gig-title">Title</label>
           <Tag kind="private">Private</Tag>
         </div>
-        <input id="gig-title" class="input" bind:value={draft.title} required>
+        <input
+          id="gig-title"
+          class="input"
+          bind:value={draft.title}
+          placeholder="Leave empty to use the venue name"
+        >
       </div>
       {#if !newVenue}
         <Typeahead
@@ -531,6 +699,7 @@ async function submit(event: SubmitEvent) {
           options={venueOptions}
           placeholder="Type a venue name"
           required={!draft.venueId}
+          invalid={venueInvalid && !draft.venueId}
           createLabel={(q) => `Create “${q}” as a new venue`}
           oncreate={(q) => {
             newVenue = true;
@@ -539,6 +708,7 @@ async function submit(event: SubmitEvent) {
           }}
           onselect={(id) => {
             draft.venueId = id;
+            venueInvalid = false;
             venueQuery = data.venues.find((v) => v.id === id)?.name ?? "";
           }}
           hint={pickedVenue
@@ -948,10 +1118,10 @@ async function submit(event: SubmitEvent) {
   </fieldset>
 
   <div class="spacer"></div>
-  {#if error}
-    <p class="notice error" role="alert">{error}</p>
-  {/if}
-  <BottomActionBar>
+  {#snippet problem()}
+    <p class="form-error" role="alert">{error}</p>
+  {/snippet}
+  <BottomActionBar summary={error ? problem : undefined}>
     <button type="submit" class="btn btn-primary btn-wide" disabled={saving}>
       {saving
         ? "Saving…"
@@ -974,6 +1144,30 @@ async function submit(event: SubmitEvent) {
 </form>
 
 <style>
+.form-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 500;
+}
+.restored {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 8px 28px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: var(--rule);
+  background: var(--color-surface-2);
+}
+.tried :global(.input:invalid) {
+  border-color: var(--color-danger);
+}
+.tried :global(.seg:has(input:invalid)) {
+  outline: 1.5px solid var(--color-danger);
+  outline-offset: 1px;
+}
 .gig-form {
   display: flex;
   flex-direction: column;

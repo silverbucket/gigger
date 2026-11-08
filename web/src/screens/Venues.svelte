@@ -22,6 +22,8 @@ import {
   mediumDate,
   normalize,
   plural,
+  venueLinks,
+  withScheme,
 } from "../lib/format";
 import { path, router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
@@ -111,7 +113,12 @@ async function save(event: SubmitEvent) {
     name: draft.name.trim(),
     address: draft.address.trim(),
   };
-  if (!value.city?.trim()) delete value.city;
+  for (const key of ["city", "email", "phone"] as const) {
+    value[key] = value[key]?.trim();
+    if (!value[key]) delete value[key];
+  }
+  value.website = withScheme(value.website ?? "");
+  if (!value.website) delete value.website;
   if (await run(() => bands.save("venue", data.band.id, value)))
     router.go(path("venues", value.id), { replace: true });
 }
@@ -252,6 +259,43 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
             </div>
             <input id="venue-city" class="input" bind:value={draft.city}>
           </div>
+          <div class="label-row reach">
+            <span class="field-label">How to reach the venue</span>
+            <Tag kind="private">Private</Tag>
+          </div>
+          <div class="field">
+            <label for="venue-website">Website</label>
+            <input
+              id="venue-website"
+              class="input"
+              inputmode="url"
+              autocomplete="off"
+              placeholder="venue.com"
+              pattern={"\\s*(https?://)?[^\\s/]+\\.[^\\s]+\\s*"}
+              bind:value={draft.website}
+            >
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="venue-email">Email</label>
+              <input
+                id="venue-email"
+                class="input"
+                type="email"
+                placeholder="booking@venue.com"
+                bind:value={draft.email}
+              >
+            </div>
+            <div class="field">
+              <label for="venue-phone">Phone</label>
+              <input
+                id="venue-phone"
+                class="input"
+                type="tel"
+                bind:value={draft.phone}
+              >
+            </div>
+          </div>
         </fieldset>
         <div class="spacer"></div>
         <BottomActionBar>
@@ -273,6 +317,7 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
       </form>
     {:else if selected}
       {@const { venue, surveys, averages } = selected}
+      {@const links = venueLinks(venue)}
       {@const indoor = surveys.filter((s) => s.setting === "indoor").length}
       {@const counted = surveys.filter((s) => s.attendance !== undefined)}
       {@const avgPeople = counted.length
@@ -322,6 +367,19 @@ const short = (c: string) => (c === "under 50" ? "under 50" : c);
                 >Map</a
               >
               <span class="muted">· surveys and notes</span>
+              {#if links.length}
+                <span class="reach-links">
+                  {#each links as link (link.href)}
+                    <a
+                      href={link.href}
+                      {...link.external
+                        ? { target: "_blank", rel: "noreferrer" }
+                        : {}}
+                      >{link.label}</a
+                    >
+                  {/each}
+                </span>
+              {/if}
             </dd>
           </div>
         </dl>
@@ -552,6 +610,15 @@ ul {
 .vis a {
   color: var(--color-text);
   text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+}
+.reach-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.reach {
+  margin-top: 4px;
 }
 .edit .detail-head .visibility-note {
   margin-top: 8px;
