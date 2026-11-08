@@ -241,6 +241,50 @@ test.describe("inbox email translation", () => {
     await expect(messageBody(page)).toHaveText(`In English: ${czech}`);
   });
 
+  test("a translation still running when the thread refreshes finishes", async ({
+    page,
+    request,
+    account,
+  }) => {
+    const signup = await request.post("/api/auth/login", {
+      data: { username: account.username, password: account.password },
+    });
+    const { token } = await signup.json();
+    const czech =
+      "Dobrý den, nabízíme koncert 12. června v Praze. Termín by nám vyhovoval.";
+    const seeded = await seedInboxEmail(
+      request,
+      account,
+      token,
+      czech,
+      "Nabídka koncertu",
+    );
+    await login(page, account);
+    await page.goto(`/#/inbox/${seeded.conversation}`);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/translate", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.getByRole("button", { name: "Show in English" }).click();
+    await expect(page.getByText("Translating…").first()).toBeVisible();
+    // A newer copy of the thread arrives while the request is still out.
+    await bumpConversationLastIn(
+      request,
+      seeded,
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+    await pullRemoteInboxRefresh(page);
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 500)));
+    release();
+    await expect(messageBody(page)).toContainText(/In English:/, {
+      timeout: 15000,
+    });
+  });
+
   test("reopening a message applies session cache on the first action", async ({
     page,
     request,
