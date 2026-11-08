@@ -8,6 +8,7 @@ import { messageHandler } from "./messages";
 import { metaHandler } from "./meta";
 import { publicHandler } from "./public";
 import { type Sender, sockethubSender } from "./sender";
+import { translateHandler } from "./translate";
 export const senders = (): Record<Channel, Sender> => ({
   email: sockethubSender("email"),
   messenger: sockethubSender("messenger"),
@@ -45,6 +46,8 @@ export function handler(
       return meta.deletionStatus();
     if (req.method === "POST" && path === "/messages/ticket")
       return messages.ticket(req);
+    if (req.method === "POST" && path === "/translate")
+      return translateHandler()(req);
     if (req.method === "POST" && path === "/messages/reply")
       return messages.reply(req);
     if (req.method === "GET" && path === "/messages/events")

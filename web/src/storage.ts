@@ -4,6 +4,7 @@ import {
   STORAGE_MODULE_SLUG,
 } from "@showday/schemas";
 import RemoteStorage from "remotestoragejs";
+import { clearTranslationCache } from "./lib/message-translate-cache";
 import { createLogoutSync } from "./logout-sync";
 export const storage = new RemoteStorage({
   discovery: { allowPrivateAddresses: true, timeout: 5000 },
@@ -359,6 +360,7 @@ function leave(expired: boolean) {
   sessionEvents.dispatchEvent(new CustomEvent("logout", { detail: expired }));
 }
 function clearCache(broadcast: boolean) {
+  clearTranslationCache();
   sessionReady = false;
   // The cache stays marked as its account's until the library has deleted it,
   // so a reload before then (another tab blocking the deletion, say) finishes
