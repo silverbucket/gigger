@@ -68,20 +68,74 @@ test("publishUntilLive retries the write until both public routes work", async (
   }
 });
 
-test("publishUntilLive stops immediately when the write step throws", async () => {
+function apiError(message: string, status: number) {
+  return Object.assign(new Error(message), { status });
+}
+
+test("publishUntilLive retries a transient write failure until the page is live", async () => {
+  let writes = 0;
+  const restore = mockFetch((path) => {
+    if (writes < 2) return new Response("", { status: 404 });
+    if (path.endsWith("/gigs.json")) return new Response("{}", { status: 200 });
+    return new Response("<html>", { status: 200 });
+  });
+  try {
+    await publishUntilLive(
+      "flaky",
+      async () => {
+        writes += 1;
+        if (writes === 1)
+          throw apiError(
+            "Could not verify access to this band. Please retry.",
+            403,
+          );
+      },
+      { timeoutMs: 10_000 },
+    );
+    expect(writes).toBe(2);
+  } finally {
+    restore();
+  }
+});
+
+test("publishUntilLive gives up after repeated write failures with only the plain message", async () => {
   const restore = mockFetch(() => new Response("", { status: 404 }));
-  const started = Date.now();
+  let writes = 0;
   try {
     await expect(
       publishUntilLive(
         "x",
         async () => {
-          throw new Error(publicPageCouldNotPublish);
+          writes += 1;
+          throw apiError(
+            "Could not verify access to this band. Please retry.",
+            403,
+          );
+        },
+        { timeoutMs: 10_000, writeAttempts: 3 },
+      ),
+    ).rejects.toThrow(publicPageCouldNotPublish);
+    expect(writes).toBe(3);
+  } finally {
+    restore();
+  }
+});
+
+test("publishUntilLive shows an address problem at once", async () => {
+  const restore = mockFetch(() => new Response("", { status: 404 }));
+  let writes = 0;
+  try {
+    await expect(
+      publishUntilLive(
+        "taken",
+        async () => {
+          writes += 1;
+          throw apiError("This address is already taken. Try another.", 409);
         },
         { timeoutMs: 10_000 },
       ),
-    ).rejects.toThrow(publicPageCouldNotPublish);
-    expect(Date.now() - started).toBeLessThan(500);
+    ).rejects.toThrow("This address is already taken. Try another.");
+    expect(writes).toBe(1);
   } finally {
     restore();
   }
@@ -207,4 +261,93 @@ test("unpublish returns the page to not live, and a later check can see it again
   serving = true;
   await tracker.probe("band");
   expect(seen.live).toBe("band");
+});
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("a later recheck sees the page live after a first 404, without a slug change", async () => {
+  const seen = { live: null as string | null };
+  const answers = [false, false, true];
+  let checks = 0;
+  const tracker = trackPublicPageLive(
+    (slug) => {
+      seen.live = slug;
+    },
+    async () => answers[Math.min(checks++, answers.length - 1)],
+  );
+  const stop = tracker.watch("band", [5]);
+  try {
+    for (let i = 0; i < 50 && seen.live !== "band"; i++) await wait(5);
+    expect(seen.live).toBe("band");
+    const settled = checks;
+    await wait(30);
+    expect(checks).toBe(settled);
+  } finally {
+    stop();
+  }
+});
+
+test("a later recheck sees the page live after the first check fails", async () => {
+  const seen = { live: null as string | null };
+  let checks = 0;
+  const tracker = trackPublicPageLive(
+    (slug) => {
+      seen.live = slug;
+    },
+    async () => {
+      checks += 1;
+      if (checks === 1) throw new Error("offline");
+      return true;
+    },
+  );
+  const stop = tracker.watch("band", [5]);
+  try {
+    for (let i = 0; i < 50 && seen.live !== "band"; i++) await wait(5);
+    expect(seen.live).toBe("band");
+    expect(checks).toBe(2);
+  } finally {
+    stop();
+  }
+});
+
+test("a watch stops rechecking once stopped", async () => {
+  let checks = 0;
+  const tracker = trackPublicPageLive(
+    () => {},
+    async () => {
+      checks += 1;
+      return false;
+    },
+  );
+  const stop = tracker.watch("band", [5]);
+  await wait(20);
+  stop();
+  const stoppedAt = checks;
+  await wait(30);
+  expect(checks).toBe(stoppedAt);
+});
+
+test("a stale 404 from a watch cannot undo a finished publish", async () => {
+  const seen = { live: null as string | null };
+  const pending = deferred();
+  let checks = 0;
+  const tracker = trackPublicPageLive(
+    (slug) => {
+      seen.live = slug;
+    },
+    () => {
+      checks += 1;
+      return pending.promise;
+    },
+  );
+  const stop = tracker.watch("band", [5]);
+  try {
+    tracker.confirmed("band");
+    pending.resolve(false);
+    await wait(30);
+    expect(seen.live).toBe("band");
+    expect(checks).toBe(1);
+  } finally {
+    stop();
+  }
 });

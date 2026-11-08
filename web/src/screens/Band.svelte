@@ -169,7 +169,7 @@ const liveTracker = trackPublicPageLive((slug) => {
 const bandSlug = $derived(band?.slug);
 const pageLive = $derived(!!bandSlug && liveSlug === bandSlug);
 $effect(() => {
-  if (bandSlug) void liveTracker.probe(bandSlug);
+  if (bandSlug) return liveTracker.watch(bandSlug);
 });
 let bandPageLive = $state<Record<string, boolean>>({});
 $effect(() => {
@@ -406,8 +406,11 @@ async function savePublicPage(event: SubmitEvent) {
     await data.load();
   } catch (cause) {
     ui.error = "";
+    const status = (cause as { status?: number } | null)?.status;
     publicPageError =
-      cause instanceof Error && cause.message
+      (status === 400 || status === 409) &&
+      cause instanceof Error &&
+      cause.message
         ? cause.message
         : publicPageCouldNotPublish;
   } finally {

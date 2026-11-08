@@ -71,6 +71,12 @@ export function trackPublicPageLive(
     liveSlug = slug;
     onChange(slug);
   };
+  const probe = async (slug: string) => {
+    if (liveSlug === slug) return;
+    const started = ++generation;
+    const live = await check(slug).catch(() => false);
+    if (started === generation) set(live ? slug : null);
+  };
   return {
     confirmed(slug: string) {
       generation += 1;
@@ -80,11 +86,31 @@ export function trackPublicPageLive(
       generation += 1;
       set(null);
     },
-    async probe(slug: string) {
-      if (liveSlug === slug) return;
-      const started = ++generation;
-      const live = await check(slug);
-      if (started === generation) set(live ? slug : null);
+    probe,
+    /**
+     * Checks the slug now, then keeps rechecking with growing gaps while it is
+     * not live, so a failed or early 404 check does not stick. Returns a stop
+     * function.
+     */
+    watch(
+      slug: string,
+      delays: readonly number[] = [2000, 5000, 15_000, 60_000],
+    ) {
+      let stopped = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let attempt = 0;
+      const run = async () => {
+        await probe(slug);
+        if (stopped || liveSlug === slug) return;
+        const delay = delays[Math.min(attempt, delays.length - 1)];
+        attempt += 1;
+        timer = setTimeout(run, delay);
+      };
+      void run();
+      return () => {
+        stopped = true;
+        clearTimeout(timer);
+      };
     },
   };
 }
@@ -96,17 +122,26 @@ export function trackPublicPageLive(
 export async function publishUntilLive(
   slug: string,
   write: () => Promise<void>,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; writeAttempts?: number } = {},
 ): Promise<void> {
   const deadline = Date.now() + (options.timeoutMs ?? 120_000);
+  const writeAttempts = options.writeAttempts ?? 3;
+  let failedWrites = 0;
   let delay = 500;
   while (Date.now() < deadline) {
     try {
       await write();
+      failedWrites = 0;
     } catch (error) {
-      throw error instanceof Error
-        ? error
-        : new Error(publicPageCouldNotPublish);
+      // A rejected or taken address needs the musician; anything else may pass.
+      const status = (error as { status?: number } | null)?.status;
+      if ((status === 400 || status === 409) && error instanceof Error)
+        throw error;
+      failedWrites += 1;
+      if (failedWrites >= writeAttempts) break;
+      await sleep(delay);
+      delay = Math.min(Math.round(delay * 1.3), 2500);
+      continue;
     }
     if (await isPublicPageLive(slug)) return;
     await sleep(delay);
