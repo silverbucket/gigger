@@ -109,6 +109,10 @@ export interface Venue {
   name: string;
   address: string;
   city?: string;
+  /** The venue's own published ways to reach it; private to the band. */
+  website?: string;
+  email?: string;
+  phone?: string;
 }
 /** The only gig fields that ever leave private storage. */
 export interface PublicGig {
@@ -850,7 +854,17 @@ export const schemas = {
       ],
     },
   ),
-  venue: object({ name: text, address: text, city: text }, ["name", "address"]),
+  venue: object(
+    {
+      name: text,
+      address: text,
+      city: text,
+      website: ticketUrl,
+      email,
+      phone: text,
+    },
+    ["name", "address"],
+  ),
   survey: surveySchema,
   otherBand: object(
     {

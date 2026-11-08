@@ -123,3 +123,40 @@ export const normalize = (value: string) =>
 
 export const mapUrl = (address: string) =>
   `https://www.openstreetmap.org/search?query=${encodeURIComponent(address)}`;
+
+/** Adds https:// to a bare domain such as "venue.cz"; empty stays empty. */
+export const withScheme = (url: string) => {
+  const value = url.trim();
+  return !value || /^https?:\/\//i.test(value) ? value : `https://${value}`;
+};
+
+/** Website, email and phone of a venue as links, in that order. */
+export const venueLinks = (venue?: {
+  website?: string;
+  email?: string;
+  phone?: string;
+}) => [
+  ...(venue?.website
+    ? [
+        {
+          label: venue.website
+            .replace(/^https?:\/\/(www\.)?/i, "")
+            .replace(/\/$/, ""),
+          href: venue.website,
+          external: true,
+        },
+      ]
+    : []),
+  ...(venue?.email
+    ? [{ label: venue.email, href: `mailto:${venue.email}`, external: false }]
+    : []),
+  ...(venue?.phone
+    ? [
+        {
+          label: venue.phone,
+          href: `tel:${venue.phone.replace(/[^\d+]/g, "")}`,
+          external: false,
+        },
+      ]
+    : []),
+];

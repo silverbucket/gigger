@@ -27,6 +27,7 @@ import {
   mediumDate,
   money,
   today,
+  venueLinks,
 } from "../lib/format";
 import {
   contactsOf,
@@ -183,6 +184,14 @@ async function sendSheet() {
             >Map and directions</a
           >
         {/if}
+        {#each venueLinks(venue) as link (link.href)}
+          <a
+            class="line"
+            href={link.href}
+            {...link.external ? { target: "_blank", rel: "noreferrer" } : {}}
+            >{link.label}</a
+          >
+        {/each}
       </DetailSection>
     {/if}
     {#if contacts.length || gig.contacts?.length || others.length}
