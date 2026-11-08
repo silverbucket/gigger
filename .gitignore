@@ -8,3 +8,6 @@ web/dist/
 test-results/
 playwright-report/
 test/certs/
+
+# Local dev stack state (bun run dev)
+.dev/
