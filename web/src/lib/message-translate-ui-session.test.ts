@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
+  clearInboxLangOnConversationOpen,
   clearInboxLangSession,
   inboxLangSessionKey,
   readInboxLangSession,
+  resetInboxLangOpenTracking,
   writeInboxLangSession,
 } from "./message-translate-ui-session";
 
@@ -41,6 +43,7 @@ beforeEach(() => {
 
 afterEach(() => {
   sessionStorage.clear();
+  resetInboxLangOpenTracking();
   restoreSessionStorage?.();
 });
 
@@ -55,4 +58,26 @@ test("inbox language session is per conversation and cleared on a fresh open", (
   expect(readInboxLangSession("conv-b")).toBeUndefined();
   clearInboxLangSession("conv-a");
   expect(sessionStorage.getItem(inboxLangSessionKey("conv-a"))).toBeNull();
+});
+
+test("open tracking clears only when the user enters a message from elsewhere", () => {
+  writeInboxLangSession("conv-a", {
+    messageId: "m1",
+    chosen: "en",
+    segmented: true,
+    view: "en",
+  });
+  clearInboxLangOnConversationOpen("conv-a");
+  expect(readInboxLangSession("conv-a")).toBeUndefined();
+  writeInboxLangSession("conv-a", {
+    messageId: "m1",
+    chosen: "en",
+    segmented: true,
+    view: "en",
+  });
+  clearInboxLangOnConversationOpen("conv-a");
+  expect(readInboxLangSession("conv-a")?.view).toBe("en");
+  resetInboxLangOpenTracking();
+  clearInboxLangOnConversationOpen("conv-a");
+  expect(readInboxLangSession("conv-a")).toBeUndefined();
 });

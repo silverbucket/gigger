@@ -43,3 +43,16 @@ export function clearInboxLangSession(conversationId: string) {
   if (typeof sessionStorage === "undefined") return;
   sessionStorage.removeItem(inboxLangSessionKey(conversationId));
 }
+
+/** Clears stored control state only when the user opens this message from elsewhere. */
+let openTranslationClearToken: string | undefined;
+
+export function resetInboxLangOpenTracking() {
+  openTranslationClearToken = undefined;
+}
+
+export function clearInboxLangOnConversationOpen(conversationId: string) {
+  if (openTranslationClearToken === conversationId) return;
+  clearInboxLangSession(conversationId);
+  openTranslationClearToken = conversationId;
+}
