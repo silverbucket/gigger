@@ -6,6 +6,7 @@ let {
   subject,
   body,
   showSubject = false,
+  conversationId,
   onSubject,
   separateControl = false,
   displayBody = $bindable(body),
@@ -15,6 +16,7 @@ let {
   subject?: string;
   body: string;
   showSubject?: boolean;
+  conversationId?: string;
   onSubject?: (subject: string | undefined) => void;
   /** When true, only the control is rendered; the parent supplies the body text. */
   separateControl?: boolean;
@@ -23,12 +25,6 @@ let {
 } = $props();
 
 let displaySubject = $state<string | undefined>();
-
-$effect(() => {
-  displayBody = body;
-  displaySubject = subject;
-  contentLang = undefined;
-});
 
 $effect(() => {
   onSubject?.(displaySubject);
@@ -40,6 +36,7 @@ $effect(() => {
   {subject}
   {body}
   {showSubject}
+  {conversationId}
   bind:displaySubject
   bind:displayBody
   bind:contentLang

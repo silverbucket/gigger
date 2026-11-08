@@ -46,6 +46,10 @@ import {
   showToSortSection,
 } from "../lib/inbox-watch";
 import { messageStream } from "../lib/message-stream.svelte";
+import {
+  clearInboxLangUiOnConversationOpen,
+  resetInboxLangOpenTracking,
+} from "../lib/message-translate-ui-session";
 import { prefillFrom, senderName, threads } from "../lib/messages.svelte";
 import { path, router } from "../lib/router.svelte";
 import { run, ui } from "../lib/ui.svelte";
@@ -228,6 +232,15 @@ const newBand = $derived(
 const open = $derived(!!kind);
 const selectedGig = $derived(openGig?.gig.id ?? "");
 const selectedMessage = $derived(openMessage?.id ?? "");
+
+$effect(() => {
+  const id = selectedMessage;
+  if (!id) {
+    resetInboxLangOpenTracking();
+    return;
+  }
+  clearInboxLangUiOnConversationOpen(id);
+});
 
 // A new enquiry from a message needs the message text before the form starts.
 let fromLoaded = $state("");

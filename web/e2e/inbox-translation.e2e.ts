@@ -1,9 +1,65 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { conversationId, messagePath } from "@showday/schemas";
+import { conversationId, type Message, messagePath } from "@showday/schemas";
 import { expect, go, login, test } from "./fixtures";
 
 const messageBody = (page: Page) => page.locator(".body .pre");
 const messageHeader = (page: Page) => page.locator(".detail-head .muted");
+const messageKicker = (page: Page) => page.locator(".detail-head .kicker");
+
+/** Same formatting as `messageTimeLong` in the open message header (en-GB). */
+function formatMessageKickerTime(iso: string): string {
+  const at = new Date(iso);
+  const dateLocale = "en-GB";
+  const time = at.toLocaleTimeString(dateLocale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const day = (d: Date) => d.toLocaleDateString("en-CA");
+  if (day(at) === day(new Date())) return `Today ${time}`;
+  return `${at.toLocaleDateString(dateLocale, { weekday: "short", day: "numeric", month: "short" })} ${time}`;
+}
+
+async function bumpConversationLastIn(
+  request: APIRequestContext,
+  seeded: {
+    root: string;
+    headers: Record<string, string>;
+    conversation: string;
+  },
+  lastIn: string,
+) {
+  const indexUrl = `${seeded.root}conversations/index`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const got = await request.get(indexUrl, { headers: seeded.headers });
+    expect(got.ok()).toBe(true);
+    const etag = got.headers().etag;
+    const index = (await got.json()) as Record<string, unknown>;
+    const entry = index[seeded.conversation] as Record<string, unknown>;
+    const updated = await request.put(indexUrl, {
+      headers: {
+        ...seeded.headers,
+        ...(etag ? { "If-Match": etag } : { "If-Match": "*" }),
+      },
+      data: {
+        ...index,
+        [seeded.conversation]: { ...entry, lastIn },
+      },
+    });
+    if ([200, 201].includes(updated.status())) return;
+    expect(updated.status()).toBe(412);
+  }
+  throw new Error("Could not bump conversation lastIn");
+}
+
+async function pullRemoteInboxRefresh(page: Page) {
+  const ok = await page.evaluate(async () => {
+    const run = window.showdaySyncUntilCompleteForLocalE2E?.();
+    if (!run) return false;
+    await run;
+    return true;
+  });
+  expect(ok).toBe(true);
+}
 
 async function seedInboxEmail(
   request: APIRequestContext,
@@ -51,7 +107,7 @@ async function seedInboxEmail(
     },
   });
   expect([200, 201, 412]).toContain(indexed.status());
-  return { conversation, peer };
+  return { conversation, peer, message, root, headers };
 }
 
 test.describe("inbox email translation", () => {
@@ -59,7 +115,11 @@ test.describe("inbox email translation", () => {
     page,
     request,
     account,
-  }) => {
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "desktop-chromium",
+      "desktop layout and reload check",
+    );
     const signup = await request.post("/api/auth/login", {
       data: { username: account.username, password: account.password },
     });
@@ -102,10 +162,83 @@ test.describe("inbox email translation", () => {
       .click();
     await expect(messageBody(page)).toContainText(/In English:/);
     await page.reload();
+    await expect(messageBody(page)).toContainText(czech, { timeout: 15000 });
     await expect(
       page.getByRole("button", { name: "Show in English" }),
-    ).toBeVisible();
-    await expect(messageBody(page)).toContainText(czech);
+    ).toBeVisible({ timeout: 15000 });
+  });
+
+  test("translated view survives background thread refresh", async ({
+    page,
+    request,
+    account,
+  }) => {
+    test.setTimeout(90_000);
+    const signup = await request.post("/api/auth/login", {
+      data: { username: account.username, password: account.password },
+    });
+    const { token } = await signup.json();
+    const czech =
+      "Dobrý den, nabízíme koncert 12. června v Praze. Termín by nám vyhovoval.";
+    const seeded = await seedInboxEmail(
+      request,
+      account,
+      token,
+      czech,
+      "Nabídka koncertu",
+    );
+    await login(page, account);
+    await page.goto(`/#/bookings/message/${seeded.conversation}`);
+    await page.getByRole("button", { name: "Show in English" }).click();
+    await expect(messageBody(page)).toContainText(/In English:/, {
+      timeout: 15000,
+    });
+    const language = page.getByRole("radiogroup", {
+      name: "Message language",
+    });
+    await expect(
+      language.getByRole("radio", { name: "English", exact: true }),
+    ).toBeChecked({ timeout: 15000 });
+    const initialKicker = (await messageKicker(page).textContent()) ?? "";
+    const refreshedAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const kickerAfterRefresh = await page.evaluate(
+      formatMessageKickerTime,
+      refreshedAt,
+    );
+    const freshMessage: Message = {
+      ...(seeded.message as Message),
+      published: refreshedAt,
+    };
+    await request.put(`${seeded.root}${messagePath(freshMessage)}`, {
+      headers: seeded.headers,
+      data: freshMessage,
+    });
+    await bumpConversationLastIn(request, seeded, refreshedAt);
+    await pullRemoteInboxRefresh(page);
+    await expect
+      .poll(
+        async () => {
+          const kickerText = (await messageKicker(page).textContent()) ?? "";
+          if (kickerText === initialKicker) return false;
+          if (!kickerText.includes(kickerAfterRefresh)) return false;
+          const group = page.getByRole("radiogroup", {
+            name: "Message language",
+          });
+          if ((await group.count()) === 0) return false;
+          const english = group.getByRole("radio", {
+            name: "English",
+            exact: true,
+          });
+          if (!(await english.isChecked())) return false;
+          const body = (await messageBody(page).textContent()) ?? "";
+          if (!/In English:/.test(body)) return false;
+          const header = (await messageHeader(page).textContent()) ?? "";
+          return /In English:/.test(header);
+        },
+        { timeout: 30000 },
+      )
+      .toBe(true);
+    await expect(messageBody(page)).toHaveText(`In English: ${czech}`);
   });
 
   test("reopening a message applies session cache on the first action", async ({

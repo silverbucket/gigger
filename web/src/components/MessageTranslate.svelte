@@ -1,4 +1,5 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import {
   alreadyMatchesCopy,
   detectEmailLanguage,
@@ -12,6 +13,10 @@ import {
   targetLabel,
   writeTranslationCache,
 } from "../lib/message-translate";
+import {
+  readInboxLangUi,
+  writeInboxLangUi,
+} from "../lib/message-translate-ui-session";
 import { ui } from "../lib/ui.svelte";
 import Segmented from "./Segmented.svelte";
 
@@ -20,6 +25,7 @@ let {
   subject,
   body,
   showSubject = false,
+  conversationId,
   displaySubject = $bindable<string | undefined>(),
   displayBody = $bindable(""),
   contentLang = $bindable<string | undefined>(),
@@ -28,6 +34,8 @@ let {
   subject?: string;
   body: string;
   showSubject?: boolean;
+  /** When set (latest email), restore the in-session control across reactive refresh. */
+  conversationId?: string;
   displaySubject?: string | undefined;
   displayBody?: string;
   contentLang?: string | undefined;
@@ -45,24 +53,58 @@ let already: TranslateTarget | undefined = $state();
 let requestId = 0;
 let abort: AbortController | undefined;
 
+// Re-init only when this incoming message changes — not when thread sync refreshes
+// subject/body. In-memory UI state survives remount for the same conversation.
 $effect(() => {
   const id = messageId;
-  const originalSubject = subject;
-  const originalBody = body;
-  chosen = undefined;
-  segmented = false;
-  view = "original";
-  busy = false;
-  failed = false;
-  already = undefined;
+  const restored = untrack(() => {
+    const convo = conversationId;
+    if (!convo || !showSubject) return undefined;
+    const saved = readInboxLangUi(convo);
+    if (!saved || saved.messageId !== id || !saved.chosen || !saved.segmented)
+      return undefined;
+    return saved;
+  });
+  if (restored) {
+    chosen = restored.chosen;
+    segmented = true;
+    view = restored.view;
+    busy = false;
+    failed = false;
+    already = undefined;
+  } else {
+    chosen = undefined;
+    segmented = false;
+    view = "original";
+    busy = false;
+    failed = false;
+    already = undefined;
+  }
   abort?.abort();
-  displaySubject = originalSubject;
-  displayBody = originalBody;
-  contentLang = undefined;
+  untrack(() => {
+    if (!restored || restored.view === "original") {
+      displaySubject = subject;
+      displayBody = body;
+      contentLang = undefined;
+    }
+  });
   return () => {
     abort?.abort();
     if (messageId === id) requestId++;
   };
+});
+
+$effect(() => {
+  if (!conversationId || !showSubject || !segmented || !chosen) return;
+  messageId;
+  view;
+  const convo = conversationId;
+  writeInboxLangUi(convo, {
+    messageId,
+    chosen,
+    segmented,
+    view,
+  });
 });
 
 function applyView() {

@@ -443,3 +443,30 @@ function clearSyncTrouble() {
     new CustomEvent("sync-trouble", { detail: false }),
   );
 }
+
+/** Completed sync pull for Playwright against localhost (not used in production). */
+export function syncUntilCompleteForLocalE2E(): Promise<void> | undefined {
+  if (typeof window === "undefined") return undefined;
+  const { hostname } = window.location;
+  if (hostname !== "localhost" && hostname !== "127.0.0.1") return undefined;
+  return new Promise<void>((resolve) => {
+    const onDone = (event: unknown) => {
+      if ((event as { completed?: boolean }).completed) {
+        storage.removeEventListener("sync-done", onDone);
+        resolve();
+      }
+    };
+    storage.on("sync-done", onDone);
+    void storage.startSync();
+  });
+}
+
+declare global {
+  interface Window {
+    showdaySyncUntilCompleteForLocalE2E?: () => Promise<void> | undefined;
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.showdaySyncUntilCompleteForLocalE2E = syncUntilCompleteForLocalE2E;
+}
