@@ -4,7 +4,7 @@
  * so accounts and records survive restarts. Local development only.
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { type AuthStore, createAuthHandler } from "../armadietto/auth.cjs";
 
@@ -62,17 +62,22 @@ export class MemoryStore implements AuthStore {
   private persist() {
     if (!this.file) return;
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      const snapshot: Snapshot = { users: {}, docs: {} };
-      for (const [name, user] of this.users) snapshot.users[name] = user;
-      for (const [key, doc] of this.docs)
-        snapshot.docs[key] = {
-          ...doc,
-          body: Buffer.from(doc.body).toString("base64"),
-        };
-      mkdirSync(dirname(this.file as string), { recursive: true });
-      void Bun.write(this.file as string, JSON.stringify(snapshot));
-    }, 200);
+    this.saveTimer = setTimeout(() => this.flush(), 200);
+  }
+  /** Writes the snapshot now; called on shutdown so the last change is kept. */
+  flush() {
+    if (!this.file) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    const snapshot: Snapshot = { users: {}, docs: {} };
+    for (const [name, user] of this.users) snapshot.users[name] = user;
+    for (const [key, doc] of this.docs)
+      snapshot.docs[key] = {
+        ...doc,
+        body: Buffer.from(doc.body).toString("base64"),
+      };
+    mkdirSync(dirname(this.file), { recursive: true });
+    writeFileSync(this.file, JSON.stringify(snapshot));
   }
 
   // --- AuthStore ---
@@ -286,6 +291,12 @@ export function storageHandler(store: MemoryStore) {
         etag ? { ETag: etag } : {},
       );
     }
+    // Read the body before looking at the document: an await between the
+    // condition checks and the write would let a concurrent writer slip past them.
+    const body =
+      req.method === "PUT"
+        ? new Uint8Array(await req.arrayBuffer())
+        : undefined;
     const doc = store.document(username, path);
     if (req.method === "GET" || req.method === "HEAD") {
       if (!doc) return respond(null, 404);
@@ -310,7 +321,7 @@ export function storageHandler(store: MemoryStore) {
         username,
         path,
         req.headers.get("content-type") ?? "application/octet-stream",
-        new Uint8Array(await req.arrayBuffer()),
+        body as Uint8Array,
       );
       return result.status === 409
         ? json({ error: "Conflicts with an existing folder or document" }, 409)

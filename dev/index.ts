@@ -76,6 +76,7 @@ Showday dev
 const shutdown = () => {
   for (const child of children) child.kill();
   storage.stop();
+  storage.store.flush();
   process.exit(0);
 };
 process.on("SIGINT", shutdown);
