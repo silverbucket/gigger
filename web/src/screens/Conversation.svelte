@@ -148,6 +148,7 @@ $effect(() => {
 });
 // Open at the newest message, like any chat.
 let scroller = $state<HTMLElement>();
+let thread = $state<HTMLElement>();
 let seen = 0;
 $effect(() => {
   const count = messages?.length ?? 0;
@@ -157,7 +158,14 @@ $effect(() => {
     if (ui.phone) {
       if (item.state !== "toSort")
         window.scrollTo({ top: document.body.scrollHeight });
-    } else if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    } else if (scroller && thread) {
+      // When the context cards follow the thread, stop at its last message.
+      const end =
+        compact && !item.gig
+          ? thread.offsetTop + thread.offsetHeight
+          : scroller.scrollHeight;
+      scroller.scrollTop = end - scroller.clientHeight;
+    }
   });
 });
 
@@ -581,7 +589,7 @@ const fullForm = $derived(
     </header>
 
     <div class="scroll" bind:this={scroller}>
-      <ol class="thread" aria-label="Messages">
+      <ol class="thread" aria-label="Messages" bind:this={thread}>
         {#if !messages?.length}
           <li class="bubble in">
             <div class="text">
@@ -784,6 +792,7 @@ const fullForm = $derived(
   color: var(--faint);
 }
 .scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
