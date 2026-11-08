@@ -112,6 +112,24 @@ test("the same venue from two accounts is listed once, and only its contributor'
       .map((v: { name: string }) => v.name)
       .sort(),
   ).toEqual(["Rock Cafe Club", "Rock Café"]);
+  // Alice adding a city, country and website to the same name and address updates her entry.
+  await add("alice", {
+    sourceId: "v2",
+    name: "Rock Café",
+    address: "Národní 20",
+    city: "Praha",
+    country: "CZ",
+    website: "https://rockcafe.cz",
+  });
+  expect(
+    (await find("bob", "rock")).body.find(
+      (v: { id: string }) => v.id === first.id,
+    ),
+  ).toMatchObject({
+    city: "Praha",
+    country: "CZ",
+    website: "https://rockcafe.cz",
+  });
   // Alice fixing her venue's address updates her entry.
   await add("alice", {
     sourceId: "v2",

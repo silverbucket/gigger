@@ -161,7 +161,9 @@ export function venueHandler(
         return fail("A shared venue needs a name and an address.", 400);
       const matchKey = `${fold(name)}|${fold(address)}`;
       const existing = byKey.get(matchKey);
-      if (existing)
+      const own = bySource.get(username, sourceId);
+      // Someone else's entry for the same venue stays as they left it.
+      if (existing && existing.id !== own?.id)
         return Response.json({ id: existing.id }, { headers: noStore });
       const values = [
         name,
@@ -172,7 +174,6 @@ export function venueHandler(
         matchKey,
         fold([name, city, address].filter(Boolean).join(" ")),
       ];
-      const own = bySource.get(username, sourceId);
       if (own) {
         db.query(
           "UPDATE directory_venues SET name = ?, address = ?, city = ?, country = ?, website = ?, match_key = ?, search = ?, updated_at = ? WHERE id = ?",
